@@ -190,6 +190,47 @@ is only needed for the app to work with the laptop closed.
 now that no cron is scheduled, nothing must run unattended, so Cloud Run's free tier is viable too
 and the host choice is genuinely open. Whoever picks one writes the superseding ADR.
 
+#### Deploy from CI, not from a laptop
+
+**This is the design constraint, and it is easy to get wrong by starting with a local
+`gcloud`/`fly` deploy.** A deploy that only works from one machine's terminal means:
+
+- no AI session without shell access — Claude on the web or a phone — can ship anything;
+- the deploy depends on locally installed CLIs and a local login that expires;
+- nothing is reproducible.
+
+So both halves should deploy **on push to this branch**:
+
+| Half | Mechanism | Local tooling needed |
+|---|---|---|
+| Web | Cloudflare Pages ↔ GitHub integration | **none** — configured once in the dashboard |
+| API | GitHub Actions → Cloud Build → Cloud Run | **none** — the image builds server-side |
+
+The API path deliberately avoids local Docker (not installed, and not worth requiring). Cloud
+Build builds the existing `apps/api/Dockerfile` **with the repo root as context** — that is not
+optional, since the build needs `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `packages/shared`.
+
+**Browser-only prerequisites** (all doable from a phone):
+
+1. **Cloudflare Pages** → connect `mevivek/life-manager`, branch `redo/architecture-scaffold`,
+   build `pnpm build --filter=@life-manager/web`, output `apps/web/dist`, env
+   `VITE_API_URL=https://api.mevivek.dev`. Then attach `app.mevivek.dev`.
+2. **Google Cloud** → in project `life-manager`, enable Cloud Run, Cloud Build and Artifact
+   Registry; create a deploy service account; download a JSON key.
+3. **GitHub** → repo secrets: `GCP_PROJECT_ID`, `GCP_SA_KEY`, plus the API's runtime config
+   (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_SECRET`).
+
+**The DNS records already point at the tunnel**, so cutting over means repointing
+`api.mevivek.dev` and `app.mevivek.dev` away from it — plan for the tunnel and the deployment not
+to coexist on the same hostnames.
+
+**Generate a fresh `BETTER_AUTH_SECRET` for production.** Do not reuse the local one; it has been
+on a development machine.
+
+**Not yet written:** the GitHub Actions workflow and the Cloud Build config. Deliberately — they
+cannot be tested without the credentials above, and untested deploy config that looks
+authoritative is worse than none.
+
 ## License
 
 Not yet chosen. Personal project.
