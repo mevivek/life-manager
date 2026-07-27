@@ -86,11 +86,15 @@ GET /api/v1/documents?limit=50&cursor=eyJpZCI6...
 ```
 
 ```json
-{ "data": [ ... ], "nextCursor": "eyJpZCI6..." }
+{ "data": [ ... ], "next_cursor": "eyJpZCI6..." }
 ```
 
-`nextCursor` is `null` on the last page. Default `limit` 50, max 200. Cursors are opaque
-to clients and validated server-side — treat an incoming cursor as attacker-controlled.
+`next_cursor` is `null` on the last page — `null`, never absent, so "last page" is always
+explicit. Default `limit` 50, max 200. Cursors are opaque to clients and validated
+server-side — treat an incoming cursor as attacker-controlled.
+
+The wire name is `next_cursor`, not `nextCursor`: §8's snake_case rule applies to every
+field, including this one. The shape is defined once, in `packages/shared`'s `paginated()`.
 
 ## 5. Idempotency
 
