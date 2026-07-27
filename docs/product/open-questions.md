@@ -126,6 +126,30 @@ role check yet. Answer during M3 planning, not sooner.
 
 Decisions already made. Kept permanently.
 
+### Scheduled jobs stay off during development
+
+**Answered:** 2026-07-27
+
+The daily `reminders.scan` cron is **not** scheduled in development. When M1 adds it,
+`createQueue` and `work` are unconditional but `schedule` is gated behind
+`ENABLE_SCHEDULED_JOBS` — so the handler stays testable and manually triggerable
+(`boss.send('reminders.scan', {})`), and only the clock is switched off.
+
+**Reasoning:** a daily cron against a database holding three test documents earns nothing, and
+it carries a cost that isn't obvious at the point of writing `boss.schedule(...)` — **a schedule
+means something must always be running.** That single requirement is what ruled out
+request-driven hosting and kept Neon's compute awake. Removing it reopens the host choice
+([ADR-0014](../decisions/0014-hosting-topology.md), amended) and makes Cloud Run's free tier
+viable, since 180,000 vCPU-seconds/month cannot cover an always-on instance but covers a
+scale-to-zero personal app easily.
+
+**Note:** this does not defer *reminders*. They remain the headline M1 deliverable — storage
+without reminders is the commodity half ([prior-art.md](../prior-art.md) §3). Only the
+unattended timer is deferred, and only until the app is somewhere it can usefully fire.
+
+→ `apps/api/src/jobs/index.ts`, [ADR-0014](../decisions/0014-hosting-topology.md),
+[review.md](review.md) D8
+
 ### Vault recovery — recovery code, not strict zero-knowledge, not server-assisted
 
 **Answered:** 2026-07-26

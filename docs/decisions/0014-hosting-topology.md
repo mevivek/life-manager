@@ -85,6 +85,24 @@ outage takes out most of the product.
 database is not truly idle. Keep an eye on free-tier compute hours
 ([ADR-0012](0012-pg-boss-background-jobs.md)).
 
+**Amended 2026-07-27 — the always-on requirement is now conditional.** Scheduled jobs are
+switched off in development (see `apps/api/src/jobs/index.ts`), and nothing is scheduled at all
+until M1. That matters more than it sounds, because *"a cron must fire while nobody is using the
+app"* was the single requirement that ruled out request-driven hosting. With no schedule running:
+
+- **Cloud Run's free tier becomes viable without Cloud Scheduler.** Its 180,000 vCPU-seconds/month
+  cannot cover an always-on instance — a month is ~2.6M seconds — but it covers a scale-to-zero
+  personal app many times over.
+- Fly is still fine, and still cheap, but is no longer *required*.
+- The Neon compute-hours concern above is moot until a schedule is switched on
+  ([review.md](../product/review.md) D8).
+
+**So the host choice is genuinely open again**, and should be made when the app actually needs to
+be reachable with the laptop closed — not before. This ADR is not yet superseded, because Fly
+remains the recorded choice; whoever changes it writes the superseding ADR then. Until then,
+[a Cloudflare Tunnel](../roadmap.md) validates ADR-0019's cookie path without committing to any
+host.
+
 **Revisit if:** the app goes public — at that point the free tiers stop being appropriate
 regardless of cost, because they lack the uptime guarantees and backup posture other
 people's data deserves.
