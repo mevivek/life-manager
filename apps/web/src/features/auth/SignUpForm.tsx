@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { signUp } from '@/lib/auth-client'
+import { GoogleButton } from './GoogleButton'
 
 /**
  * React Hook Form + the Zod resolver over the schema from `packages/shared`
@@ -35,6 +36,8 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <GoogleButton />
+
       {serverError !== null && <Alert variant="destructive">{serverError}</Alert>}
 
       <div className="flex flex-col gap-2">

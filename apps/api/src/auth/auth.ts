@@ -6,7 +6,7 @@ import { bearer } from 'better-auth/plugins/bearer'
 import { db } from '../db/client.js'
 import * as schema from '../db/schema/index.js'
 import { ensurePersonalSpace } from '../domains/spaces/spaces.service.js'
-import { env, isProduction, isTest } from '../env.js'
+import { env, isTest, useSecureCookies } from '../env.js'
 import { logger } from '../lib/logger.js'
 
 /**
@@ -35,7 +35,7 @@ export const auth = betterAuth({
    */
   basePath: '/api/v1/auth',
 
-  trustedOrigins: [env.WEB_ORIGIN],
+  trustedOrigins: env.WEB_ORIGIN,
 
   database: drizzleAdapter(db, {
     provider: 'pg',
@@ -61,6 +61,41 @@ export const auth = betterAuth({
   },
 
   /**
+   * Google OAuth, registered only when BOTH credentials are present (env.ts enforces the pair).
+   * Without them this is an empty object and email+password is the only route in.
+   *
+   * Better Auth derives the redirect URI as `${baseURL}${basePath}/callback/google`, i.e.
+   * `https://api.mevivek.dev/api/v1/auth/callback/google`. That exact string must be registered
+   * in the Google Cloud console — a mismatch fails at the redirect with Google's own error page,
+   * not ours, which is a confusing place to debug.
+   */
+  socialProviders:
+    env.GOOGLE_CLIENT_ID === undefined || env.GOOGLE_CLIENT_SECRET === undefined
+      ? {}
+      : {
+          google: {
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET,
+          },
+        },
+
+  /**
+   * Account linking, so signing in with Google using an email that already has a password
+   * account resolves to ONE user rather than a duplicate.
+   *
+   * **`trustedProviders` is a security control, not a convenience.** Linking by email is only
+   * safe when the provider verifies the address. Google does. Listing an unverified provider
+   * here would let anyone who can create an account with your email address take over your
+   * existing one, so do not add a provider without checking that it verifies emails.
+   */
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ['google'],
+    },
+  },
+
+  /**
    * Native clients send `Authorization: Bearer <token>` against the SAME session store as the
    * web cookie (security-model.md §2). Enabling it now costs nothing and means the actor hook
    * has one code path instead of a branch on client type later.
@@ -78,8 +113,14 @@ export const auth = betterAuth({
      */
     database: { generateId: () => randomUUID() },
 
-    /** security-model.md §2: httpOnly, Secure, SameSite=Lax. `Secure` breaks http://localhost. */
-    useSecureCookies: isProduction,
+    /**
+     * security-model.md §2: httpOnly, Secure, SameSite=Lax.
+     *
+     * Keyed off the API's scheme, not `NODE_ENV` — see `useSecureCookies` in env.ts. `Secure`
+     * over plain http://localhost would mean the cookie is never stored, and keying off
+     * NODE_ENV would mean an HTTPS tunnel test silently ran without it.
+     */
+    useSecureCookies,
     defaultCookieAttributes: {
       httpOnly: true,
       sameSite: 'lax',

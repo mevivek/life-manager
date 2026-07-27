@@ -60,9 +60,22 @@ export default defineConfig({
   server: {
     port: 5173,
     /**
+     * Vite refuses requests whose `Host` header it does not recognise (a DNS-rebinding
+     * defence). A Cloudflare Tunnel arrives as `app.mevivek.dev`, so without this the phone
+     * gets a blank "host not allowed" page and the dev server logs nothing useful.
+     *
+     * Listed explicitly rather than `allowedHosts: true` — the wildcard disables the check
+     * altogether, and this is a dev server pointed at a database with real credentials.
+     */
+    allowedHosts: ['app.mevivek.dev', 'localhost', '127.0.0.1'],
+    /**
      * Makes local development SAME-ORIGIN, which sidesteps cookies and CORS entirely while
      * developing. Production is same-SITE instead, via two subdomains of one domain — see
      * ADR-0019. That difference is why `VITE_API_URL` is empty locally and set in production.
+     *
+     * Note the proxy is bypassed entirely when `VITE_API_URL` is set: the client then calls
+     * the absolute origin directly, which is what makes the tunnel exercise the real
+     * cross-subdomain path instead of this shortcut.
      */
     proxy: {
       '/api': {
@@ -70,6 +83,16 @@ export default defineConfig({
         changeOrigin: false,
       },
     },
+  },
+  /**
+   * `vite preview` serves the built output, which is the only way to exercise the service
+   * worker and the web manifest — `devOptions.enabled` is false above, so PWA install does not
+   * work against the dev server at all. It needs its own `allowedHosts`; the `server` block's
+   * does not apply here.
+   */
+  preview: {
+    port: 5173,
+    allowedHosts: ['app.mevivek.dev', 'localhost', '127.0.0.1'],
   },
   build: {
     // Sourcemaps: this is a private personal app, and a stack trace that names a real file is

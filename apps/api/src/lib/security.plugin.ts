@@ -15,8 +15,9 @@ import { PROBLEM_CONTENT_TYPE, rateLimitProblem } from './problem.js'
 export const securityPlugin = fp(
   async (app: FastifyInstance) => {
     await app.register(fastifyCors, {
-      // An exact origin, never `*`. `credentials: true` with a wildcard origin is rejected
-      // by every browser, and the session cookie would never be sent.
+      // Exact origins, never `*`. `credentials: true` with a wildcard origin is rejected
+      // by every browser, and the session cookie would never be sent. An array so the
+      // deployed app and localhost can both be trusted — see originListSchema in env.ts.
       origin: env.WEB_ORIGIN,
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
