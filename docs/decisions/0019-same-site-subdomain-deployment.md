@@ -2,6 +2,12 @@
 
 - **Status:** accepted
 - **Date:** 2026-07-27
+- **Amended:** 2026-07-27 — **`COOKIE_DOMAIN` and `crossSubDomainCookies` are NOT required, and
+  are now deliberately unset.** Written before the design had ever run; verified the same day over
+  a real Cloudflare Tunnel on the actual hostnames, which showed the cookie works host-only. Also
+  corrects how `Secure` is decided. The core decision — two subdomains of one registrable domain
+  — is unchanged and confirmed, so this is an amendment rather than a supersession. Details in
+  the Decision section below.
 - **Supersedes:** —
 - **Superseded by:** —
 
@@ -33,25 +39,44 @@ The maintainer owns `mevivek.dev`.
 **The web app is served from `app.mevivek.dev` and the API from `api.mevivek.dev`.**
 
 Subdomains of one registrable domain are the **same site**, so `SameSite=Lax` is satisfied and
-`security-model.md` §2 stands unchanged. Three settings implement it, and all three are required:
+`security-model.md` §2 stands unchanged.
 
-| Where | Setting |
-|---|---|
-| `apps/api` env | `COOKIE_DOMAIN=.mevivek.dev` |
-| `auth.ts` | `advanced.crossSubDomainCookies: { enabled: true, domain: env.COOKIE_DOMAIN }` |
-| `auth.ts` | `advanced.defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', path: '/' }` |
+### What is actually required — corrected against a live test
 
-Without `crossSubDomainCookies` the cookie's `Domain` defaults to the API host alone and is
-invisible to the app host. `COOKIE_DOMAIN` is **unset in local development**, where it is not
-needed and where a `Domain` attribute on `localhost` is ignored anyway.
+The original version of this ADR listed three required settings, one of which was wrong. Verified
+on 2026-07-27 over a Cloudflare Tunnel serving the real `app.mevivek.dev` and `api.mevivek.dev`:
+
+| Where | Setting | |
+|---|---|---|
+| `auth.ts` | `defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', path: '/' }` | required |
+| `auth.ts` | `useSecureCookies` derived from `API_BASE_URL`'s scheme | required |
+| `apps/api` env | `COOKIE_DOMAIN` / `crossSubDomainCookies` | **NOT required — leave unset** |
+
+**Why `COOKIE_DOMAIN` is not needed.** `SameSite` is defined in terms of *site* — the registrable
+domain — not the host. A host-only cookie set by `api.mevivek.dev` is therefore sent on a
+`fetch` initiated by `app.mevivek.dev`, because that request is same-site. Confirmed: signup
+returned `__Secure-better-auth.session_token; HttpOnly; Secure; SameSite=Lax` with **no `Domain`
+attribute**, and `GET /api/v1/me` from the app origin succeeded.
+
+`crossSubDomainCookies` exists for a different problem — making one session cookie *readable* by
+several subdomains, which matters when more than one host needs to inspect it. Here only the API
+ever reads it, so widening it buys nothing and costs real isolation: `Domain=.mevivek.dev` would
+send the session cookie to **every** subdomain of the domain, including the maintainer's personal
+site and an unrelated `homeassistant` tunnel. Narrower is both simpler and safer.
+
+**Why `Secure` is keyed off the URL scheme, not `NODE_ENV`.** The two disagree in exactly the
+case that matters — running the real HTTPS shape while still `NODE_ENV=development`, which is what
+tunnel-based verification is. The original `useSecureCookies: isProduction` would have silently
+dropped `Secure` during that test, so the thing verified would not have been the thing that ships.
+Deriving it from `new URL(env.API_BASE_URL).protocol === 'https:'` makes the flag follow reality.
 
 They are still different **origins**, so CORS is still required: `@fastify/cors` with
-`credentials: true` and `origin: env.WEB_ORIGIN` — an exact origin, never `*`, because every
+`credentials: true` and `origin: env.WEB_ORIGIN` — exact origins, never `*`, because every
 browser rejects a wildcard origin combined with credentials. The web client sends
-`credentials: 'include'` on every request.
-
-`Secure` is on in production only (`useSecureCookies: isProduction`), because it prevents the
-cookie being set over plain `http://localhost`.
+`credentials: 'include'` on every request. `WEB_ORIGIN` is a comma-separated **list** so the
+deployed app and `localhost:5173` can both be trusted; with a single value, pointing the API at a
+deployed hostname makes local development fail with a 403 from the origin check, which reads like
+a bug rather than a configuration choice.
 
 ## Alternatives considered
 
@@ -88,12 +113,17 @@ session is `httpOnly` and `SameSite=Lax` in production exactly as designed. Loca
 stays same-origin and therefore free of all of this. Adding a third client later (Android) uses
 the bearer transport against the same session store, needing no cookie changes.
 
-**Bad:** M0 cannot be fully verified without DNS. Two DNS records and a Fly certificate are now
-prerequisites for the acceptance test, and certificate issuance plus propagation is a wait, not a
-command. `COOKIE_DOMAIN` becomes a variable whose *absence* is meaningful locally and whose
-presence is required in production — a configuration asymmetry that is easy to get wrong in one
-direction only. The `_headers` CSP now names `https://api.mevivek.dev` explicitly in
-`connect-src`, so a future domain change touches that file too.
+**Bad:** M0 cannot be fully verified without DNS. Two DNS records are prerequisites for the
+acceptance test, and propagation is a wait, not a command. The `_headers` CSP names
+`https://api.mevivek.dev` explicitly in `connect-src`, so a future domain change touches that file
+too.
+
+**Verified without hosting.** The acceptance test does *not* require Fly or Cloudflare Pages. A
+**Cloudflare Tunnel** pointing both hostnames at `localhost` exercises the identical cookie path —
+real HTTPS, real hostnames, real cross-subdomain request — while the laptop is the origin. That is
+how this ADR was confirmed, and it is the cheapest way to re-check it after any auth change. See
+[README.md](../../README.md) § Serving it on your phone. The limitation is inherent: the tunnel
+lives only as long as the laptop is awake, so it verifies the design without being hosting.
 
 **Also:** losing or changing the domain breaks production login. That is a real single point of
 failure, and the mitigation is simply knowing it — recorded in the debt register.

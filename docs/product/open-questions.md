@@ -126,6 +126,25 @@ role check yet. Answer during M3 planning, not sooner.
 
 Decisions already made. Kept permanently.
 
+### Google sign-in added, but email+password kept
+
+**Answered:** 2026-07-27
+
+Google OAuth is enabled alongside email+password, with account linking and `google` as a trusted
+provider, so both routes reach one account.
+
+**Reasoning:** Google-only would be simpler and would eliminate debt D11 (no password reset)
+outright rather than merely softening it. Rejected because it makes a single Google account the
+only way into a system whose long-term goal is a password vault — a locked Google account would
+mean losing everything, and that recovery path is not one this project controls.
+
+**Also settled:** Google identity is **not** used for the vault. Vault access derives from a
+passphrase the server never sees; tying it to an OAuth session would mean the server could unlock
+it, which is not E2EE. Signing in and unlocking the vault stay separate acts.
+
+→ [ADR-0020](../decisions/0020-google-oauth-alongside-password.md),
+[review.md](review.md) D3 and D11
+
 ### Scheduled jobs stay off during development
 
 **Answered:** 2026-07-27

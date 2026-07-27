@@ -4,9 +4,25 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M0 code complete; deployment not done.** Everything below is built, and
-`typecheck`, `lint`, `test` and `build` are green — but the app has never run anywhere except
-`localhost`. **M0 is not signed off until the phone check in the M0 section passes.**
+**Current position: M0 done and verified on the real domain. Not deployed.**
+
+Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
+Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
+the cross-subdomain session cookie that `localhost` cannot exercise. The PWA installs. Google
+sign-in ([ADR-0020](decisions/0020-google-oauth-alongside-password.md)) created a real account with
+exactly one personal space.
+
+**Two caveats, both real:**
+
+- **The tunnel makes the laptop the origin.** The app is reachable only while the laptop is awake
+  (debt D20). Hosting is a separate step, and the host choice reopened when scheduled jobs were
+  switched off ([ADR-0014](decisions/0014-hosting-topology.md), amended). See
+  [README.md](../README.md) § Serving it on your phone.
+- **`SIGTERM` graceful shutdown is still unverified** (debt D14) — Windows does not deliver POSIX
+  signals, so it can only be checked on a real host.
+
+**Next:** answer **Q1 and Q2** in [product/open-questions.md](product/open-questions.md); they
+block M1's schema and forms. Then M1.
 
 Next action is the maintainer's, not a session's: fill `apps/api/.env`, create the Fly app and
 the Cloudflare Pages project, and add the two DNS records

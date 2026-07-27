@@ -136,12 +136,59 @@ print a box telling you so. That is deliberate, so a fresh clone is not red by d
 means **a green `pnpm test` does not by itself prove the API was tested** — check the skip count.
 CI has a Postgres service container and fails rather than skipping.
 
+### Serving it on your phone (no hosting required)
+
+A **Cloudflare Tunnel** publishes the two real hostnames straight from this laptop, over real
+HTTPS on the real domain. That is enough to install the PWA and to exercise the cross-subdomain
+cookie path in [ADR-0019](docs/decisions/0019-same-site-subdomain-deployment.md) — the thing that
+cannot be tested on `localhost`. **The laptop is the server: close it and the app stops.**
+
+Already set up (one-time, done 2026-07-27): `cloudflared` installed, `cloudflared tunnel login`
+authorized for `mevivek.dev`, tunnel `life-manager` created, and CNAMEs for `app.mevivek.dev` and
+`api.mevivek.dev` pointed at it. The apex and `www` are untouched.
+
+Config lives at `~/.cloudflared/life-manager.yml` — **deliberately not `config.yml`**, so a
+pre-existing unrelated tunnel that uses the default file is unaffected.
+
+Three processes, in this order:
+
+```bash
+# 1. API on :8080
+pnpm --filter api dev
+
+# 2. Web on :5173 — pick ONE:
+pnpm --filter web dev                      # dev server; NO service worker, so no PWA install
+pnpm --filter web build && pnpm --filter web preview   # built output; PWA installable
+
+# 3. Tunnel
+cloudflared --config ~/.cloudflared/life-manager.yml tunnel run life-manager
+```
+
+Then open <https://app.mevivek.dev> on the phone.
+
+Four things that will bite, all already handled in config — don't undo them:
+
+- **`allowedHosts`** must list `app.mevivek.dev` in **both** `server` and `preview` in
+  `apps/web/vite.config.ts`. Vite rejects unknown `Host` headers and the phone just gets a blank
+  page.
+- **`WEB_ORIGIN`** is a comma-separated list precisely so the tunnel host and `localhost:5173` are
+  both trusted. A single value makes them mutually exclusive.
+- **`VITE_API_URL`** is baked in at build time. Change it and you must rebuild.
+- **PWA install needs the built output.** `devOptions.enabled` is false, so the dev server serves
+  no manifest or service worker at all.
+
+`cloudflared` is not on `PATH` in a fresh shell after install; it lives at
+`C:\Program Files (x86)\cloudflared\cloudflared.exe`.
+
 ### Deploying
 
-Not done yet, and the configs have never been executed. `apps/api/fly.toml` and
-`apps/api/Dockerfile` carry the steps in comments;
-[ADR-0019](docs/decisions/0019-same-site-subdomain-deployment.md) explains why the app and API must
-be subdomains of one domain rather than on `*.pages.dev` and `*.fly.dev`.
+**Not done, and no deploy has ever been executed.** The tunnel above covers phone testing; hosting
+is only needed for the app to work with the laptop closed.
+
+`apps/api/fly.toml` and `apps/api/Dockerfile` exist but have never run.
+[ADR-0014](docs/decisions/0014-hosting-topology.md) records Fly as the choice **but was amended**:
+now that no cron is scheduled, nothing must run unattended, so Cloud Run's free tier is viable too
+and the host choice is genuinely open. Whoever picks one writes the superseding ADR.
 
 ## License
 

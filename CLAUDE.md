@@ -11,20 +11,31 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 
 ## Status
 
-**[M0](docs/roadmap.md) code complete, not yet deployed.** The monorepo, the API, the web app,
-the database schema, auth, and CI all exist and work. `pnpm typecheck lint test build` are green,
-40 tests pass, and signup → `GET /api/v1/me` returns exactly one personal space over real HTTP.
+**[M0](docs/roadmap.md) done and verified on a real phone.** The monorepo, API, web app, database
+schema, auth and CI exist and work. `pnpm typecheck lint test build` are green and 40 tests pass.
 
-**Nothing has ever run outside `localhost.`** M0 is not signed off until the phone check in
-[roadmap.md](docs/roadmap.md) passes, which needs the maintainer to fill `apps/api/.env`, create
-the Fly app and Cloudflare Pages project, and add two DNS records.
+**It has run on the real domain, not just `localhost`.** Verified 2026-07-27 over a Cloudflare
+Tunnel serving `app.mevivek.dev` and `api.mevivek.dev`: 21/21 public checks, including the
+cross-subdomain session cookie from [ADR-0019](docs/decisions/0019-same-site-subdomain-deployment.md)
+— which is the one thing `localhost` cannot exercise. The PWA installs. Google sign-in works and
+created a real account with a personal space. Schema is applied to the Neon dev branch.
+
+**But nothing is deployed.** The tunnel makes the laptop the origin, so the app is reachable only
+while the laptop is awake. See [README.md](README.md) § Serving it on your phone to bring it back
+up; hosting is only needed for laptop-closed access, and the host choice is deliberately still
+open ([ADR-0014](docs/decisions/0014-hosting-topology.md), amended).
 
 What does **not** exist yet: any domain table (`documents` is [M1](docs/roadmap.md)), R2 or any
-file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `registerJobs` is empty),
-full-text search, `Idempotency-Key` handling, password reset, and Playwright. Several of those look
-like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D9–D17 with triggers, so check there
+file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `registerJobs` is empty and
+**scheduled jobs are deliberately off in development**), full-text search, `Idempotency-Key`
+handling, password reset, and Playwright. Several of those look like missing conventions rather
+than deferred work — they are in the
+[debt register](docs/product/review.md#3-debt-register) as D9–D20 with triggers, so check there
 before "fixing" one.
+
+**Two things block progress and only the maintainer can clear them:** the 17 commits on
+`redo/architecture-scaffold` are **not pushed** to `origin`, and **Q1/Q2** in
+[open-questions.md](docs/product/open-questions.md) block M1's schema and forms.
 
 ---
 

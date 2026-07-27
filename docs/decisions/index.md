@@ -42,13 +42,18 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0016](0016-testing-and-tooling.md) | Testing and tooling | accepted | Vitest against real Postgres, Playwright, Biome; a cross-space test per endpoint |
 | [0017](0017-product-brain.md) | Project brain | accepted | Living doc driving product + technical direction, review, and re-planning; AI proposes, human decides scope |
 | [0018](0018-testcontainers-for-api-tests.md) | Testcontainers for API tests | accepted | Throwaway Postgres per run; `TEST_DATABASE_URL` overrides it; skips (not fails) with neither, except in CI |
-| [0019](0019-same-site-subdomain-deployment.md) | One domain, two subdomains | accepted | `app.` + `api.mevivek.dev` are same-site, so `SameSite=Lax` survives two hosting providers |
+| [0019](0019-same-site-subdomain-deployment.md) | One domain, two subdomains | accepted, **amended** | `app.` + `api.mevivek.dev` are same-site, so `SameSite=Lax` survives two hosting providers |
+| [0020](0020-google-oauth-alongside-password.md) | Google sign-in | accepted | Google OAuth **alongside** email+password, with google as a trusted linking provider |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
 create it in the same transaction as the user. Decision unchanged; only the mechanism was
 misstated. [0017](0017-product-brain.md) 2026-07-27 — charter widened from product-only to
-product and technical thinking.
+product and technical thinking. [0019](0019-same-site-subdomain-deployment.md) 2026-07-27 —
+`COOKIE_DOMAIN`/`crossSubDomainCookies` turned out **not** to be required and are now unset;
+found by actually running the design over a tunnel. Two subdomains confirmed correct.
+[0014](0014-hosting-topology.md) 2026-07-27 — the always-on requirement disappeared with the
+cron, so the host choice is open again and Fly is no longer mandatory.
 
 ---
 
@@ -60,7 +65,8 @@ product and technical thinking.
 
 **Touching auth, ownership, or crypto** — read [security-model.md](../security-model.md)
 first
-0002 boundaries · 0006 ownership · 0007 auth · 0009 tiers · 0010 vault keys
+0002 boundaries · 0006 ownership · 0007 auth · 0009 tiers · 0010 vault keys ·
+0019 cookies and same-site · 0020 Google sign-in and account linking
 
 **Changing the schema**
 0005 Drizzle · 0006 `space_id` on everything · 0011 reset-don't-migrate
