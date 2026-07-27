@@ -4,6 +4,7 @@ import { actorHook } from './auth/actor.hook.js'
 import { authRoutes } from './auth/auth.routes.js'
 import { healthRoutes } from './domains/health/health.routes.js'
 import { meRoutes } from './domains/me/me.routes.js'
+import { jobsPlugin } from './jobs/jobs.plugin.js'
 import { loggerOptions } from './lib/logger.js'
 import { openapiPlugin } from './lib/openapi.js'
 import { registerProblemHandlers } from './lib/problem.js'
@@ -37,7 +38,7 @@ export type BuildAppOptions = {
  * 6. Routes. `authRoutes` last of the auth pieces, and NOT `fp()`-wrapped — see its file.
  */
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
-  void options.startJobs
+  const { startJobs = true } = options
 
   const app = Fastify({
     logger: loggerOptions,
@@ -60,6 +61,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(healthRoutes)
   await app.register(meRoutes)
   await app.register(authRoutes)
+
+  if (startJobs) await app.register(jobsPlugin)
 
   // NOTE: the connection pool is deliberately NOT closed here. It is process-wide, whereas a
   // Fastify instance is not — a test file builds and closes several. `server.ts` owns draining
