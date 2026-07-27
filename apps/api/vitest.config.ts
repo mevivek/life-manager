@@ -11,6 +11,14 @@ export default defineConfig({
     pool: 'forks',
     fileParallelism: true,
 
+    globalSetup: ['./src/test/global-setup.ts'],
+    setupFiles: ['./src/test/setup.ts'],
+
+    // Testcontainers pulling postgres:17-alpine on a cold machine takes longer than the
+    // 10s default, and a timeout there looks like a broken suite rather than a slow pull.
+    hookTimeout: 120_000,
+    testTimeout: 30_000,
+
     /**
      * Fake-but-valid values so `src/env.ts` parses in tests that never touch a database.
      * conventions/testing.md §5: obvious fakes only, never a copied real value.
