@@ -8,19 +8,24 @@ import { signIn } from '@/lib/auth-client'
  * OAuth flow is identical for both — Google tells us whether the account is new, so having two
  * buttons that do the same thing would only invite them to drift apart.
  *
- * `callbackURL` is where Google sends the browser back to *on this app* after the API's callback
- * completes. It must be an app-origin path, not an API one.
+ * **`callbackURL` must be ABSOLUTE.** Better Auth resolves a relative value against its own
+ * `baseURL`, which is the API origin — so `/home` sends the browser to
+ * `https://api.mevivek.dev/home` and lands on the API's 404 instead of the app. Deriving it from
+ * `window.location.origin` keeps it correct on localhost and on the deployed host without
+ * config, and the origin is already in the server's trusted list (`WEB_ORIGIN`), which Better
+ * Auth requires or it rejects the redirect outright.
  *
  * There is deliberately no loading state that resolves: a successful call navigates away from
  * the page, so `isRedirecting` only ever turns off on failure.
  */
-export function GoogleButton({ callbackURL = '/home' }: { callbackURL?: string }) {
+export function GoogleButton({ path = '/home' }: { path?: string }) {
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function start() {
     setError(null)
     setIsRedirecting(true)
+    const callbackURL = new URL(path, window.location.origin).toString()
     const { error: signInError } = await signIn.social({ provider: 'google', callbackURL })
     if (signInError) {
       // The most likely cause by far is a misconfigured redirect URI or missing credentials on
