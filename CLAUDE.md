@@ -20,10 +20,15 @@ cross-subdomain session cookie from [ADR-0019](docs/decisions/0019-same-site-sub
 — which is the one thing `localhost` cannot exercise. The PWA installs. Google sign-in works and
 created a real account with a personal space. Schema is applied to the Neon dev branch.
 
-**But nothing is deployed.** The tunnel makes the laptop the origin, so the app is reachable only
-while the laptop is awake. See [README.md](README.md) § Serving it on your phone to bring it back
-up; hosting is only needed for laptop-closed access, and the host choice is deliberately still
-open ([ADR-0014](docs/decisions/0014-hosting-topology.md), amended).
+**It is deployed, and nothing runs on the maintainer's laptop.** `app.mevivek.dev` is Cloudflare
+Pages (builds on push from `main`); `api.mevivek.dev` is Cloud Run, scale-to-zero
+([ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md), superseding ADR-0014's Fly choice);
+Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 23 checks,
+including the ones `localhost` structurally cannot perform.
+
+**One asymmetry to know:** the web app deploys on push, the API does **not** — API deploys still
+need `gcloud` from a terminal (debt D22). So a session without shell access can ship web changes
+but not API changes.
 
 What does **not** exist yet: any domain table (`documents` is [M1](docs/roadmap.md)), R2 or any
 file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `registerJobs` is empty and
@@ -33,9 +38,9 @@ than deferred work — they are in the
 [debt register](docs/product/review.md#3-debt-register) as D9–D20 with triggers, so check there
 before "fixing" one.
 
-**Two things block progress and only the maintainer can clear them:** the 17 commits on
-`redo/architecture-scaffold` are **not pushed** to `origin`, and **Q1/Q2** in
-[open-questions.md](docs/product/open-questions.md) block M1's schema and forms.
+**What blocks progress:** **Q1 and Q2** in
+[open-questions.md](docs/product/open-questions.md) block M1's schema and forms. Nothing else —
+the work is on `main`, deployed, and verified.
 
 ---
 

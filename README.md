@@ -277,13 +277,50 @@ session.
    and closes with `unexpected EOF / 0 bytes`. That looks like a misconfiguration and is not one —
    **wait, do not re-point DNS**, which restarts the process.
 
+#### The web app: Cloudflare Pages
+
+Project `life-manager`, connected to this GitHub repo, production branch `main`. It **builds on
+push** — no local tooling needed.
+
+| Setting | Value |
+|---|---|
+| Build command | `pnpm turbo run build --filter=@life-manager/web` |
+| Output directory | `apps/web/dist` |
+| Root directory | `/` (repo root) |
+| Variable | `VITE_API_URL=https://api.mevivek.dev` |
+
+**Use `pnpm turbo run build`, not `pnpm build --filter=…`.** Turbo's `dependsOn: ["^build"]`
+builds `packages/shared` first; the pnpm-filter form relies on `shared/dist` already existing,
+which it never does on a fresh clone.
+
+##### The trap that shipped a broken site
+
+**`VITE_API_URL` is baked in at build time, and a build with it missing looks completely
+healthy.** This actually happened: the first Pages build ran before the variable was saved, so
+`api-origin.ts` fell back to `window.location.origin`, the app called *itself* for `/api/v1/...`,
+and the SPA fallback in `public/_redirects` (`/* /index.html 200`) answered **every** request with
+HTML and a 200.
+
+Nothing looked wrong from outside. The page loaded, assets loaded, status codes were 200. Only
+login broke, on a JSON parse error.
+
+So **"does the site load" proves nothing here.** After any deploy, run:
+
+```bash
+node scripts/verify-deployment.mjs
+```
+
+Its first check greps the shipped JavaScript for the API origin, which is precisely the thing that
+was broken. **If you change `VITE_API_URL`, you must rebuild** — editing the variable alone does
+nothing to already-built assets.
+
 ##### Not yet done
 
-- **Web app hosting.** Cloudflare Pages, per the settings above. Until then the web half needs the
-  laptop.
-- **GitHub Actions.** The build and deploy commands above are proven, so a workflow can now
-  reproduce a known-good path rather than guessing. It needs a deploy service account key as a
-  repo secret; the runtime account above is *not* it and must not be given deploy rights.
+- **GitHub Actions for the API.** The Cloud Build and Cloud Run commands above are proven, so a
+  workflow can now reproduce a known-good path rather than guessing. It needs a *deploy* service
+  account key as a repo secret; the runtime account above is **not** it and must not be given
+  deploy rights. Until this exists, API deploys still need `gcloud` from a terminal — the web half
+  deploys on push, the API half does not.
 
 ## License
 

@@ -4,7 +4,7 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M0 done and verified on the real domain. Not deployed.**
+**Current position: M0 complete, deployed, and verified on the real domain.**
 
 Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
 Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
@@ -12,21 +12,23 @@ the cross-subdomain session cookie that `localhost` cannot exercise. The PWA ins
 sign-in ([ADR-0020](decisions/0020-google-oauth-alongside-password.md)) created a real account with
 exactly one personal space.
 
-**Two caveats, both real:**
+**M0 is deployed as well as built.** `app.mevivek.dev` on Cloudflare Pages, `api.mevivek.dev` on
+Cloud Run ([ADR-0021](decisions/0021-cloud-run-for-the-api.md)), Postgres on Neon. Nothing runs on
+the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of it in 23 assertions.
 
-- **The tunnel makes the laptop the origin.** The app is reachable only while the laptop is awake
-  (debt D20). Hosting is a separate step, and the host choice reopened when scheduled jobs were
-  switched off ([ADR-0014](decisions/0014-hosting-topology.md), amended). See
-  [README.md](../README.md) § Serving it on your phone.
-- **`SIGTERM` graceful shutdown is still unverified** (debt D14) — Windows does not deliver POSIX
-  signals, so it can only be checked on a real host.
+**Three caveats, all real:**
+
+- **Only the web app deploys on push.** API deploys still need `gcloud` from a terminal, so a
+  session without shell access cannot ship an API change (debt D22).
+- **`SIGTERM` graceful shutdown is still unverified** (debt D14). Windows does not deliver POSIX
+  signals — but Cloud Run does, so this is now *testable* for the first time rather than blocked.
+- **A Pages build with `VITE_API_URL` unset ships a broken-but-healthy-looking site** (debt D23).
+  It happened once. Run the verify script after every deploy; status codes cannot detect it.
 
 **Next:** answer **Q1 and Q2** in [product/open-questions.md](product/open-questions.md); they
 block M1's schema and forms. Then M1.
 
-Next action is the maintainer's, not a session's: fill `apps/api/.env`, create the Fly app and
-the Cloudflare Pages project, and add the two DNS records
-([ADR-0019](decisions/0019-same-site-subdomain-deployment.md)).
+
 
 ---
 
@@ -50,13 +52,14 @@ Make the repo runnable end to end with one trivial vertical slice. No product fe
 - [x] pg-boss lifecycle wired, zero handlers registered
 - [x] `CLAUDE.md` Status, Conventions, Layout and Stack updated
 
-**Still outstanding — all of it needs the maintainer, none of it needs a session:**
+**Deployment, all done 2026-07-27:**
 
-- [ ] `apps/api/.env` filled in (Neon connection strings + `BETTER_AUTH_SECRET`)
-- [ ] Fly app created, secrets set, `fly certs add api.mevivek.dev`, deployed
-- [ ] Cloudflare Pages project created, `VITE_API_URL` set, `app.mevivek.dev` attached
-- [ ] Two DNS records
-- [ ] **The phone check below**
+- [x] `apps/api/.env` filled; schema applied to the Neon dev branch
+- [x] API on **Cloud Run** — not Fly; see [ADR-0021](decisions/0021-cloud-run-for-the-api.md)
+- [x] Cloudflare Pages project connected to GitHub, `VITE_API_URL` set, `app.mevivek.dev` attached
+- [x] DNS: `api` → Cloud Run domain mapping, `app` → Pages
+- [x] Google sign-in ([ADR-0020](decisions/0020-google-oauth-alongside-password.md))
+- [x] **The phone check below**
 
 **Done when:** you can sign up on your phone, and the API proves the session resolves to an
 `ActorContext` with exactly one space. Concretely: sign up at `https://app.mevivek.dev`, land on
@@ -66,9 +69,9 @@ screen, open it standalone, and **still be logged in** — that last part is the
 to fail. Then sign up a second account and confirm it gets its own separate space and cannot see
 the first.
 
-**Verified locally instead, for the record:** signup over real HTTP returns a
-`HttpOnly; SameSite=Lax` cookie, and `GET /api/v1/me` returns exactly one personal space owned by
-the new user.
+**Verified on the deployed app**, not just locally: `node scripts/verify-deployment.mjs` asserts
+all of it in 23 checks — the `Secure; HttpOnly; SameSite=Lax` cookie with **no `Domain`**, the
+cross-subdomain session, and that the API origin is actually baked into the shipped JavaScript.
 
 ## M1 — Documents, core + reminders
 
