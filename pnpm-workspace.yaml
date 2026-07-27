@@ -4,14 +4,23 @@ packages:
 
 # pnpm 11 reads its settings from THIS file, not from .npmrc. Do not add an .npmrc
 # expecting pnpm to honour it.
-#
-# Packages allowed to run install scripts. Everything else is blocked by default, which
-# is the behaviour we want: an install script is arbitrary code execution.
-onlyBuiltDependencies:
-  - '@biomejs/biome'
-  - '@tailwindcss/oxide'
-  - esbuild
-  - msw
+
+# Which dependencies may run install scripts. Everything else is blocked, which is the
+# behaviour we want: an install script is arbitrary code execution at `pnpm install` time.
+# `pnpm install` prints any newly-ignored package; add it here with a deliberate answer
+# rather than approving interactively.
+allowBuilds:
+  # Needs its postinstall to place the platform binary.
+  esbuild: true
+  # All three arrive via testcontainers -> dockerode -> ssh2, are dev-only, and their build
+  # scripts only compile optional native speedups. Not worth a toolchain on Windows.
+  cpu-features: false
+  ssh2: false
+  protobufjs: false
 
 # `pnpm deploy` (used by apps/api/Dockerfile) refuses to run without this.
 injectWorkspacePackages: true
+
+# Default is "install", which reaches the registry on every `pnpm run`. Turbo and vitest are
+# run constantly; the check is not worth the latency or the offline failure mode.
+verifyDepsBeforeRun: false
