@@ -4,6 +4,24 @@ Start here, then read only what your task needs. These docs are structured as a 
 system**, not a manual — the goal is that a session orients from two or three files rather
 than scanning the codebase ([ADR-0015](decisions/0015-docs-as-orientation.md)).
 
+## Read budget
+
+**There is more here than any one session should read. That is intentional — but it only
+works if you route instead of reading everything.**
+
+- **Baseline: 3 files.** [`CLAUDE.md`](../CLAUDE.md) → this routing table → the one domain
+  doc or playbook your task names. That should be enough to start work.
+- **Add a fourth** only when the table below tells you to — `security-model.md` for anything
+  touching auth, ownership, or crypto; a specific ADR when you're about to contradict a
+  decision.
+- **Don't read `decisions/` front to back.** Use [its index](decisions/index.md) to find the
+  one ADR you need.
+
+If you find yourself needing five or more files to make a routine change, **the structure
+has failed — say so and fix the routing**, rather than compensating by reading more. Docs
+that must be read exhaustively are no better than no docs
+([ADR-0015](decisions/0015-docs-as-orientation.md), consequences).
+
 ---
 
 ## Doing X? Read Y.

@@ -67,6 +67,38 @@ The logical document — "my passport" — independent of any particular scan of
 Indexes: `(space_id) where deleted_at is null`, `(space_id, expires_on) where deleted_at is
 null` (the reminder scan and the default sort), GIN on `search_vector`.
 
+#### `custom_attrs` shapes per `doc_type`
+
+JSONB in the database, but **not freeform over the wire** — a Zod discriminated union on
+`doc_type` in `packages/shared` validates these at the API boundary
+([conventions/data.md](../conventions/data.md) §5). Every field is optional; capture friction
+is the bigger risk than incomplete records
+([product/brain.md](../product/brain.md) principle 2).
+
+| `doc_type` | Keys |
+|---|---|
+| `identity` | `document_number_last4`, `issuing_authority`, `nationality`, `place_of_issue` |
+| `financial` | `counterparty`, `account_last4`, `value`, `currency`, `renewal_terms` |
+| `legal` | `counterparty`, `jurisdiction`, `effective_from`, `renewal_terms` |
+| `warranty` | `vendor`, `product`, `serial_number`, `purchase_price`, `currency`, `purchased_on`, `coverage_months` |
+| `receipt` | `vendor`, `amount`, `currency`, `purchased_on`, `payment_method_last4` |
+| `certificate` | `issuing_body`, `credential_id`, `level`, `verify_url` |
+| `other` | *(none — freeform `notes` only)* |
+
+Two rules that are easy to get wrong:
+
+- **Never a full number.** `document_number_last4`, `account_last4`, and
+  `payment_method_last4` are truncated at the API boundary, same as the top-level
+  `identifier_last4` (§4 rule 6). A full passport or card number in JSONB is exactly the
+  liability that column exists to avoid, and JSONB makes it easy to slip in unnoticed.
+- **Money keys carry a `currency`** and are `numeric`, never float
+  ([conventions/data.md](../conventions/data.md) §4). These are the natural join points to
+  the future Money domain (§8), so getting the type right now avoids a conversion later.
+
+`warranty` and `receipt` are deliberately separate types even though they often arrive
+together — a receipt proves a purchase, a warranty confers a right, and only the latter
+expires. Splitting them keeps the reminder logic clean.
+
 ### `document_files`
 
 A specific uploaded file. Versioned — renewing a passport must not destroy the old scan.
@@ -222,9 +254,11 @@ Domain-internal. Product-level questions live in
    are hundreds of documents and is the natural bridge to People. Starting with free text
    plus autocomplete-over-distinct because it needs no extra UI. Revisit when the archive
    passes ~100 documents.
-2. **Where `custom_attrs` schemas live.** A Zod discriminated union on `doc_type` in
-   `packages/shared` is the plan. Unresolved: whether users can define their own fields
-   later — that would need a metadata table, not just JSONB.
+2. **User-defined `custom_attrs` fields.** The per-type shapes are now specified in §3 and
+   validated by a Zod discriminated union, so this is settled for the built-in types. Still
+   open: whether users can add their own fields later. That needs a field-metadata table,
+   not just JSONB, and would weaken the Zod contract — deferred until there is evidence
+   anyone wants it.
 3. **Client-side vs server-side thumbnails.** Client-side is free and immediate; server-side
    is consistent and cacheable. Deferred to M2.
 4. **Whether `reminders` should carry a nullable `document_id` FK** alongside the

@@ -32,6 +32,10 @@ but not yet scaffolded**. Next step is [M0](docs/roadmap.md).
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
+**Baseline is three files: this one, the routing table, and the one doc your task names.**
+There is more documentation than any single session should read — route to it, don't sweep
+it ([read budget](docs/README.md#read-budget)).
+
 ---
 
 ## Invariants
