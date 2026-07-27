@@ -28,7 +28,8 @@ but not yet scaffolded**. Next step is [M0](docs/roadmap.md).
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |
 | **Changing the schema** | [`docs/agent-playbooks/change-the-schema.md`](docs/agent-playbooks/change-the-schema.md) |
-| **Deciding what to build** | [`docs/product/brain.md`](docs/product/brain.md) |
+| **Deciding what to build, or shaping a technical call** | [`docs/product/brain.md`](docs/product/brain.md) — the project brain |
+| **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
@@ -122,7 +123,7 @@ M0. **Update this section when they do.**
 
 - **One domain at a time.** Finish and actually use it before starting the next. Six
   shallow domains are worth less than one good one
-  ([product/brain.md](docs/product/brain.md) §4).
+  ([product/brain.md](docs/product/brain.md) §5).
 - **Pre-v1, the dev database may be reset rather than migrated** — until M3
   ([ADR-0011](docs/decisions/0011-pre-v1-schema-resets.md)).
 - **Multi-user isolation is a day-one requirement**, even with one user

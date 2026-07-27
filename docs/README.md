@@ -38,7 +38,10 @@ that must be read exhaustively are no better than no docs
 | **File upload or download** | [ADR-0008](decisions/0008-object-storage-r2.md) → [architecture.md](architecture.md) §6 |
 | **Writing tests** | [conventions/testing.md](conventions/testing.md) |
 | **Deciding what to build next** | [product/brain.md](product/brain.md) → [product/idea-backlog.md](product/idea-backlog.md) → [roadmap.md](roadmap.md) |
-| **Brainstorming features with the human** | [product/brain.md](product/brain.md) §6 |
+| **Brainstorming features with the human** | [product/brain.md](product/brain.md) §7 |
+| **Shaping a technical question / architecture call** | [product/brain.md](product/brain.md) §8b → [decisions/index.md](decisions/index.md) |
+| **Reviewing a finished milestone** | [product/review.md](product/review.md) |
+| **Changing the plan** | [product/brain.md](product/brain.md) §10 |
 | **Wondering why something is the way it is** | [decisions/index.md](decisions/index.md) |
 | **Tempted to change the stack** | [decisions/index.md](decisions/index.md) — the alternative was probably already rejected |
 | **Deploying or debugging hosting** | [ADR-0014](decisions/0014-hosting-topology.md) |
@@ -93,10 +96,13 @@ Planned: Assets, Money, People, Notes, Vault. Each gets a doc before it gets cod
 Conventions say what good looks like; playbooks say what to type. If a playbook doesn't
 cover what you hit, **fix it in the same commit.**
 
-### Product — what to build and why
+### Product — what to build, and whether it was built well
 
-- [**product/brain.md**](product/brain.md) — vision, principles, anti-goals, the decision
-  funnel, and how to run a brainstorming session with the human
+- [**product/brain.md**](product/brain.md) — **the project brain.** Vision, principles,
+  anti-goals, and the four working modes: ideate, shape, review, re-plan. Covers product
+  *and* technical thinking
+- [**product/review.md**](product/review.md) — review method, the four lenses, and the
+  **debt register**
 - [**product/idea-backlog.md**](product/idea-backlog.md) — every idea with its status,
   including rejected ones and why
 - [**product/open-questions.md**](product/open-questions.md) — questions needing a human
@@ -104,6 +110,10 @@ cover what you hit, **fix it in the same commit.**
 
 **The AI proposes; the human decides scope.** Nothing reaches the roadmap without an
 explicit yes ([ADR-0017](decisions/0017-product-brain.md)).
+
+**Conclusions graduate out of here** — into [roadmap.md](roadmap.md) for sequence,
+[decisions/](decisions/index.md) for architecture, [domains/](domains/) for specs. The brain
+is where thinking happens, not where it is stored.
 
 ---
 

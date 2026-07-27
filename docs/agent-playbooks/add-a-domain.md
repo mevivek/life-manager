@@ -16,7 +16,7 @@ why the doc leads.
       raise it in [product/idea-backlog.md](../product/idea-backlog.md) instead.
 - [ ] The previous domain is genuinely finished and in use. **One domain at a time** is the
       anti-goal most likely to be violated and the one most likely to sink the project
-      ([product/brain.md](../product/brain.md) §4).
+      ([product/brain.md](../product/brain.md) §5).
 
 ## 1. Write the domain doc
 
@@ -31,7 +31,8 @@ a future session jump to §4 without reading §1–3.
 - [ ] §4 Business rules, numbered and testable — each should map to a test
 - [ ] §5 API surface
 - [ ] §8 Cross-domain links — record intent even for domains that don't exist yet; this is
-      where the product's value concentrates ([product/brain.md](../product/brain.md) §3)
+      where the product's value concentrates
+      ([product/brain.md](../product/brain.md) principle 4)
 - [ ] §9 Open questions — technical ones here, product ones in
       [product/open-questions.md](../product/open-questions.md)
 

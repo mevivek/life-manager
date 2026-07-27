@@ -111,6 +111,12 @@ Not scheduled. Revisit once M1–M4 have proven the domain pattern holds.
 ## Standing rules
 
 - A milestone is done when it works **on your phone**, not when the tests pass.
+- **Every milestone ends with a review** — all four lenses in
+  [product/review.md](product/review.md), findings written to the debt register. This is a
+  deliverable, not a nicety: nothing else forces it, it ships no feature, and it is the only
+  thing that catches drift in a codebase edited by sessions with no shared memory.
+- **Re-plan deliberately after each review** ([product/brain.md](product/brain.md) §10).
+  The plan below will be wrong; changing it is expected, changing it *silently* is not.
 - Every milestone that changes an invariant updates the relevant ADR or writes a new one.
 - Pre-v1, the dev database may be reset rather than migrated
   ([ADR-0011](decisions/0011-pre-v1-schema-resets.md)). That freedom ends at M3, when real

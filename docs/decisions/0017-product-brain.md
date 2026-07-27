@@ -1,7 +1,11 @@
-# ADR-0017: A product brain — product direction as a living, AI-driven, human-approved doc
+# ADR-0017: A project brain — direction as a living, AI-driven, human-approved doc
 
 - **Status:** accepted
 - **Date:** 2026-07-27
+- **Amended:** 2026-07-27 — charter widened from *product only* to **product and technical
+  thinking, plus review and re-planning**. Amended rather than superseded because the
+  decision itself is unchanged (a living brain doc; AI proposes, human decides scope); only
+  its scope grew, before any of it had been acted on.
 
 ## Context
 
@@ -26,16 +30,30 @@ would make it unusable as a plan.
 
 ## Decision
 
-**A dedicated product function, documented in [`docs/product/`](../product/), operated by
-the AI session and owned by the human.**
+**A dedicated thinking function — the "brain" — documented in
+[`docs/product/`](../product/), operated by the AI session and owned by the human.**
 
-Three files with distinct jobs:
+It covers **product and technical direction both**, and works in four modes:
+
+| Mode | Answers | Output lands in |
+|---|---|---|
+| **Ideate** | What should we build? | [`idea-backlog.md`](../product/idea-backlog.md) |
+| **Shape** | How, concretely? (product *or* technical) | A domain doc, or an ADR |
+| **Review** | Is what we built what we meant, and does it still hold? | [`review.md`](../product/review.md) debt register |
+| **Re-plan** | Reality disagreed — now what? | [`roadmap.md`](../roadmap.md) |
+
+Four files with distinct jobs and very different change rates:
 
 | File | Role | Changes |
 |---|---|---|
-| [`brain.md`](../product/brain.md) | Vision, product principles, the decision funnel, and the method for running a session with the human | Rarely |
+| [`brain.md`](../product/brain.md) | Vision, principles, anti-goals, the four modes, the funnel, shaping templates | Rarely |
+| [`review.md`](../product/review.md) | Review method, the four lenses, and the debt register | Per milestone |
 | [`idea-backlog.md`](../product/idea-backlog.md) | Every idea ever raised, with status — including rejected ones and why | Often |
 | [`open-questions.md`](../product/open-questions.md) | Questions genuinely needing a human answer, and answers once given | Often |
+
+**Review and re-planning are the parts most likely to be skipped**, because neither ships a
+feature and nothing forces them. So a milestone-ending review is written into
+[`roadmap.md`](../roadmap.md) as an explicit deliverable rather than left to good intentions.
 
 **The operating rules, which are the actual decision here:**
 

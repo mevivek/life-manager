@@ -10,6 +10,12 @@ for a reason that still holds.
 ADRs are **superseded, never edited in place.** If a decision changes, write a new ADR and
 mark the old one superseded. Rationale: [ADR-0015](0015-docs-as-orientation.md).
 
+The one narrow exception: **clarifying or widening the scope of a decision that has not been
+acted on yet**, where the decision itself is unchanged. Record it as an `Amended:` line
+stating what changed and why it wasn't superseded — see
+[ADR-0017](0017-product-brain.md). If the original conclusion would change, that is a
+supersession, not an amendment.
+
 Template: [0000-adr-template.md](0000-adr-template.md).
 
 ---
@@ -34,7 +40,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0014](0014-hosting-topology.md) | Hosting topology | accepted | Cloudflare Pages + Fly.io + Neon + R2; free except a few dollars for the API |
 | [0015](0015-docs-as-orientation.md) | Docs as orientation | accepted | Documentation is a routing system for sessions with no memory |
 | [0016](0016-testing-and-tooling.md) | Testing and tooling | accepted | Vitest against real Postgres, Playwright, Biome; a cross-space test per endpoint |
-| [0017](0017-product-brain.md) | Product brain | accepted | Product direction is a living doc; AI proposes, the human decides scope |
+| [0017](0017-product-brain.md) | Project brain | accepted | Living doc driving product + technical direction, review, and re-planning; AI proposes, human decides scope |
 
 ---
 
@@ -56,8 +62,8 @@ first
 **Deployment and cost**
 0014 hosting · 0005 Neon · 0008 R2
 
-**Deciding what to build**
-0017 product brain · 0015 documentation structure
+**Deciding what to build, reviewing it, changing the plan**
+0017 project brain · 0015 documentation structure
 
 ---
 

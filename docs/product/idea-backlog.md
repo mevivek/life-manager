@@ -140,7 +140,7 @@ changed.**
 | Bank API integration as a core dependency | Fragile, jurisdiction-specific, permanent maintenance tax against principle 3 | A stable aggregator makes it genuinely zero-maintenance |
 | Public sharing surface, feeds, social features | Anti-goal. This is a private tool | Never |
 | Build all six domains in parallel | The most likely way this project fails — dilution, not slowness | Never |
-| Use Bitwarden/1Password via API instead of building a vault | A unified cross-domain model is the thesis ([brain.md](brain.md) §2) | The vault is descoped — then this is the *right* answer, not weaker crypto |
+| Use Bitwarden/1Password via API instead of building a vault | A unified cross-domain model is the thesis ([brain.md](brain.md) §3) | The vault is descoped — then this is the *right* answer, not weaker crypto |
 | Collaborative editing / comments / task assignment | Family sharing is not collaboration. Anti-goal | Never |
 
 ---
