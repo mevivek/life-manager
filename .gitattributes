@@ -1,0 +1,14 @@
+# Normalise line endings. Development is on Windows, CI and the Fly container are Linux;
+# without this, a CRLF shell script or Dockerfile line fails in the container with an
+# error that names the wrong thing entirely.
+* text=auto eol=lf
+
+# Never touched by a text filter.
+*.png binary
+*.ico binary
+*.webp binary
+
+# Generated — collapse it in diffs and keep it out of language stats.
+apps/web/src/routeTree.gen.ts linguist-generated=true
+apps/api/src/db/schema/auth.ts linguist-generated=true
+pnpm-lock.yaml linguist-generated=true

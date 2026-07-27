@@ -1,0 +1,17 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 11 reads its settings from THIS file, not from .npmrc. Do not add an .npmrc
+# expecting pnpm to honour it.
+#
+# Packages allowed to run install scripts. Everything else is blocked by default, which
+# is the behaviour we want: an install script is arbitrary code execution.
+onlyBuiltDependencies:
+  - '@biomejs/biome'
+  - '@tailwindcss/oxide'
+  - esbuild
+  - msw
+
+# `pnpm deploy` (used by apps/api/Dockerfile) refuses to run without this.
+injectWorkspacePackages: true

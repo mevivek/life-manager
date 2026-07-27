@@ -1,0 +1,12 @@
+{
+  // Root-level config files only. The three packages each own a tsconfig.json and are
+  // typechecked independently via `turbo run typecheck`, which orders them with
+  // `dependsOn: ["^build"]` so packages/shared's declarations exist first. Deliberately
+  // NOT a composite "solution" file with project references — turbo already provides the
+  // ordering, and one fewer TypeScript build mode is one fewer thing to break.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["vitest.config.ts"]
+}
