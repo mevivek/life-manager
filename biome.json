@@ -61,6 +61,11 @@
       "allowComments": true
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "overrides": [
     {
       "includes": ["**/*.test.ts", "**/*.test.tsx", "**/src/test/**"],
@@ -71,6 +76,16 @@
           },
           "suspicious": {
             "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noLabelWithoutControl": "off"
           }
         }
       }

@@ -17,9 +17,18 @@ allowBuilds:
   cpu-features: false
   ssh2: false
   protobufjs: false
+  # msw's postinstall only copies `mockServiceWorker.js` into a public directory, which is for
+  # intercepting in a real browser. We use `msw/node` in Vitest, so there is nothing to place.
+  msw: false
 
 # `pnpm deploy` (used by apps/api/Dockerfile) refuses to run without this.
 injectWorkspacePackages: true
+
+# pnpm 11 refuses packages published very recently, as supply-chain protection. This exclusion
+# was added automatically for a fresh major of jsdom. It is dev-only — the Vitest DOM
+# environment, never shipped — which is the only reason it is acceptable to wave through.
+minimumReleaseAgeExclude:
+  - jsdom@30.0.0
 
 # Default is "install", which reaches the registry on every `pnpm run`. Turbo and vitest are
 # run constantly; the check is not worth the latency or the offline failure mode.
