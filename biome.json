@@ -13,7 +13,6 @@
       "!**/.turbo",
       "!**/coverage",
       "!apps/api/drizzle",
-      "!apps/api/src/db/schema/auth.ts",
       "!apps/web/src/routeTree.gen.ts",
       "!apps/web/dev-dist"
     ]

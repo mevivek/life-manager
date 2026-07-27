@@ -133,8 +133,9 @@ the system. From then on, migrations are forward-only and additive.
 
 ```
 users              managed by Better Auth. Do not hand-edit its columns; extend via a
-                   separate profile table if needed.
-spaces             id, name, kind ('personal' | 'shared'), created_at
+                   separate profile table if needed. Also: sessions, accounts,
+                   verifications. Regenerate with `pnpm --filter api auth:generate`.
+spaces             id, name, kind ('personal' | 'shared'), personal_for_user_id, created_at
 space_members      space_id, user_id, role ('owner' | 'member'), joined_at
                    primary key (space_id, user_id)
 ```
@@ -142,3 +143,25 @@ space_members      space_id, user_id, role ('owner' | 'member'), joined_at
 Every user gets a `personal` space at signup with themselves as `owner`. A personal space
 is not special-cased anywhere — it is simply a space with one member, which is what makes
 family sharing additive.
+
+**`spaces.personal_for_user_id`** is nullable, references `users(id)`, and is set only on a
+user's one personal space. It exists so that "at most one personal space per user" is a
+constraint rather than a hope:
+
+```sql
+create unique index on spaces (personal_for_user_id) where personal_for_user_id is not null;
+```
+
+`ensurePersonalSpace()` inserts with `on conflict do nothing` and re-reads, so two concurrent
+calls cannot produce two personal spaces. **Nothing else reads this column** — it is a
+uniqueness guard, not a code path, and ADR-0006's "not special-cased anywhere" still holds.
+Do not branch on it and do not join through it. See
+[ADR-0006](../decisions/0006-space-based-ownership.md) (amended) for why the alternative —
+inferring a personal space from `kind = 'personal'` plus a membership count — was rejected:
+it is not expressible as a constraint.
+
+**Auth-table id columns are `uuid`, not Better Auth's default `text`.** §4 above is
+unconditional that identifiers are uuid, and §1 requires `created_by uuid references
+users(id)` on every domain table; a `text` user id would force every future domain table to
+diverge instead. Better Auth is configured with
+`advanced.database.generateId: () => crypto.randomUUID()` to match.

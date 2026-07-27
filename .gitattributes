@@ -10,5 +10,4 @@
 
 # Generated — collapse it in diffs and keep it out of language stats.
 apps/web/src/routeTree.gen.ts linguist-generated=true
-apps/api/src/db/schema/auth.ts linguist-generated=true
 pnpm-lock.yaml linguist-generated=true
