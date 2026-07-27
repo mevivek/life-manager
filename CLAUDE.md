@@ -96,7 +96,7 @@ Non-negotiable. Breaking one is a bug even if tests pass. Each links to its reas
 | Routing / data | TanStack Router + TanStack Query | router 1.170 · query 5.101 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
 | UI | Tailwind v4 + shadcn/ui primitives | tailwind 4.3 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
 | API | Fastify + `fastify-type-provider-zod` → OpenAPI 3.1 | fastify 5.10 · provider 7.0 | [0004](docs/decisions/0004-zod-single-contract-source.md) |
-| Database | Postgres 17 on Neon | — | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
+| Database | Postgres 18 on Neon | 18.4 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
 | ORM | Drizzle + drizzle-kit | 0.45 / 0.31 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
 | Auth | Better Auth, self-hosted in our Postgres | 1.6 | [0007](docs/decisions/0007-better-auth-self-hosted.md) |
 | Files | Cloudflare R2, private, presigned URLs | **not installed — M1** | [0008](docs/decisions/0008-object-storage-r2.md) |

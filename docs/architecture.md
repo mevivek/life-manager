@@ -76,7 +76,7 @@ runtime dependencies on either app and must never import from them.
 | UI | Tailwind v4 + shadcn/ui (Radix) | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
 | Forms | React Hook Form + Zod resolver | [0004](decisions/0004-zod-single-contract-source.md) |
 | API framework | Fastify 5 + `fastify-type-provider-zod` | [0004](decisions/0004-zod-single-contract-source.md) |
-| Database | Postgres 17 on Neon | [0005](decisions/0005-postgres-neon-drizzle.md) |
+| Database | Postgres 18 on Neon | [0005](decisions/0005-postgres-neon-drizzle.md) |
 | ORM | Drizzle ORM + drizzle-kit | [0005](decisions/0005-postgres-neon-drizzle.md) |
 | Auth | Better Auth, self-hosted | [0007](decisions/0007-better-auth-self-hosted.md) |
 | File storage | Cloudflare R2, private bucket | [0008](decisions/0008-object-storage-r2.md) |

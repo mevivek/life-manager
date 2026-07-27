@@ -18,7 +18,14 @@ full-text search. Requirements that follow from the rest of the design:
 
 ## Decision
 
-**Postgres 17, hosted on Neon, accessed exclusively through Drizzle ORM.**
+**Postgres, hosted on Neon, accessed exclusively through Drizzle ORM.**
+
+> **Version, corrected 2026-07-27.** This ADR originally specified Postgres 17. The dev branch
+> provisioned at M0 reports **PostgreSQL 18.4** — Neon's default moved on between this decision
+> and the scaffold. Nothing here depends on 17 specifically; every feature relied on below has
+> been in Postgres for several major versions. **Do not pin a major version in this ADR** — take
+> Neon's default and record the observed version in `CLAUDE.md`'s stack table, which is checked
+> against reality at each review ([review.md](../product/review.md) lens 3).
 
 Postgres because it covers every requirement above natively: `jsonb` for `custom_attrs`,
 generated `tsvector` columns with GIN indexes for search, `numeric` for money, `pgvector`
