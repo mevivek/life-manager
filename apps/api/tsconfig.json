@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // nodenext: this compiles to real Node ESM and is run by `node dist/server.js`, so
+    // relative imports must carry an explicit .js extension. Not `bundler` — nothing
+    // bundles this.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"]
+  },
+  "include": ["src", "drizzle.config.ts", "vitest.config.ts"]
+}

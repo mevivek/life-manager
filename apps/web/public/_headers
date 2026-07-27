@@ -1,0 +1,18 @@
+# Cloudflare Pages response headers.
+#
+# The API sets its own; these cover the static origin that serves the app shell.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  # connect-src must name the API host explicitly: the app and the API are different ORIGINS in
+  # production (app.mevivek.dev vs api.mevivek.dev), even though they are the same site.
+  # 'unsafe-inline' for style-src is required by Tailwind's runtime-injected styles.
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.mevivek.dev; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+# Hashed assets are immutable; the service worker and index.html must never be.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

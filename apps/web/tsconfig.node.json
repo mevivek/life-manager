@@ -1,0 +1,8 @@
+{
+  // Config files run in Node, not the browser, so they get a different lib and types.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,48 @@
+# Cloud Build: builds the API image server-side, so no local Docker is required.
+#
+# Why this file exists rather than `gcloud run deploy --source .`:
+# that path expects a Dockerfile at the SOURCE ROOT and otherwise falls back to buildpacks.
+# Our Dockerfile lives at apps/api/Dockerfile but must be built with the REPO ROOT as context —
+# the build needs pnpm-lock.yaml, pnpm-workspace.yaml and packages/shared, and a context of
+# apps/api alone fails with a confusing "lockfile not found".
+#
+# Deploy is deliberately NOT a step here. Build and deploy are separated so an image can be
+# built and inspected without being released, and so the Cloud Run flags that keep this inside
+# the free tier (--min-instances=0) live in one visible place rather than buried in a build.
+#
+# Run manually:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=_TAG=$(git rev-parse --short HEAD)
+#
+# The upload honours .gitignore, so node_modules and dist are not sent.
+
+substitutions:
+  _REGION: us-central1
+  _REPO: life-manager
+  _IMAGE: api
+  _TAG: latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    # BuildKit is REQUIRED: the Dockerfile uses `RUN --mount=type=cache` for the pnpm store,
+    # which the legacy builder silently fails to parse.
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - --file=apps/api/Dockerfile
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_TAG}
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest
+
+options:
+  # Newer projects reject builds that use the default logs bucket with the compute service
+  # account; this keeps logs in Cloud Logging only and avoids that failure.
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1200s

@@ -1,0 +1,3 @@
+# Cloudflare Pages SPA fallback. Without this, a hard refresh on /home or /login is a 404 from
+# the CDN, because no such file exists — TanStack Router resolves those paths client-side.
+/*  /index.html  200

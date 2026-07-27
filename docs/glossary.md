@@ -1,39 +1,90 @@
 # Glossary
 
-Shared vocabulary used across ADRs and domain docs. Keep terms defined here rather
-than redefining them (possibly inconsistently) in each domain doc.
+Shared vocabulary. These words have precise meanings in this repo — use them exactly, in
+code, docs, and commit messages. Where a term has a common alternative that we
+deliberately do *not* use, that is noted.
 
-**Entity**
-A record belonging to a domain (a Document, a Thing, a Transaction, a Person, a
-Note, a Credential). Entities share cross-cutting attributes: tags, attachments,
-links to other entities, reminder dates, timestamps.
+---
 
-**Domain**
-A life area with its own data shape and its own doc under `docs/domains/`
-(Documents, Things/Assets, Money, People, Notes, Vault). Each domain owns its
-entity model and business rules; cross-domain relationships go through the shared
-Links concept, not direct foreign keys between domain tables.
+**Actor** — the authenticated user performing a request, together with the spaces they may
+act in. Represented as `ActorContext { userId, spaceIds, role }`. Every repository function
+takes an actor as its first argument. See [security-model.md](security-model.md) §3.
 
-**Tier A / Tier B (sensitivity tiers)**
-- **Tier A** — Documents, Things, Money, People, Notes. Encrypted at rest/in
-  transit, server holds the keys, standard account auth.
-- **Tier B** — the Vault (secrets/credentials). Zero-knowledge: a master password
-  derives an encryption key client-side; the backend only ever stores ciphertext it
-  cannot read. Architecturally a separate subsystem, not a flag on a Tier A table.
+**ADR** — Architecture Decision Record. A numbered, immutable document capturing one
+decision, its context, and its consequences. Stored in [decisions/](decisions/). ADRs are
+superseded, never edited in place. See [ADR-0015](decisions/0015-docs-as-orientation.md).
 
-**Vault**
-The secrets/password-manager domain (Tier B). Not yet implemented; deferred until
-after the Documents domain proves out the entity/tag/attachment pattern, but its
-zero-knowledge design should be settled before the data model grows large (see the
-phasing discussion — not yet captured as an ADR since implementation hasn't started).
+**Attachment** — *not used.* Say **file**.
 
-**ADR (Architecture Decision Record)**
-A short file under `docs/decisions/` capturing one architectural decision as
-**Context / Decision / Consequences**. Written so a future session understands
-*why* something is the way it is without re-deriving it from git history or chat
-logs that aren't visible to it.
+**DEK** — Data Encryption Key. A random key encrypting exactly one vault item. Stored
+wrapped under the Space Key. Vault-only concept. See
+[security-model.md](security-model.md) §5.
 
-**Links**
-The mechanism by which entities in different domains reference each other (e.g. a
-Thing referencing the Document that is its warranty) without domain tables having
-hard-wired foreign keys into each other.
+**Document** — a record in the Documents domain: metadata (title, type, issuer, expiry)
+plus zero or more **files**. A document is the logical thing ("my passport"); a file is a
+specific scan of it. See [domains/documents.md](domains/documents.md).
+
+**Domain** — one area of life the app models: Documents, Assets, Money, People, Notes,
+Vault. Each has exactly one doc in [domains/](domains/) and is designed to be worked on
+without reading the others.
+
+**E2EE** — end-to-end encrypted. Ciphertext only server-side; the server holds no key and
+cannot decrypt. **Tier 2**. Applies to the vault only.
+
+**File** — the bytes of an uploaded document scan, stored in R2 and described by a
+`document_files` row. Files are versioned; replacing a scan does not destroy the old one.
+
+**KEK** — Key Encryption Key. Derived client-side from the vault passphrase via Argon2id.
+Never leaves the client, never sent to the server. Vault-only.
+
+**Owner** — the `role` of the user who created a space. Distinguished from **member**.
+Not to be confused with "the owner of a record" — records belong to a *space*, not a user.
+
+**Personal space** — the space auto-created for each user at signup, with that user as its
+sole member. Structurally identical to a shared space; there is no special-casing.
+
+**Presigned URL** — a short-lived, single-purpose URL minted by the API that lets a client
+read or write one specific R2 object directly. The API always chooses the object key; the
+client never supplies one. See [ADR-0008](decisions/0008-object-storage-r2.md).
+
+**Recovery code** — a one-time code generated client-side at vault setup, forming a second
+independent wrap of the user's private key. The only way back into a vault after a
+forgotten passphrase. Never transmitted to the server. Vault-only.
+
+**Reminder** — a scheduled notification tied to any entity via
+`(entity_type, entity_id, due_on, lead_days)`. Generic on purpose so every domain reuses
+one table. The most valuable feature of the Documents domain — see
+[prior-art.md](prior-art.md) §3.
+
+**Repository** — the only layer permitted to write SQL. Every function takes an actor and
+filters by space. See [conventions/code.md](conventions/code.md).
+
+**Sensitivity tier** — how readable a piece of data is to the server. **Tier 0**
+server-readable (everything today), **Tier 1** server-side encrypted (reserved, unused),
+**Tier 2** end-to-end encrypted (vault only). Every domain doc states its tier. See
+[security-model.md](security-model.md) §4.
+
+**Service** — the layer holding business rules and owning transactions. Knows nothing about
+HTTP; calls repositories.
+
+**Space** — **the unit of ownership and sharing.** Every domain record carries a
+`space_id`. A space has members with roles. This is the tenant boundary. Chosen over a
+plain `owner_id` because family sharing is near-term — see
+[ADR-0006](decisions/0006-space-based-ownership.md).
+
+**Space Key** — the symmetric key protecting a space's vault items, stored once per member,
+each copy wrapped to that member's public key. Vault-only.
+
+**Tenant** — *avoid.* Say **space**. "Tenant" implies organizational isolation we don't
+model.
+
+**User** — an authenticated identity, managed by Better Auth in our own Postgres. A user is
+a member of one or more spaces. Users do not own records; spaces do.
+
+**Vault** — the future end-to-end encrypted secrets/password domain. Does not exist yet;
+its cryptographic design is fixed in [security-model.md](security-model.md) §5 so building
+it is additive.
+
+**Wrap / wrapped** — encrypting a key with another key. "The DEK is wrapped under the Space
+Key" means `encrypt(SpaceKey, DEK)` is what gets stored. Always say wrapped, never
+"encrypted key", to keep key-on-key operations distinguishable from data encryption.

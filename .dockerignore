@@ -1,0 +1,19 @@
+# Build context is the repo root (see apps/api/Dockerfile).
+#
+# .env is listed first and matters most: without it, a local .env would be copied into the image
+# and every secret in it would be readable by anyone who can pull that image.
+.env
+.env.*
+!.env.example
+
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+apps/web
+.git
+.github
+docs
+*.md
+!apps/api/**/*.md
