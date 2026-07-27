@@ -227,9 +227,63 @@ to coexist on the same hostnames.
 **Generate a fresh `BETTER_AUTH_SECRET` for production.** Do not reuse the local one; it has been
 on a development machine.
 
-**Not yet written:** the GitHub Actions workflow and the Cloud Build config. Deliberately — they
-cannot be tested without the credentials above, and untested deploy config that looks
-authoritative is worse than none.
+#### What is actually deployed (done 2026-07-27)
+
+**The API runs on Cloud Run.** The web app does not — it is still served from the laptop by the
+tunnel above.
+
+| | |
+|---|---|
+| Project | `life-manager-01` (number `830606060895` — the same project as the Google OAuth client) |
+| Service | `life-manager-api`, region `us-central1` (free-tier eligible) |
+| Direct URL | `https://life-manager-api-830606060895.us-central1.run.app` |
+| Custom domain | `api.mevivek.dev` via a Cloud Run **domain mapping** |
+| Image | Artifact Registry `us-central1-docker.pkg.dev/life-manager-01/life-manager/api`, cleanup policy keeps the last 3 |
+| Runtime identity | `life-manager-api@life-manager-01.iam.gserviceaccount.com` |
+| Guard rails | `--min-instances=0`, `--max-instances=3`, `$5` budget alert on the billing account |
+
+**`--min-instances=0` is load-bearing, not a preference.** Cloud Run's free tier is 180,000
+vCPU-seconds/month and a month is ~2.6M seconds, so a single always-on instance costs roughly 14×
+the free allowance. Anything that sets a minimum above zero turns this from free into billed.
+
+Rebuild and redeploy:
+
+```bash
+gcloud builds submit --config cloudbuild.yaml --substitutions=_TAG=$(git rev-parse --short HEAD)
+gcloud run deploy life-manager-api --region=us-central1 \
+  --image=us-central1-docker.pkg.dev/life-manager-01/life-manager/api:$(git rev-parse --short HEAD) \
+  --service-account=life-manager-api@life-manager-01.iam.gserviceaccount.com \
+  --min-instances=0 --max-instances=3
+```
+
+**Secrets live in Secret Manager**, not as env vars on the service: `DATABASE_URL`,
+`DATABASE_URL_UNPOOLED`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_SECRET`. The runtime service account
+has `secretAccessor` **on those four secrets only and no project-level roles** — deliberately not
+the default compute service account, which is broadly privileged. The first deploy failed on
+exactly this permission; that failure is expected if the account is ever recreated.
+
+Production uses a **different `BETTER_AUTH_SECRET`** from local. Rotating it invalidates every
+session.
+
+##### Two traps in the domain mapping, both of which cost time
+
+1. **The DNS record must be DNS-only (grey cloud), not proxied.** Google cannot complete
+   certificate validation through Cloudflare's proxy, and the failure is silent — the certificate
+   simply never issues. This is the opposite of what a Cloudflare-proxied CNAME to `*.run.app`
+   would need, so do not mix the two approaches.
+2. **`CertificateProvisioned: True` does not mean it is serving.** That condition reports
+   issuance in the control plane; propagation to the serving edge lags it by minutes to about an
+   hour. During that window port 80 answers with a 302 while port 443 accepts the TCP connection
+   and closes with `unexpected EOF / 0 bytes`. That looks like a misconfiguration and is not one —
+   **wait, do not re-point DNS**, which restarts the process.
+
+##### Not yet done
+
+- **Web app hosting.** Cloudflare Pages, per the settings above. Until then the web half needs the
+  laptop.
+- **GitHub Actions.** The build and deploy commands above are proven, so a workflow can now
+  reproduce a known-good path rather than guessing. It needs a deploy service account key as a
+  repo secret; the runtime account above is *not* it and must not be given deploy rights.
 
 ## License
 

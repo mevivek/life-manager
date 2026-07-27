@@ -37,13 +37,14 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0011](0011-pre-v1-schema-resets.md) | Pre-v1 schema resets | accepted | Reset the dev database rather than migrate it — **until M3** |
 | [0012](0012-pg-boss-background-jobs.md) | pg-boss for jobs | accepted | Queue on the existing Postgres; jobs enqueue transactionally. No Redis |
 | [0013](0013-read-only-offline-v1.md) | Read-only offline in v1 | accepted | Cache reads; writes need connectivity. Offline writes are their own project |
-| [0014](0014-hosting-topology.md) | Hosting topology | accepted | Cloudflare Pages + Fly.io + Neon + R2; free except a few dollars for the API |
+| [0014](0014-hosting-topology.md) | Hosting topology | **superseded by 0021** | Cloudflare Pages + Fly.io + Neon + R2; free except a few dollars for the API |
 | [0015](0015-docs-as-orientation.md) | Docs as orientation | accepted | Documentation is a routing system for sessions with no memory |
 | [0016](0016-testing-and-tooling.md) | Testing and tooling | accepted | Vitest against real Postgres, Playwright, Biome; a cross-space test per endpoint |
 | [0017](0017-product-brain.md) | Project brain | accepted | Living doc driving product + technical direction, review, and re-planning; AI proposes, human decides scope |
 | [0018](0018-testcontainers-for-api-tests.md) | Testcontainers for API tests | accepted | Throwaway Postgres per run; `TEST_DATABASE_URL` overrides it; skips (not fails) with neither, except in CI |
 | [0019](0019-same-site-subdomain-deployment.md) | One domain, two subdomains | accepted, **amended** | `app.` + `api.mevivek.dev` are same-site, so `SameSite=Lax` survives two hosting providers |
 | [0020](0020-google-oauth-alongside-password.md) | Google sign-in | accepted | Google OAuth **alongside** email+password, with google as a trusted linking provider |
+| [0021](0021-cloud-run-for-the-api.md) | Cloud Run for the API | accepted | Supersedes 0014's Fly choice; --min-instances=0 is what keeps it free |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -75,7 +76,8 @@ first
 0008 R2 and presigned URLs · 0009 not encrypted
 
 **Deployment and cost**
-0014 hosting · 0019 domains and cookies · 0005 Neon · 0008 R2
+0021 Cloud Run (API) · 0014 original topology, superseded · 0019 domains and cookies ·
+0005 Neon · 0008 R2
 
 **Deciding what to build, reviewing it, changing the plan**
 0017 project brain · 0015 documentation structure

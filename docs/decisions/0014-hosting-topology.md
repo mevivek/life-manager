@@ -2,6 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-07-26
+- **Superseded by:** [ADR-0021](0021-cloud-run-for-the-api.md) — Cloud Run, not Fly, is what the API actually runs on
 
 ## Context
 
