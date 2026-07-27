@@ -95,6 +95,31 @@ target, widgets) versus waiting for native.
 
 **Blocks:** nothing yet. Worth answering before M2's PWA work.
 
+### Q6 — Should `ActorContext.role` be a scalar or per-space?
+
+**Why it matters:** [security-model.md](../security-model.md) §3 defines
+`ActorContext.role: 'owner' | 'member'` as "role in the space being acted upon", while `spaceIds`
+on the same type is an array. Those cannot both be true once a user belongs to two spaces, which is
+exactly what M3 introduces. This is a **technical** question, which
+[ADR-0017](../decisions/0017-product-brain.md)'s amended charter puts in scope for this file.
+
+**Assumption M0 shipped on, stated so it can be corrected:** every user has exactly one space, so
+`role` is populated from that single membership. Where it is set —
+`apps/api/src/auth/actor.hook.ts` — carries a comment pointing here, and the type itself documents
+the ambiguity.
+
+**Options:** (a) `memberships: ReadonlyArray<{ spaceId, role }>` on `ActorContext`, with the role
+resolved per target space in the service layer; (b) keep the scalar and resolve the target space
+earlier, in the route; (c) drop `role` from `ActorContext` entirely and have services look up the
+membership they need.
+
+**Leaning:** (a). It makes the type honest and keeps role resolution in one place. It edits
+`security-model.md` §3, which is a doc a session is told to read *in full* before touching auth —
+so changing it is a human decision, not a refactor.
+
+**Blocks:** M3's role enforcement. Nothing before that, because there is no second space and no
+role check yet. Answer during M3 planning, not sooner.
+
 ---
 
 ## 2. Answered

@@ -2,6 +2,13 @@
 
 - **Status:** accepted
 - **Date:** 2026-07-26
+- **Amended:** 2026-07-27 — the personal-space guarantee is restated in terms of what is actually
+  enforced. This ADR originally said signup's extra step "must be transactional with user
+  creation"; Better Auth cannot do that, so M0 delivers the same guarantee with a database
+  constraint plus an idempotent, retried creation path. Amended rather than superseded because the
+  **decision is unchanged** — records belong to spaces, every user has exactly one personal space
+  they own, and a personal space is not special-cased. Only the stated *mechanism* was wrong, and
+  it was wrong from the day it was written rather than changed by anything since.
 
 ## Context
 
@@ -34,12 +41,44 @@ space_members      space_id, user_id, role ('owner' | 'member'), joined_at
 - Every domain table carries `space_id not null` **and** `created_by not null`.
 - `space_id` is the authorization boundary. `created_by` is provenance only — useful for
   showing who added something in a shared space, never consulted for access control.
-- **Every user gets a `personal` space at signup**, with themselves as `owner`.
+- **Every user ends up with exactly one `personal` space, owned by them.**
 - A personal space is **not special-cased anywhere.** It is a space with one member. This
   is the crux: if personal spaces had their own code path, sharing would still be a
   rewrite.
 - Every repository function takes `ActorContext` first and filters
   `space_id IN actor.spaceIds` ([conventions/code.md](../conventions/code.md) §2).
+
+### How the personal-space guarantee is enforced
+
+Stated precisely, because the obvious reading — "one transaction with user creation" — is not
+achievable and a doc claiming it would be fiction ([review.md](../product/review.md) lens 3).
+
+**Better Auth cannot create the space in the same transaction as the user.**
+`databaseHooks.user.create.after` is queued to run *after* that transaction commits, by design
+(better-auth issue #7260); an after-hook that inserts a row referencing the new user inside the
+transaction hits a foreign-key violation because it cannot see the uncommitted row. A `before`
+hook cannot work either — `space_members.user_id` needs the user to exist. Getting a genuine
+single transaction would mean forking Better Auth's signup or hand-writing the auth-table
+inserts, both far worse trades than the alternative below.
+
+So the guarantee comes from three mechanisms instead of one:
+
+1. **Atomic where it matters.** `spacesService.ensurePersonalSpace()` creates the `spaces` row and
+   its `owner` `space_members` row in one transaction. No user can ever have an orphan space, and
+   no space can ever exist without an owner.
+2. **At most one, enforced by the database.** `spaces.personal_for_user_id` carries a partial
+   unique index (`where personal_for_user_id is not null`), so a second personal space for the
+   same user is impossible. `ensurePersonalSpace` inserts with `on conflict do nothing` and
+   re-reads, which makes it idempotent under concurrency rather than merely idempotent in code.
+   See [conventions/data.md](../conventions/data.md) §9. **Nothing reads that column except
+   `ensurePersonalSpace`** — it is a uniqueness guard, not a code path, so "not special-cased
+   anywhere" still holds.
+3. **At least one, enforced by retry.** Two independent callers invoke it: the signup after-hook,
+   and the session → `ActorContext` hook whenever it sees a session with no memberships. If the
+   first ever dies between commit and hook, the user's next request repairs it and logs a `warn`.
+
+Net: **exactly one personal space per user.** The mechanism is a constraint plus idempotent
+retry, not atomicity with user creation.
 
 Family sharing then becomes: an invite flow, a `space_members` insert, and a space switcher
 in the UI. **No schema migration. No repository changes. No authorization redesign.**
@@ -72,9 +111,19 @@ matches how comparable products model ownership; Papra reached the same conclusi
 "organizations" ([prior-art.md](../prior-art.md) §1).
 
 **Bad:** Two extra tables and an extra join before any sharing feature exists. Every query
-carries a space filter that is trivially satisfiable today. Signup has an extra step
-(create the personal space) that must be transactional with user creation. `actor.spaceIds`
-is a list rather than a single value, so every query uses `IN` rather than `=`.
+carries a space filter that is trivially satisfiable today. Signup has an extra step (create the
+personal space) which cannot be transactional with user creation, and therefore costs a column, a
+partial unique index, and a self-healing branch in the auth hook to guarantee properly — see
+above. `actor.spaceIds` is a list rather than a single value, so every query uses `IN` rather
+than `=`.
+
+**Open, for M3:** `ActorContext.role` is a single scalar while `spaceIds` is a list
+([security-model.md](../security-model.md) §3 calls it "role in the space being acted upon"). Those
+cannot both be right once a user belongs to two spaces. At M0 there is exactly one space per user,
+so it is that space's role. The likely fix is `memberships: ReadonlyArray<{ spaceId, role }>` with
+the role resolved per target space — an edit to security-model.md §3, and therefore a human
+decision rather than a refactor. Recorded in
+[open-questions.md](../product/open-questions.md).
 
 **Deferred:** Postgres RLS as defense-in-depth, using
 `space_id = any(current_setting('app.space_ids'))` set per transaction. Deferred because

@@ -29,7 +29,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0003](0003-vite-spa-pwa-over-nextjs.md) | Vite SPA, not Next.js | accepted | SSR is unusable under ADR-0002 and tempts sessions to break it |
 | [0004](0004-zod-single-contract-source.md) | Zod as the single contract | accepted | One schema → validation + types + OpenAPI + form validation |
 | [0005](0005-postgres-neon-drizzle.md) | Postgres on Neon, Drizzle | accepted | JSONB, full-text, transactions; branching makes resets free |
-| [0006](0006-space-based-ownership.md) | Space-based ownership | accepted | Records belong to spaces, not users — family sharing is near-term |
+| [0006](0006-space-based-ownership.md) | Space-based ownership | accepted, **amended** | Records belong to spaces, not users — family sharing is near-term |
 | [0007](0007-better-auth-self-hosted.md) | Better Auth, self-hosted | accepted | Users in our own Postgres; passkeys and vault key material need it |
 | [0008](0008-object-storage-r2.md) | Cloudflare R2, presigned URLs | accepted | Zero egress; the API chooses object keys, bytes never transit it |
 | [0009](0009-sensitivity-tiers.md) | Sensitivity tiers | accepted | No app-level encryption for ordinary data; that's what keeps OCR and search possible |
@@ -41,13 +41,22 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0015](0015-docs-as-orientation.md) | Docs as orientation | accepted | Documentation is a routing system for sessions with no memory |
 | [0016](0016-testing-and-tooling.md) | Testing and tooling | accepted | Vitest against real Postgres, Playwright, Biome; a cross-space test per endpoint |
 | [0017](0017-product-brain.md) | Project brain | accepted | Living doc driving product + technical direction, review, and re-planning; AI proposes, human decides scope |
+| [0018](0018-testcontainers-for-api-tests.md) | Testcontainers for API tests | accepted | Throwaway Postgres per run; `TEST_DATABASE_URL` overrides it; skips (not fails) with neither, except in CI |
+| [0019](0019-same-site-subdomain-deployment.md) | One domain, two subdomains | accepted | `app.` + `api.mevivek.dev` are same-site, so `SameSite=Lax` survives two hosting providers |
+
+**Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
+personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
+create it in the same transaction as the user. Decision unchanged; only the mechanism was
+misstated. [0017](0017-product-brain.md) 2026-07-27 — charter widened from product-only to
+product and technical thinking.
 
 ---
 
 ## By topic
 
 **Deciding how to build something**
-0001 language · 0003 web client · 0004 contract · 0005 database · 0012 jobs · 0016 tests
+0001 language · 0003 web client · 0004 contract · 0005 database · 0012 jobs · 0016 tests ·
+0018 test database
 
 **Touching auth, ownership, or crypto** — read [security-model.md](../security-model.md)
 first
@@ -60,7 +69,7 @@ first
 0008 R2 and presigned URLs · 0009 not encrypted
 
 **Deployment and cost**
-0014 hosting · 0005 Neon · 0008 R2
+0014 hosting · 0019 domains and cookies · 0005 Neon · 0008 R2
 
 **Deciding what to build, reviewing it, changing the plan**
 0017 project brain · 0015 documentation structure

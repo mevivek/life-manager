@@ -11,11 +11,20 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 
 ## Status
 
-**Pre-code.** Only documentation and architecture decisions exist. No app code, no
-dependencies, no CI, no `apps/` or `packages/` directories.
+**[M0](docs/roadmap.md) code complete, not yet deployed.** The monorepo, the API, the web app,
+the database schema, auth, and CI all exist and work. `pnpm typecheck lint test build` are green,
+40 tests pass, and signup → `GET /api/v1/me` returns exactly one personal space over real HTTP.
 
-Do not assume any tooling exists — check before relying on it. The stack below is **decided
-but not yet scaffolded**. Next step is [M0](docs/roadmap.md).
+**Nothing has ever run outside `localhost.`** M0 is not signed off until the phone check in
+[roadmap.md](docs/roadmap.md) passes, which needs the maintainer to fill `apps/api/.env`, create
+the Fly app and Cloudflare Pages project, and add two DNS records.
+
+What does **not** exist yet: any domain table (`documents` is [M1](docs/roadmap.md)), R2 or any
+file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `registerJobs` is empty),
+full-text search, `Idempotency-Key` handling, password reset, and Playwright. Several of those look
+like missing conventions rather than deferred work — they are in the
+[debt register](docs/product/review.md#3-debt-register) as D9–D17 with triggers, so check there
+before "fixing" one.
 
 ---
 
@@ -31,6 +40,8 @@ but not yet scaffolded**. Next step is [M0](docs/roadmap.md).
 | **Deciding what to build, or shaping a technical call** | [`docs/product/brain.md`](docs/product/brain.md) — the project brain |
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
+| **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D9–D17 are M0's known gaps, each with a trigger |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
@@ -72,24 +83,34 @@ Non-negotiable. Breaking one is a bug even if tests pass. Each links to its reas
 
 ---
 
-## Stack (decided, not yet scaffolded)
+## Stack (installed — versions are what `pnpm install` actually resolved)
 
-| Layer | Choice | ADR |
-|---|---|---|
-| Language | TypeScript `strict`, everywhere | [0001](docs/decisions/0001-typescript-monorepo.md) |
-| Monorepo | pnpm workspaces + Turborepo | [0001](docs/decisions/0001-typescript-monorepo.md) |
-| Web | Vite + React SPA, PWA via `vite-plugin-pwa` | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| Routing / data | TanStack Router + TanStack Query | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| UI | Tailwind v4 + shadcn/ui | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| API | Fastify 5 + `fastify-type-provider-zod` → OpenAPI 3.1 | [0004](docs/decisions/0004-zod-single-contract-source.md) |
-| Database | Postgres 17 on Neon | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
-| ORM | Drizzle + drizzle-kit | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
-| Auth | Better Auth, self-hosted in our Postgres | [0007](docs/decisions/0007-better-auth-self-hosted.md) |
-| Files | Cloudflare R2, private, presigned URLs | [0008](docs/decisions/0008-object-storage-r2.md) |
-| Jobs | pg-boss on the same Postgres — no Redis | [0012](docs/decisions/0012-pg-boss-background-jobs.md) |
-| Tests | Vitest (real Postgres), Playwright, MSW | [0016](docs/decisions/0016-testing-and-tooling.md) |
-| Lint/format | Biome | [0016](docs/decisions/0016-testing-and-tooling.md) |
-| Hosting | Cloudflare Pages · Fly.io · Neon · R2 | [0014](docs/decisions/0014-hosting-topology.md) |
+| Layer | Choice | Version | ADR |
+|---|---|---|---|
+| Runtime | Node.js | **22.15** (`.node-version`, `engines`) | — |
+| Package manager | pnpm | **11.17** (`packageManager`) | [0001](docs/decisions/0001-typescript-monorepo.md) |
+| Language | TypeScript `strict` + `noUncheckedIndexedAccess` | **7.0** (Go-native `tsgo`) | [0001](docs/decisions/0001-typescript-monorepo.md) |
+| Monorepo | pnpm workspaces + Turborepo | turbo 2.10 | [0001](docs/decisions/0001-typescript-monorepo.md) |
+| Contract | Zod | **4.4** | [0004](docs/decisions/0004-zod-single-contract-source.md) |
+| Web | Vite + React SPA, PWA via `vite-plugin-pwa` | vite 8.1 · react 19.2 · pwa 1.3 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
+| Routing / data | TanStack Router + TanStack Query | router 1.170 · query 5.101 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
+| UI | Tailwind v4 + shadcn/ui primitives | tailwind 4.3 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
+| API | Fastify + `fastify-type-provider-zod` → OpenAPI 3.1 | fastify 5.10 · provider 7.0 | [0004](docs/decisions/0004-zod-single-contract-source.md) |
+| Database | Postgres 17 on Neon | — | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
+| ORM | Drizzle + drizzle-kit | 0.45 / 0.31 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
+| Auth | Better Auth, self-hosted in our Postgres | 1.6 | [0007](docs/decisions/0007-better-auth-self-hosted.md) |
+| Files | Cloudflare R2, private, presigned URLs | **not installed — M1** | [0008](docs/decisions/0008-object-storage-r2.md) |
+| Jobs | pg-boss on the same Postgres — no Redis | 12.26, zero handlers | [0012](docs/decisions/0012-pg-boss-background-jobs.md) |
+| Tests | Vitest (real Postgres) + MSW; Playwright **not installed** | vitest 4.1 · msw 2.15 | [0016](docs/decisions/0016-testing-and-tooling.md) · [0018](docs/decisions/0018-testcontainers-for-api-tests.md) |
+| Lint/format | Biome | 2.5 | [0016](docs/decisions/0016-testing-and-tooling.md) |
+| Hosting | Cloudflare Pages · Fly.io · Neon · R2 | configured, **never deployed** | [0014](docs/decisions/0014-hosting-topology.md) · [0019](docs/decisions/0019-same-site-subdomain-deployment.md) |
+
+**Version couplings — bumping one of these forces the others:**
+`@vitejs/plugin-react@6` peer-requires `vite@^8` exactly · `fastify-type-provider-zod@7` needs
+`zod >=4.2` **and** `@fastify/swagger >=9.5.1` · `@better-auth/drizzle-adapter` peer-requires
+`drizzle-orm ^0.45.2`, and `better-auth` itself sets the Zod floor · Vitest 4 dropped
+`vitest.workspace.ts` for `test.projects` · Turbo 2 renamed `pipeline` to `tasks` · Tailwind 4 has
+no `tailwind.config.js` · pnpm 11 reads settings from `pnpm-workspace.yaml`, **not** `.npmrc`.
 
 **Before proposing a stack change, read [`docs/decisions/index.md`](docs/decisions/index.md)
 — the alternative was probably already considered and rejected for a reason that still
@@ -98,24 +119,55 @@ were each evaluated and declined.
 
 ---
 
-## Planned layout
-
-Does not exist yet. Created in [M0](docs/roadmap.md).
+## Layout
 
 ```
 apps/web/          Vite React SPA (PWA) — the first client
+  src/routes/        TanStack Router file routes. `_authed.tsx` guards everything under it
+  src/features/      One folder per domain: components, hooks, forms
+  src/components/ui/ shadcn-style primitives
+  src/lib/           api.ts (the ONE typed client), auth-client, query-client, api-origin
 apps/api/          Fastify — the ONLY thing that touches Postgres and R2
+  src/domains/<d>/   <d>.routes.ts → <d>.service.ts → <d>.repository.ts, + <d>.test.ts
+  src/db/            client, columns, schema/, migrate, seed, and scoped.ts — THE tenant filter
+  src/auth/          Better Auth setup, the actor hook, ActorContext
+  src/jobs/          pg-boss lifecycle; registerJobs() is empty until M1
+  src/lib/           env, logger, errors, problem+json, openapi, security plugin
+  src/test/          global-setup, per-file setup, factories, describeDb
+  drizzle/           committed migration SQL
 packages/shared/   Zod schemas + inferred types, imported by both
 docs/              See docs/README.md
 ```
+
+**Two files are worth reading before touching anything space-scoped:**
+`apps/api/src/db/scoped.ts` (the only place the tenant filter is written) and
+`apps/api/src/db/schema/scoped-columns.ts` (the columns and index every domain table gets).
 
 ---
 
 ## Conventions
 
-**Not yet established in code** — no lint config, test framework, or CI exists. The intended
-conventions are written up in [`docs/conventions/`](docs/conventions/) and become real at
-M0. **Update this section when they do.**
+**Real now.** [`docs/conventions/`](docs/conventions/) describes them; these enforce them:
+
+| Enforced by | What |
+|---|---|
+| `biome.json` | Format + lint. `pnpm lint`, `pnpm format`. `no-explicit-any`, `noNonNullAssertion`, `noFloatingPromises` are **errors** |
+| `tsconfig.base.json` | `strict` + `noUncheckedIndexedAccess`, monorepo-wide |
+| `turbo.json` | `pnpm typecheck`, `pnpm build` — ordered so `packages/shared` builds first |
+| `vitest.config.ts` (root) | `pnpm test` runs all three packages |
+| `.github/workflows/ci.yml` | typecheck → lint → test → build on every push and PR, no secrets |
+
+Two traps worth knowing before you edit tooling config:
+
+- **`biome.json` must not contain comments.** Biome silently falls back to its defaults when it
+  cannot deserialise the config, so one `//` turns into every file failing `format` with nothing
+  naming the cause.
+- **`pnpm` settings live in `pnpm-workspace.yaml`**, not `.npmrc`. Install scripts are blocked by
+  default and allowlisted there.
+
+Database-backed tests need Docker or `TEST_DATABASE_URL`; with neither they **skip, not fail**
+([ADR-0018](docs/decisions/0018-testcontainers-for-api-tests.md)) — so a green `pnpm test` does not
+by itself mean the API was tested. Check the skip count.
 
 ---
 

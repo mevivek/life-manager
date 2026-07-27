@@ -4,7 +4,13 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M0 not started.** Only documentation exists.
+**Current position: M0 code complete; deployment not done.** Everything below is built, and
+`typecheck`, `lint`, `test` and `build` are green — but the app has never run anywhere except
+`localhost`. **M0 is not signed off until the phone check in the M0 section passes.**
+
+Next action is the maintainer's, not a session's: fill `apps/api/.env`, create the Fly app and
+the Cloudflare Pages project, and add the two DNS records
+([ADR-0019](decisions/0019-same-site-subdomain-deployment.md)).
 
 ---
 
@@ -12,21 +18,41 @@ waterfall.
 
 Make the repo runnable end to end with one trivial vertical slice. No product features.
 
-- pnpm workspace: `apps/web`, `apps/api`, `packages/shared`; Turborepo pipeline
-- Biome, TypeScript strict, GitHub Actions CI (typecheck, lint, test, build)
-- Fastify app with `/api/v1/health`, Zod type provider, OpenAPI served at
-  `/api/v1/openapi.json`, pino logging, RFC 9457 error mapping
-- Drizzle + drizzle-kit wired to a Neon branch; `users`, `spaces`, `space_members`
-- Better Auth mounted: email + password signup/login; **personal space auto-created at
-  signup**
-- Vite React SPA that logs in, calls `/health`, and installs as a PWA
-- Vitest running in both apps; one API integration test against real Postgres
+- [x] pnpm workspace: `apps/web`, `apps/api`, `packages/shared`; Turborepo pipeline
+- [x] Biome, TypeScript strict, GitHub Actions CI (typecheck, lint, test, build)
+- [x] Fastify app with `/api/v1/health`, Zod type provider, OpenAPI served at
+      `/api/v1/openapi.json`, pino logging, RFC 9457 error mapping
+- [x] Drizzle + drizzle-kit; `users`, `spaces`, `space_members` (+ `sessions`, `accounts`,
+      `verifications`), one committed migration
+- [x] Better Auth mounted: email + password signup/login; **personal space auto-created at
+      signup** — see the amended [ADR-0006](decisions/0006-space-based-ownership.md) for the
+      mechanism, which is a database constraint plus idempotent retry, not one transaction
+- [x] Vite React SPA that signs up, signs in, calls `/health` and `/me`, and builds a service
+      worker + manifest
+- [x] Vitest in all three packages; 40 tests, including API integration tests against real
+      Postgres ([ADR-0018](decisions/0018-testcontainers-for-api-tests.md))
+- [x] pg-boss lifecycle wired, zero handlers registered
+- [x] `CLAUDE.md` Status, Conventions, Layout and Stack updated
+
+**Still outstanding — all of it needs the maintainer, none of it needs a session:**
+
+- [ ] `apps/api/.env` filled in (Neon connection strings + `BETTER_AUTH_SECRET`)
+- [ ] Fly app created, secrets set, `fly certs add api.mevivek.dev`, deployed
+- [ ] Cloudflare Pages project created, `VITE_API_URL` set, `app.mevivek.dev` attached
+- [ ] Two DNS records
+- [ ] **The phone check below**
 
 **Done when:** you can sign up on your phone, and the API proves the session resolves to an
-`ActorContext` with exactly one space.
+`ActorContext` with exactly one space. Concretely: sign up at `https://app.mevivek.dev`, land on
+the home route showing your email and exactly one space (`personal` / `owner`), add it to the home
+screen, open it standalone, and **still be logged in** — that last part is the
+[ADR-0019](decisions/0019-same-site-subdomain-deployment.md) cookie path and the most likely thing
+to fail. Then sign up a second account and confirm it gets its own separate space and cannot see
+the first.
 
-**Update [CLAUDE.md](../CLAUDE.md) "Conventions" and "Status" sections as part of this
-milestone** — they currently say no tooling exists.
+**Verified locally instead, for the record:** signup over real HTTP returns a
+`HttpOnly; SameSite=Lax` cookie, and `GET /api/v1/me` returns exactly one personal space owned by
+the new user.
 
 ## M1 — Documents, core + reminders
 

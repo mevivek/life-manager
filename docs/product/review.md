@@ -123,6 +123,15 @@ Status: `open` · `accepted` (known, deliberately not fixing) · `fixed`.
 | D6 | No uptime monitoring or alerting | low | accepted | Before going public |
 | D7 | Migration path never exercised — first real migration will be the first one ever run | med | accepted | M3. Rehearse against a Neon branch first ([ADR-0011](../decisions/0011-pre-v1-schema-resets.md)) |
 | D8 | pg-boss cron wakes Neon compute, so the DB is never truly idle — free-tier hours unverified | low | open | Watch after M1 ([ADR-0012](../decisions/0012-pg-boss-background-jobs.md)) |
+| D9 | `Idempotency-Key` is documented in [api.md](../conventions/api.md) §5 but **not implemented**. M0 ships no mutation of its own, so nothing honours it yet | med | accepted | **The first M1 `POST`.** A retried upload creating two documents is the exact failure it exists to prevent |
+| D10 | Cursor pagination primitives exist in `packages/shared` but no endpoint uses them, so the shape is unproven | low | accepted | The first list endpoint (M1 `GET /documents`) |
+| D11 | **No password reset and no email verification.** `requireEmailVerification: false`, and there is no mail provider. A forgotten password means deleting the user row from the database by hand | med | accepted | Before M3 — unacceptable the moment a family member has an account — **or sooner if it bites once.** Needs `RESEND_API_KEY`, already stubbed in `.env.example` |
+| D12 | Auth-table `id` columns are `uuid`, diverging from what `auth:generate` emits (`text`). Justified by [data.md](../conventions/data.md) §4, but it means regenerating that file reintroduces the divergence silently | low | accepted | Any `better-auth` upgrade: regenerate, diff, re-apply the uuid columns. The header comment in `schema/auth.ts` says so |
+| D13 | Better Auth's endpoints do **not** appear in `/api/v1/openapi.json`, so [api.md](../conventions/api.md)'s "the OpenAPI document is the contract" is not true for auth. `@fastify/swagger` only sees Fastify-declared schemas | low | accepted | Before a second client is written against the API (Android). Until then the web client uses `better-auth/react`, which carries its own types |
+| D14 | Graceful shutdown on `SIGTERM` is unverified — Windows does not deliver POSIX signals, and that path only runs on Fly, where scale-to-zero exercises it constantly | low | open | The first `fly deploy`: watch the logs for `shutdown complete` rather than a SIGKILL |
+| D15 | Production login depends on owning `mevivek.dev`. Losing or changing the domain breaks the session cookie, not just the URL ([ADR-0019](../decisions/0019-same-site-subdomain-deployment.md)) | low | accepted | Domain renewal. If it ever changes, `COOKIE_DOMAIN`, `API_BASE_URL`, `WEB_ORIGIN`, `VITE_API_URL` and `apps/web/public/_headers` all change together |
+| D16 | PWA icons are generated, aliased PNGs with no antialiasing — real icons, but visibly jagged at small sizes | low | open | Whenever the app is shown to anyone, or M2's PWA polish |
+| D17 | No E2E test. [ADR-0016](../decisions/0016-testing-and-tooling.md) lists Playwright; M0's acceptance test is a human on a phone | low | accepted | M1, when [testing.md](../conventions/testing.md) §6's first flow ("sign up → land on the document list") has a document list to land on |
 
 Seeded from [security-model.md](../security-model.md) §7 and the ADR consequence sections.
 **Every entry needs a trigger** — debt with no trigger is debt nobody will ever pay.
@@ -130,6 +139,9 @@ Seeded from [security-model.md](../security-model.md) §7 and the ADR consequenc
 **D4 is the one to be uncomfortable about.** Everything else is deferred against a future
 milestone; D4 is a gap that bites retroactively, and the whole point of this app is holding
 documents you can't afford to lose.
+
+**D11 is the one most likely to bite first**, and it bites the maintainer personally: at M0 there
+is no way to recover an account except editing the database.
 
 ## 4. Turning findings into work
 
