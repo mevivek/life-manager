@@ -1,0 +1,66 @@
+# Fly.io configuration for the API (ADR-0014).
+#
+# NEVER EXECUTED AS PART OF M0. `fly launch` will want to rewrite this file; use
+# `fly launch --no-deploy --copy-config` so it keeps these settings, then `fly deploy`.
+#
+# Before the first deploy:
+#   fly secrets set DATABASE_URL=... DATABASE_URL_UNPOOLED=... BETTER_AUTH_SECRET=... \
+#                   API_BASE_URL=https://api.mevivek.dev WEB_ORIGIN=https://app.mevivek.dev \
+#                   COOKIE_DOMAIN=.mevivek.dev
+#   fly certs add api.mevivek.dev
+#
+# `fly secrets set` is the ONLY place production values live. Never in this file, and never in
+# [env] below — this file is committed (security-model.md §6).
+
+app = 'life-manager-api'
+primary_region = 'lhr'
+
+[build]
+  dockerfile = 'Dockerfile'
+  # Relative to this file; the actual build context is the repo root.
+  ignorefile = '../../.dockerignore'
+
+[deploy]
+  # Runs in a one-off machine from the new image, BEFORE any traffic reaches it. If migrations
+  # fail the deploy aborts and the old version keeps serving.
+  release_command = 'node dist/db/migrate.cli.js'
+  strategy = 'immediate'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '8080'
+  HOST = '0.0.0.0'
+  LOG_LEVEL = 'info'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # Scale to zero. This app serves one household, so paying for an always-on machine is waste —
+  # ADR-0014's whole cost argument. The consequences are deliberate and worth knowing:
+  #   * a cold request waits a second or two for the machine to start
+  #   * SIGTERM runs constantly rather than rarely, which is why server.ts's shutdown path is
+  #     written carefully
+  #   * pg-boss cron would keep the machine awake; there are no scheduled jobs yet, and debt D8
+  #     is already watching for it at M1
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = 'requests'
+    soft_limit = 60
+    hard_limit = 120
+
+  # Deliberately /api/v1/health, which does NOT touch Postgres. A health check that opened a
+  # connection would wake Neon's compute on every probe and burn the free-tier hours.
+  [[http_service.checks]]
+    method = 'GET'
+    path = '/api/v1/health'
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

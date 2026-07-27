@@ -53,6 +53,20 @@ export default async function setup({ provide }: GlobalSetup) {
     console.info(`[test] started ${IMAGE} via Testcontainers`)
   } catch (error) {
     await container?.stop().catch(() => undefined)
+
+    /**
+     * In CI, skipping is not acceptable. A green run that silently tested nothing is worse than
+     * a red one, and it is exactly what would happen if `TEST_DATABASE_URL` were mistyped in the
+     * workflow. Fail loudly there; degrade gracefully on a developer machine.
+     */
+    if (process.env.CI === 'true') {
+      throw new Error(
+        'No test database available, and CI=true. Database-backed suites must not be skipped in CI. ' +
+          'Check the postgres service container and TEST_DATABASE_URL in .github/workflows/ci.yml. ' +
+          `Underlying error: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+
     provide('databaseUrl', null)
 
     // Loud, specific, and actionable. Never silent — conventions/code.md §6.
