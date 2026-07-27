@@ -47,12 +47,22 @@ describeDb('schema', () => {
           values ('First', 'personal', ${userId})`,
     )
 
-    const secondInsert = db.execute(
-      sql`insert into spaces (name, kind, personal_for_user_id)
-          values ('Second', 'personal', ${userId})`,
-    )
+    const failure = await db
+      .execute(
+        sql`insert into spaces (name, kind, personal_for_user_id)
+            values ('Second', 'personal', ${userId})`,
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
 
-    await expect(secondInsert).rejects.toThrow(/spaces_personal_for_user_id_key/)
+    expect(failure, 'a second personal space was accepted').toBeDefined()
+    // Drizzle's own message only says "Failed query"; the constraint name is on the pg error
+    // underneath. Assert the specific constraint, so this test cannot pass because of some
+    // unrelated failure.
+    const cause = (failure as { cause?: { constraint?: string } }).cause
+    expect(cause?.constraint).toBe('spaces_personal_for_user_id_key')
   })
 
   it('leaves the partial index inactive for shared spaces, so a user can own many', async () => {

@@ -41,7 +41,17 @@ export const db = drizzle(pool, {
 
 export type Db = typeof db
 
-/** Called from the app's `onClose` hook, so `app.close()` drains connections. */
+let poolClosed = false
+
+/**
+ * Called by `server.ts` after `app.close()`, and by `db:seed`. Deliberately NOT registered as a
+ * Fastify `onClose` hook: the pool is process-wide while a Fastify instance is not, and a test
+ * file that builds two apps would otherwise end the pool underneath the second one.
+ *
+ * Idempotent, because `pg` throws "Called end on pool more than once".
+ */
 export async function closePool(): Promise<void> {
+  if (poolClosed) return
+  poolClosed = true
   await pool.end()
 }

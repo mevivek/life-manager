@@ -1,10 +1,9 @@
-import { migrate } from '../db/migrate.js'
-
 /**
- * Gets ONE real Postgres for the whole run, applies the committed migrations to it, and hands
- * its URL to the workers. conventions/testing.md §1: API integration tests run against a real
- * database, because most of what can go wrong here — the space filter, cascades, partial
- * unique indexes — is database behaviour, and a mocked database tests the mock.
+ * Gets ONE real Postgres server for the whole run and hands its URL to the workers, which each
+ * carve out their own database from it and migrate that (see `setup.ts`).
+ * conventions/testing.md §1: API integration tests run against a real database, because most of
+ * what can go wrong here — the space filter, cascades, partial unique indexes — is database
+ * behaviour, and a mocked database tests the mock.
  *
  * Two paths, in priority order (ADR-0018):
  *
@@ -40,7 +39,6 @@ type GlobalSetup = {
 export default async function setup({ provide }: GlobalSetup) {
   const override = process.env.TEST_DATABASE_URL
   if (override !== undefined && override !== '') {
-    await migrate(override)
     provide('databaseUrl', override)
     console.info('[test] using TEST_DATABASE_URL')
     return
@@ -51,9 +49,7 @@ export default async function setup({ provide }: GlobalSetup) {
     const { PostgreSqlContainer } = await import('@testcontainers/postgresql')
     const started = await new PostgreSqlContainer(IMAGE).start()
     container = started
-    const url = started.getConnectionUri()
-    await migrate(url)
-    provide('databaseUrl', url)
+    provide('databaseUrl', started.getConnectionUri())
     console.info(`[test] started ${IMAGE} via Testcontainers`)
   } catch (error) {
     await container?.stop().catch(() => undefined)

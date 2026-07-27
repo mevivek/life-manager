@@ -1,4 +1,5 @@
 import { buildApp } from './app.js'
+import { closePool } from './db/client.js'
 import { env } from './env.js'
 import { logger } from './lib/logger.js'
 
@@ -32,6 +33,9 @@ async function main(): Promise<void> {
 
     app
       .close()
+      // The pool is process-wide, not per-instance, so it is drained here rather than in an
+      // `onClose` hook. See db/client.ts.
+      .then(closePool)
       .then(() => {
         logger.info('shutdown complete')
         process.exit(0)
