@@ -170,10 +170,102 @@ console.log('\n[6] the session works across subdomains')
   }
 }
 
+console.log('\n[7] the Documents domain actually works — i.e. its tables exist')
+{
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  This section exists because the other 23 checks would all pass against a database
+   *  with no `documents` table at all.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * `GET /api/v1/health` does not touch the database, so neither the deploy pipeline's own
+   * `verify` step nor this script would have noticed that nothing was applying migrations
+   * (ADR-0023) — the same "looks perfectly healthy, is broken" shape as debt D23.
+   *
+   * A write, a read back, a filter and a delete. The write is the important one: it is the only
+   * thing here that proves the schema is present and current rather than merely that the process
+   * booted.
+   */
+  const headers = { cookie, origin: APP, 'content-type': 'application/json' }
+  let documentId
+
+  const created = await fetch(`${API}/api/v1/documents`, {
+    method: 'POST',
+    headers: { ...headers, 'idempotency-key': `deploy-check-${Date.now()}` },
+    body: JSON.stringify({
+      title: 'deploy check — safe to delete',
+      doc_type: 'identity',
+      expires_on: '2099-01-01',
+    }),
+  })
+  ok(created.status === 201, 'POST /documents', `${created.status}`)
+
+  if (created.status === 201) {
+    const body = await created.json()
+    documentId = body.id
+    ok(typeof body.id === 'string', 'created document has an id')
+    // Business rule 8: an identity document with an expiry gets 90/30/7-day reminders. This also
+    // proves the `reminders` table exists, which no other check would.
+    const detail = await fetch(`${API}/api/v1/documents/${documentId}`, { headers })
+    if (detail.ok) {
+      const full = await detail.json()
+      ok(
+        full.reminders?.length === 3,
+        'three automatic reminders created',
+        `${full.reminders?.length}`,
+      )
+      ok(Array.isArray(full.files), 'files[] present')
+    } else {
+      ok(false, 'GET /documents/:id', `${detail.status}`)
+    }
+
+    const list = await fetch(`${API}/api/v1/documents?limit=5`, { headers })
+    ok(list.ok, 'GET /documents', `${list.status}`)
+    if (list.ok) {
+      const page = await list.json()
+      ok(Array.isArray(page.data), 'list returns data[]')
+      // `null`, never absent — conventions/api.md §4.
+      ok('next_cursor' in page, 'next_cursor present (null on the last page)')
+    }
+
+    // Debt D27: a typo'd filter must fail loudly rather than return the unfiltered list.
+    const typo = await fetch(`${API}/api/v1/documents?expiring_befor=2030-01-01`, { headers })
+    ok(typo.status === 400, 'unknown query parameter rejected', `${typo.status}`)
+
+    const deleted = await fetch(`${API}/api/v1/documents/${documentId}`, {
+      method: 'DELETE',
+      headers,
+    })
+    ok(deleted.status === 204, 'DELETE /documents/:id', `${deleted.status}`)
+  }
+}
+
+console.log('\n[8] optional features report their configuration honestly')
+{
+  const headers = { cookie, origin: APP }
+
+  // Not an assertion about whether they ARE configured — that is a deployment choice. What must
+  // hold is that an unconfigured feature says so cleanly instead of throwing a 500.
+  const pushKey = await fetch(`${API}/api/v1/push/public-key`, { headers })
+  ok(pushKey.ok, 'GET /push/public-key', `${pushKey.status}`)
+  if (pushKey.ok) {
+    const { public_key: publicKey } = await pushKey.json()
+    const configured = typeof publicKey === 'string' && publicKey.length > 0
+    ok(publicKey === null || configured, 'push key is a string or null')
+    console.log(
+      configured
+        ? '      → web push IS configured'
+        : '      → web push is NOT configured (reminders will not be delivered)',
+    )
+  }
+}
+
 console.log('\n[cleanup]')
 {
   const db = new Client({ connectionString: env.DATABASE_URL_UNPOOLED })
   await db.connect()
+  // The document is soft-deleted above and its space is the throwaway user's, so deleting the
+  // user cascades it away. Deleting the user is enough.
   await db.query('delete from users where email = $1', [email])
   const left = await db.query(
     "select count(*)::int n from users where email like 'deploy-check-%@example.test'",

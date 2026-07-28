@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# The API image, for Fly.io (ADR-0014). Built from the REPO ROOT, not from apps/api:
+# The API image, for **Cloud Run** (ADR-0021, superseding ADR-0014's Fly choice). Built from the
+# REPO ROOT, not from apps/api:
 #
 #     docker build -f apps/api/Dockerfile .
 #
-# fly.toml's [build] dockerfile setting handles that. A build context of apps/api alone cannot
+# `cloudbuild.deploy.yaml` passes the repo root as the build context. A context of apps/api alone cannot
 # see pnpm-lock.yaml or packages/shared, and the failure is a confusing "lockfile not found".
 
 FROM node:22-alpine AS base
@@ -43,20 +44,24 @@ RUN pnpm --filter @life-manager/api deploy --prod --legacy /out
 
 FROM base AS runtime
 ENV NODE_ENV=production
-# Fly's convention, and fly.toml's internal_port must match.
+# Cloud Run injects PORT and expects the container to listen on it; 8080 is its default and the
+# value the service is configured with (ADR-0021).
 ENV PORT=8080
 ENV HOST=0.0.0.0
 
 # `node` (uid 1000) ships with the image. Never run as root.
 WORKDIR /app
 COPY --from=build --chown=node:node /out /app
-# Migrations are applied by fly.toml's release_command, which runs this same image, so the
-# generated SQL has to be present in it.
+# The generated migration SQL must be in the image, because **the API applies migrations itself on
+# boot** (`src/server.ts`, ADR-0023). It used to be `fly.toml`'s `release_command` that ran them —
+# that disappeared with ADR-0021's move to Cloud Run and nothing replaced it, so for a while nothing
+# applied migrations at all. Removing this COPY breaks every deploy, silently, at boot.
 COPY --from=build --chown=node:node /repo/apps/api/drizzle /app/drizzle
 
 USER node
 EXPOSE 8080
 
-# No secrets are baked in. Everything comes from `fly secrets set` at runtime, and src/env.ts
-# refuses to boot if any of it is missing (security-model.md §6).
+# No secrets are baked in. Everything comes from Secret Manager, bound to the Cloud Run service at
+# runtime and read by the runtime service account, and src/env.ts refuses to boot if any of it is
+# missing (security-model.md §6).
 CMD ["node", "dist/server.js"]

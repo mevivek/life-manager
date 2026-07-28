@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm'
+import { Client } from 'pg'
 import { expect, it } from 'vitest'
 import { describeDb, withCleanDatabase } from '../test/db.js'
 import { db } from './client.js'
+import { migrate } from './migrate.js'
 
 /**
  * Proves the committed migration files actually apply and that the constraints they declare
@@ -63,6 +65,75 @@ describeDb('schema', () => {
     // unrelated failure.
     const cause = (failure as { cause?: { constraint?: string } }).cause
     expect(cause?.constraint).toBe('spaces_personal_for_user_id_key')
+  })
+
+  it('is safe to run concurrently on a FRESH database — the advisory lock serialises it', async () => {
+    /**
+     * The scenario this protects against is real, not theoretical: migrations now run on **boot**
+     * (ADR-0023) and Cloud Run is configured `--max-instances=3`, so two cold starts can call
+     * `migrate()` at the same moment.
+     *
+     * **It has to be a fresh database to mean anything.** Against an already-migrated one every run
+     * is a no-op and the test passes with or without the lock — which is the trap this project has
+     * already fallen into once (debt D33: assertions that only ever check the empty case).
+     * Verified to have teeth by removing the lock and watching it fail with
+     * `relation "spaces" already exists`.
+     */
+    const workerUrl = process.env.DATABASE_URL
+    expect(workerUrl).toBeDefined()
+    if (workerUrl === undefined) return
+
+    const target = new URL(workerUrl)
+    const freshName = `lm_concurrent_${process.env.VITEST_WORKER_ID ?? '1'}`
+    if (!/^[A-Za-z0-9_]+$/.test(freshName)) throw new Error('unsafe database name')
+
+    const admin = new Client({ connectionString: workerUrl })
+    await admin.connect()
+    try {
+      await admin.query(`drop database if exists "${freshName}"`)
+      await admin.query(`create database "${freshName}"`)
+    } finally {
+      await admin.end()
+    }
+
+    target.pathname = `/${freshName}`
+    const freshUrl = target.toString()
+
+    try {
+      const results = await Promise.allSettled([
+        migrate(freshUrl),
+        migrate(freshUrl),
+        migrate(freshUrl),
+      ])
+
+      const reasons = results
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map((result) => String(result.reason).split('\n')[0])
+      expect(reasons, 'a concurrent migration failed').toEqual([])
+
+      // And it actually migrated, rather than all three no-oping for some other reason.
+      const check = new Client({ connectionString: freshUrl })
+      await check.connect()
+      try {
+        const { rows } = await check.query<{ table_name: string }>(
+          `select table_name from information_schema.tables
+           where table_schema = 'public' and table_type = 'BASE TABLE'`,
+        )
+        expect(rows.map((row) => row.table_name)).toEqual(
+          expect.arrayContaining(['documents', 'reminders', 'spaces', 'idempotency_keys']),
+        )
+      } finally {
+        await check.end()
+      }
+    } finally {
+      const cleanup = new Client({ connectionString: workerUrl })
+      await cleanup.connect()
+      try {
+        await cleanup.query(`drop database if exists "${freshName}"`)
+      } finally {
+        await cleanup.end()
+      }
+    }
   })
 
   it('created the M1 domain tables', async () => {

@@ -146,6 +146,20 @@ const envSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((value) => value === 'true'),
+
+    /**
+     * Escape hatch for the migrate-on-boot in `server.ts` (ADR-0023).
+     *
+     * **Defaults to applying them**, and that default is the entire point: nothing else applies
+     * migrations on this deployment, and a variable that had to be set to make deploys work would
+     * need a `gcloud` change — which is exactly the manual step debt D22 was closed to remove.
+     *
+     * Set it only to get a process up against a database you deliberately do not want touched.
+     */
+    SKIP_MIGRATIONS_ON_BOOT: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
   })
   .refine(
     (value) =>
