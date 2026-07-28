@@ -1,95 +1,107 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { Alert } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useHealth } from '@/features/health/useHealth'
+import { DocumentList } from '@/features/documents/DocumentList'
+import { ExpiringSoon } from '@/features/documents/ExpiringSoon'
+import { NotificationsCard } from '@/features/documents/NotificationsCard'
 import { useMe } from '@/features/spaces/useMe'
 import { signOut } from '@/lib/auth-client'
 
 export const Route = createFileRoute('/_authed/home')({ component: HomePage })
 
 /**
- * ═══════════════════════════════════════════════════════════════════════════════════════
- *  The M0 vertical slice, and the thing the acceptance criterion is read off.
- * ═══════════════════════════════════════════════════════════════════════════════════════
+ * The dashboard. domains/documents.md §7: "expiring in 30 and 90 days, recently added, documents
+ * with no file."
  *
- * roadmap.md M0: "done when you can sign up on your phone, and the API proves the session
- * resolves to an ActorContext with exactly one space."
- *
- * The spaces list below is rendered from `GET /api/v1/me`, which the API builds from
- * `request.actor` — itself built from a live `space_members` query on every request. So seeing
- * one row here, `personal` / `owner`, IS the API proving it. There is no client-side state
- * involved and nothing cached across a sign-out.
+ * This replaced M0's vertical-slice page, which existed to prove the session resolved to an
+ * `ActorContext` with exactly one space. That proof now lives in `me.test.ts` and
+ * `scripts/verify-deployment.mjs` rather than on the user's home screen — the spaces list and the
+ * health readout were scaffolding, and keeping them here would mean showing plumbing to someone who
+ * only wants to know when their passport expires.
  */
 function HomePage() {
   const me = useMe()
-  const health = useHealth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold">life-manager</h1>
-          <p className="text-sm text-muted-foreground">{me.data?.email ?? '…'}</p>
+          <p className="truncate text-sm text-muted-foreground">{me.data?.email ?? '…'}</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            await signOut()
-            // Drop every cached server response. Leaving `/me` in the cache would show the
-            // previous user's email to the next one on a shared device.
-            queryClient.clear()
-            await navigate({ to: '/login' })
-          }}
-        >
-          Sign out
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Link to="/documents" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            All documents
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              await signOut()
+              // Drop every cached server response. Leaving `/me` or a document list in the cache
+              // would show the previous user's data to the next one on a shared device.
+              queryClient.clear()
+              await navigate({ to: '/login' })
+            }}
+          >
+            Sign out
+          </Button>
+        </div>
       </div>
 
+      {me.isError && <Alert variant="destructive">{me.error.message}</Alert>}
+
       <Card>
-        <CardHeader>
-          <CardTitle>Your spaces</CardTitle>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle>Expiring in 30 days</CardTitle>
+          <Link to="/documents/new" className={buttonVariants({ size: 'sm' })}>
+            Add
+          </Link>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {me.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
-          {me.isError && <Alert variant="destructive">{me.error.message}</Alert>}
-          {me.data?.spaces.map((space) => (
-            <div
-              key={space.space_id}
-              className="flex items-center justify-between rounded-md border border-border px-3 py-2"
-            >
-              <span className="text-sm font-medium">{space.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {space.kind} · {space.role}
-              </span>
-            </div>
-          ))}
-          {me.data?.spaces.length === 0 && (
-            <Alert variant="destructive">
-              No spaces. That should be impossible — every account gets one at signup (ADR-0006).
-            </Alert>
-          )}
+        <CardContent>
+          <ExpiringSoon withinDays={30} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>API</CardTitle>
+          <CardTitle>Expiring in 90 days</CardTitle>
         </CardHeader>
         <CardContent>
-          {health.isError ? (
-            <Alert variant="destructive">Cannot reach the API.</Alert>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {health.data === undefined
-                ? 'Checking…'
-                : `${health.data.status} · v${health.data.version} · up ${health.data.uptime_seconds}s`}
-            </p>
-          )}
+          <ExpiringSoon withinDays={90} />
+        </CardContent>
+      </Card>
+
+      {/* Renders nothing at all when push is unconfigured — it owns its own Card. */}
+      <NotificationsCard />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recently added</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DocumentList
+            baseQuery={{ sort: 'created_at', order: 'desc', limit: 5 }}
+            showFilters={false}
+            emptyMessage="No documents yet. Start with something that expires — a passport or a licence."
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Missing a file</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DocumentList
+            baseQuery={{ has_file: false, limit: 5 }}
+            showFilters={false}
+            emptyMessage="Every document has a file attached."
+          />
         </CardContent>
       </Card>
     </div>

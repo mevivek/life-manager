@@ -1,11 +1,36 @@
 import {
+  type ConfirmUploadRequest,
+  type Document,
+  type DocumentCreate,
+  type DocumentDetailResponse,
+  type DocumentFile,
+  type DocumentListQuery,
+  type DocumentListResponse,
+  type DocumentUpdate,
+  documentDetailResponseSchema,
+  documentFileSchema,
+  documentListResponseSchema,
+  documentSchema,
   type HealthResponse,
   healthResponseSchema,
   type MeResponse,
   meResponseSchema,
+  type PresignDownloadResponse,
+  type PresignUploadRequest,
+  type PresignUploadResponse,
   type Problem,
+  type PushSubscription as PushSubscriptionPayload,
+  presignDownloadResponseSchema,
+  presignUploadResponseSchema,
   problemSchema,
+  pushPublicKeyResponseSchema,
+  pushSubscribeResponseSchema,
+  type Reminder,
+  type ReminderCreate,
+  reminderListResponseSchema,
+  reminderSchema,
 } from '@life-manager/shared'
+import { z } from 'zod'
 import { API_ORIGIN } from './api-origin'
 
 /**
@@ -37,19 +62,69 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, schema: { parse: (value: unknown) => T }): Promise<T> {
+type RequestOptions = {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  body?: unknown
+  /**
+   * Sent as `Idempotency-Key` (conventions/api.md §5). Supply one per **logical operation**, not
+   * per attempt — the whole point is that a retry carries the same key so the server replays
+   * rather than repeating the write.
+   */
+  idempotencyKey?: string
+}
+
+async function request<T>(
+  path: string,
+  schema: { parse: (value: unknown) => T },
+  options: RequestOptions = {},
+): Promise<T> {
+  const { method = 'GET', body, idempotencyKey } = options
+
   const response = await fetch(`${API_ORIGIN}${path}`, {
+    method,
     /**
      * Non-negotiable. The session is an httpOnly cookie (security-model.md §2), so without
      * this the browser sends no credentials and every authenticated call is a silent 401.
      */
     credentials: 'include',
-    headers: { accept: 'application/json' },
+    headers: {
+      accept: 'application/json',
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(idempotencyKey === undefined ? {} : { 'idempotency-key': idempotencyKey }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
 
   if (!response.ok) throw await toApiError(response)
 
+  // 204 has no body to parse. Callers pass `z.null()` for these.
+  if (response.status === 204) return schema.parse(null)
+
   return schema.parse(await response.json())
+}
+
+/**
+ * Builds a querystring from a list query, dropping `undefined` and expanding arrays into repeated
+ * parameters — which is the shape `documentListQuerySchema`'s `repeatable()` expects.
+ *
+ * **Only keys the schema declares may appear here.** The server rejects unknown query parameters
+ * (debt D27), so a stray key is a 400 rather than a silently ignored filter — which is the desired
+ * behaviour, but it means this function must not invent parameter names.
+ */
+function toQueryString(query: Partial<DocumentListQuery>): string {
+  const params = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === '') continue
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, String(item))
+    } else {
+      params.set(key, String(value))
+    }
+  }
+
+  const serialised = params.toString()
+  return serialised === '' ? '' : `?${serialised}`
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
@@ -69,7 +144,133 @@ async function toApiError(response: Response): Promise<ApiError> {
   })
 }
 
+/** For `DELETE` endpoints, which answer 204 with no body. */
+const noContentSchema = z.null()
+
 export const api = {
   health: (): Promise<HealthResponse> => request('/api/v1/health', healthResponseSchema),
   me: (): Promise<MeResponse> => request('/api/v1/me', meResponseSchema),
+
+  documents: {
+    list: (query: Partial<DocumentListQuery> = {}): Promise<DocumentListResponse> =>
+      request(`/api/v1/documents${toQueryString(query)}`, documentListResponseSchema),
+
+    get: (id: string): Promise<DocumentDetailResponse> =>
+      request(`/api/v1/documents/${id}`, documentDetailResponseSchema),
+
+    create: (input: DocumentCreate, idempotencyKey?: string): Promise<Document> =>
+      request('/api/v1/documents', documentSchema, {
+        method: 'POST',
+        body: input,
+        idempotencyKey,
+      }),
+
+    update: (id: string, patch: DocumentUpdate): Promise<Document> =>
+      request(`/api/v1/documents/${id}`, documentSchema, { method: 'PATCH', body: patch }),
+
+    remove: (id: string): Promise<null> =>
+      request(`/api/v1/documents/${id}`, noContentSchema, { method: 'DELETE' }),
+
+    issuers: (): Promise<string[]> =>
+      request('/api/v1/documents/issuers', z.object({ data: z.array(z.string()) })).then(
+        (response) => response.data,
+      ),
+  },
+
+  files: {
+    presignUpload: (
+      documentId: string,
+      input: PresignUploadRequest,
+    ): Promise<PresignUploadResponse> =>
+      request(`/api/v1/documents/${documentId}/files:presign-upload`, presignUploadResponseSchema, {
+        method: 'POST',
+        body: input,
+      }),
+
+    confirm: (documentId: string, input: ConfirmUploadRequest): Promise<DocumentFile> =>
+      request(`/api/v1/documents/${documentId}/files:confirm`, documentFileSchema, {
+        method: 'POST',
+        body: input,
+      }),
+
+    presignDownload: (documentId: string, fileId: string): Promise<PresignDownloadResponse> =>
+      request(
+        `/api/v1/documents/${documentId}/files:presign-download`,
+        presignDownloadResponseSchema,
+        { method: 'POST', body: { file_id: fileId } },
+      ),
+
+    makePrimary: (documentId: string, fileId: string): Promise<DocumentFile> =>
+      request(`/api/v1/documents/${documentId}/files/${fileId}`, documentFileSchema, {
+        method: 'PATCH',
+        body: { is_primary: true },
+      }),
+
+    remove: (documentId: string, fileId: string): Promise<null> =>
+      request(`/api/v1/documents/${documentId}/files/${fileId}`, noContentSchema, {
+        method: 'DELETE',
+      }),
+
+    /**
+     * PUTs the bytes **straight to storage**, not through the API (ADR-0008).
+     *
+     * The one `fetch` in this file that does not go to our own origin, and the one that must NOT
+     * send credentials: the presigned URL carries its own authorisation, and attaching our session
+     * cookie to a third-party request would leak it. `credentials: 'omit'` is deliberate.
+     *
+     * `content-type` and `content-length` are signed into the URL, so they must match what was
+     * declared at presign time or storage rejects the upload.
+     */
+    upload: async (uploadUrl: string, file: File): Promise<void> => {
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        credentials: 'omit',
+        headers: { 'content-type': file.type },
+        body: file,
+      })
+
+      if (!response.ok) {
+        // Storage errors are XML, not problem+json, so there is nothing useful to parse. Surface
+        // the status rather than swallowing it (conventions/code.md §6).
+        throw new ApiError({
+          type: 'about:blank',
+          title: 'Upload failed',
+          status: response.status,
+          detail: `Storage rejected the upload (${response.status}).`,
+        })
+      }
+    },
+  },
+
+  reminders: {
+    listForDocument: (documentId: string): Promise<Reminder[]> =>
+      request(`/api/v1/documents/${documentId}/reminders`, reminderListResponseSchema).then(
+        (response) => response.data,
+      ),
+
+    create: (documentId: string, input: ReminderCreate): Promise<Reminder> =>
+      request(`/api/v1/documents/${documentId}/reminders`, reminderSchema, {
+        method: 'POST',
+        body: input,
+      }),
+
+    remove: (id: string): Promise<null> =>
+      request(`/api/v1/reminders/${id}`, noContentSchema, { method: 'DELETE' }),
+
+    dismiss: (id: string): Promise<Reminder> =>
+      request(`/api/v1/reminders/${id}/dismiss`, reminderSchema, { method: 'POST' }),
+  },
+
+  push: {
+    publicKey: (): Promise<string | null> =>
+      request('/api/v1/push/public-key', pushPublicKeyResponseSchema).then(
+        (response) => response.public_key,
+      ),
+
+    subscribe: (subscription: PushSubscriptionPayload): Promise<{ id: string }> =>
+      request('/api/v1/push/subscriptions', pushSubscribeResponseSchema, {
+        method: 'POST',
+        body: subscription,
+      }),
+  },
 }

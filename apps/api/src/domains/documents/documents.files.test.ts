@@ -237,6 +237,55 @@ describeDb('document files', () => {
     expect(again.statusCode).toBe(409)
   })
 
+  it('counts a confirmed file in file_count — the assertion that was missing', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+
+    /**
+     * This test exists because its absence hid a real bug for the whole of M1's build.
+     *
+     * Every other `file_count` assertion happened to expect **0** — a new document, an
+     * unconfirmed upload — so a correlated subquery that always returned 0 passed all of them.
+     * The dashboard showed "no file" beside a file it had just uploaded. See the comment on
+     * `fileCountSql` in `documents.repository.ts`.
+     *
+     * Asserted on BOTH the list and the detail endpoint, because they were not equally wrong:
+     * `?has_file=` filtered correctly the whole time, which is exactly why nothing looked broken.
+     */
+    const file = await presign(user, document.id)
+    await confirm(user, document.id, file.json().file_id)
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+    expect(detail.json().file_count).toBe(1)
+
+    const list = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
+    expect((list.json().data as { file_count: number }[])[0]?.file_count).toBe(1)
+
+    // A second confirmed version makes it 2 — so this cannot pass by returning a constant.
+    const second = await presign(user, document.id)
+    await confirm(user, document.id, second.json().file_id)
+
+    const after = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
+    expect((after.json().data as { file_count: number }[])[0]?.file_count).toBe(2)
+
+    // And a deleted version stops counting.
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${document.id}/files/${second.json().file_id}`,
+      ...authAs(user),
+    })
+    const afterDelete = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents',
+      ...authAs(user),
+    })
+    expect((afterDelete.json().data as { file_count: number }[])[0]?.file_count).toBe(1)
+  })
+
   it('does not count an unconfirmed upload as a file', async () => {
     const user = await seedUserWithSpace(app)
     const document = await createDocument(app, user)

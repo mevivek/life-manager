@@ -58,7 +58,12 @@ function s3(): { client: S3Client; bucket: string; ttlSeconds: number } {
   client ??= new S3Client({
     // R2's S3 endpoint. `auto` is the only region R2 accepts, and SigV4 needs *a* region.
     region: 'auto',
-    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+    endpoint: config.endpointOverride ?? `https://${config.accountId}.r2.cloudflarestorage.com`,
+    /**
+     * Path-style only when an endpoint override is in play. R2 uses virtual-hosted addressing, but
+     * a localhost S3 server cannot — `bucket.127.0.0.1` does not resolve. See `R2_ENDPOINT`.
+     */
+    ...(config.endpointOverride === undefined ? {} : { forcePathStyle: true }),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,

@@ -50,6 +50,20 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+
+        /**
+         * Adds the `push` and `notificationclick` listeners to the generated worker.
+         *
+         * `importScripts` rather than switching to the `injectManifest` strategy: `generateSW` is
+         * doing its job correctly, and taking over the whole worker to add two event listeners
+         * would mean owning the precache manifest by hand forever.
+         *
+         * **This is load-bearing for M1's "done when".** `userVisibleOnly: true` obliges every push
+         * to show a notification, so a worker with no `push` listener receives the message and
+         * displays nothing — or, in some browsers, a generic "site updated in the background"
+         * notice. The reminder pipeline ends in `public/push-sw.js`.
+         */
+        importScripts: ['/push-sw.js'],
       },
       devOptions: { enabled: false },
     }),

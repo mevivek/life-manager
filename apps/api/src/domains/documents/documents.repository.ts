@@ -4,7 +4,19 @@ import type {
   DocumentSort,
   DocumentType,
 } from '@life-manager/shared'
-import { and, arrayContains, count, eq, getTableColumns, inArray, lte, max, sql } from 'drizzle-orm'
+import {
+  and,
+  arrayContains,
+  count,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  max,
+  sql,
+} from 'drizzle-orm'
 import type { ActorContext } from '../../auth/actor.js'
 import { type Db, db } from '../../db/client.js'
 import { scoped } from '../../db/scoped.js'
@@ -26,17 +38,45 @@ import { documentFiles, documents } from './documents.schema.js'
 export type Executor = Db | Parameters<Parameters<Db['transaction']>[0]>[0]
 
 /**
- * `count(document_files.id)` as a correlated subquery, so a list of 50 documents is one query
- * rather than 51. Filtered to live, confirmed files: an abandoned upload (business rule 10) must
- * not make `has_file` true, or "documents with no file" — a dashboard view (spec §7) — silently
- * stops listing documents whose only upload failed halfway.
+ * Confirmed live files per document, as a correlated subquery — so listing 50 documents is one
+ * query rather than 51.
+ *
+ * Filtered to live, **confirmed** files: an abandoned upload (business rule 10) must not make
+ * `has_file` true, or "documents with no file" — a dashboard view (spec §7) — silently stops
+ * listing the documents whose only upload failed halfway.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  `db.$count`, NOT a hand-written `sql` template. This was a real bug.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The original was:
+ *
+ *     sql`(select count(*)::int from ${documentFiles}
+ *          where ${documentFiles.documentId} = ${documents.id} ...)`
+ *
+ * In a **select-field** position Drizzle renders those columns *unqualified*, producing
+ * `where "document_id" = "id"`. Inside the subquery `document_files` is the only table in scope and
+ * it has its own `id`, so that compares `document_files.document_id` to `document_files.id` — never
+ * true. Every `file_count` came back **0** while the identical expression in a `WHERE` clause
+ * (where Drizzle *does* qualify) worked correctly. So `?has_file=` filtered right and the count
+ * displayed wrong, which is why it survived: the UI said "no file" next to a file it had just
+ * uploaded.
+ *
+ * `db.$count` emits `"document_files"."document_id" = "documents"."id"` — fully qualified, by
+ * construction. Do not replace it with a template.
+ *
+ * **It also survived the tests**, which is the more useful lesson: every assertion happened to be
+ * `file_count === 0` (a new document, an unconfirmed upload). Nothing asserted a *non-zero* count
+ * until `documents.files.test.ts` gained one.
  */
-const fileCountSql = sql<number>`(
-  select count(*)::int from ${documentFiles}
-  where ${documentFiles.documentId} = ${documents.id}
-    and ${documentFiles.deletedAt} is null
-    and ${documentFiles.uploadedAt} is not null
-)`
+const fileCountSql = db.$count(
+  documentFiles,
+  and(
+    eq(documentFiles.documentId, documents.id),
+    isNull(documentFiles.deletedAt),
+    isNotNull(documentFiles.uploadedAt),
+  ),
+)
 
 const documentColumns = { ...getTableColumns(documents), fileCount: fileCountSql }
 

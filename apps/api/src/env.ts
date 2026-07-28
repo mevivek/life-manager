@@ -110,6 +110,17 @@ const envSchema = z
     R2_PRESIGN_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(600),
 
     /**
+     * Overrides the derived R2 endpoint, for pointing at any S3-compatible server instead.
+     *
+     * **Leave this unset in production.** Its purpose is verifying the upload path end to end
+     * against a local MinIO — which is the one part of ADR-0008's flow that unit tests cannot
+     * cover, because presigning is offline and a fake bucket never checks the signature. Setting it
+     * also switches the client to **path-style** addressing, which a localhost endpoint requires
+     * and R2 does not.
+     */
+    R2_ENDPOINT: z.url().optional(),
+
+    /**
      * Web Push / VAPID (RFC 8292), for reminder delivery.
      *
      * Optional as a **group** for the same reason as R2. The public key is public by design — it
@@ -229,6 +240,8 @@ export function r2Config(): {
   secretAccessKey: string
   bucket: string
   ttlSeconds: number
+  /** Set only when `R2_ENDPOINT` overrides the derived R2 host. */
+  endpointOverride: string | undefined
 } | null {
   const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = env
   if (
@@ -246,6 +259,7 @@ export function r2Config(): {
     secretAccessKey: R2_SECRET_ACCESS_KEY,
     bucket: R2_BUCKET,
     ttlSeconds: env.R2_PRESIGN_TTL_SECONDS,
+    endpointOverride: env.R2_ENDPOINT,
   }
 }
 

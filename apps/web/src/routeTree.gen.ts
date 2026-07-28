@@ -14,6 +14,9 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AuthedHomeRouteImport } from './routes/_authed/home'
+import { Route as AuthedDocumentsIndexRouteImport } from './routes/_authed/documents.index'
+import { Route as AuthedDocumentsDocumentIdRouteImport } from './routes/_authed/documents.$documentId'
+import { Route as AuthedDocumentsNewRouteImport } from './routes/_authed/documents.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -39,18 +42,40 @@ const AuthedHomeRoute = AuthedHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedDocumentsIndexRoute = AuthedDocumentsIndexRouteImport.update({
+  id: '/documents/',
+  path: '/documents/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedDocumentsDocumentIdRoute =
+  AuthedDocumentsDocumentIdRouteImport.update({
+    id: '/documents/$documentId',
+    path: '/documents/$documentId',
+    getParentRoute: () => AuthedRoute,
+  } as any)
+const AuthedDocumentsNewRoute = AuthedDocumentsNewRouteImport.update({
+  id: '/documents/new',
+  path: '/documents/new',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/home': typeof AuthedHomeRoute
+  '/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
+  '/documents/new': typeof AuthedDocumentsNewRoute
+  '/documents/': typeof AuthedDocumentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/home': typeof AuthedHomeRoute
+  '/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
+  '/documents/new': typeof AuthedDocumentsNewRoute
+  '/documents': typeof AuthedDocumentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,13 +84,39 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_authed/home': typeof AuthedHomeRoute
+  '/_authed/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
+  '/_authed/documents/new': typeof AuthedDocumentsNewRoute
+  '/_authed/documents/': typeof AuthedDocumentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/home'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/signup'
+    | '/home'
+    | '/documents/$documentId'
+    | '/documents/new'
+    | '/documents/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/home'
-  id: '__root__' | '/' | '/_authed' | '/login' | '/signup' | '/_authed/home'
+  to:
+    | '/'
+    | '/login'
+    | '/signup'
+    | '/home'
+    | '/documents/$documentId'
+    | '/documents/new'
+    | '/documents'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authed'
+    | '/login'
+    | '/signup'
+    | '/_authed/home'
+    | '/_authed/documents/$documentId'
+    | '/_authed/documents/new'
+    | '/_authed/documents/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -112,15 +163,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedHomeRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/documents/': {
+      id: '/_authed/documents/'
+      path: '/documents'
+      fullPath: '/documents/'
+      preLoaderRoute: typeof AuthedDocumentsIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/documents/$documentId': {
+      id: '/_authed/documents/$documentId'
+      path: '/documents/$documentId'
+      fullPath: '/documents/$documentId'
+      preLoaderRoute: typeof AuthedDocumentsDocumentIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/documents/new': {
+      id: '/_authed/documents/new'
+      path: '/documents/new'
+      fullPath: '/documents/new'
+      preLoaderRoute: typeof AuthedDocumentsNewRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
 interface AuthedRouteChildren {
   AuthedHomeRoute: typeof AuthedHomeRoute
+  AuthedDocumentsDocumentIdRoute: typeof AuthedDocumentsDocumentIdRoute
+  AuthedDocumentsNewRoute: typeof AuthedDocumentsNewRoute
+  AuthedDocumentsIndexRoute: typeof AuthedDocumentsIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHomeRoute: AuthedHomeRoute,
+  AuthedDocumentsDocumentIdRoute: AuthedDocumentsDocumentIdRoute,
+  AuthedDocumentsNewRoute: AuthedDocumentsNewRoute,
+  AuthedDocumentsIndexRoute: AuthedDocumentsIndexRoute,
 }
 
 const AuthedRouteWithChildren =
