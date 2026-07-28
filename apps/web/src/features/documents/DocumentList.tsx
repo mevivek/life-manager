@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DocumentListSkeleton } from '@/components/ui/skeleton'
 import { ExpiryBadge } from './ExpiryBadge'
 import { useDocuments } from './useDocuments'
 
@@ -107,7 +108,9 @@ function DocumentPage({
   const documents = useDocuments(query)
 
   if (documents.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>
+    // A skeleton the size of the rows that are coming, so the page height is settled before the
+    // data lands. `query.limit` is the honest count to show.
+    return <DocumentListSkeleton count={Math.min(query.limit ?? 3, 3)} />
   }
 
   if (documents.isError) {

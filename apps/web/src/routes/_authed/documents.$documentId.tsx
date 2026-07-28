@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { DocumentFiles } from '@/features/documents/DocumentFiles'
 import { DocumentForm } from '@/features/documents/DocumentForm'
 import { DocumentReminders } from '@/features/documents/DocumentReminders'
@@ -29,7 +30,19 @@ function DocumentDetailPage() {
   const remove = useDeleteDocument()
 
   if (document.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>
+    // Shaped like the real screen — a title, then three cards — so opening a document does not
+    // flash an empty page and then reflow.
+    return (
+      <div className="flex flex-col gap-6" role="status" aria-label="Loading document">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        {[0, 1, 2].map((n) => (
+          <Skeleton key={n} className="h-32 w-full rounded-lg" />
+        ))}
+      </div>
+    )
   }
 
   if (document.isError) {
@@ -71,7 +84,7 @@ function DocumentDetailPage() {
               }}
             />
           ) : (
-            <dl className="grid gap-3 sm:grid-cols-2">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
               <Field label="Issued" value={detail.issued_on} />
               <Field label="Expires" value={detail.expires_on} />
               <Field label="Country" value={detail.country} />

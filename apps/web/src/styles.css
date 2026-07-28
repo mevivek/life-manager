@@ -57,14 +57,69 @@
     border-color: var(--color-border);
   }
 
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  The rules below are what make this read as an APP rather than a web page.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * Each one removes a specific browser affordance that has no equivalent in a native app, and
+   * whose presence is immediately recognisable. They are listed with the tell they remove, because
+   * every one of them looks deletable to someone who does not know what it is for.
+   */
+  html {
+    /**
+     * **Tell: dragging the page bounces, and pulling down reloads it.**
+     *
+     * `overscroll-behavior: none` kills both the rubber-band and the browser's pull-to-refresh.
+     * Pull-to-refresh is especially wrong here: TanStack Query already refetches on focus, so the
+     * gesture destroys and rebuilds the whole app to do something that happens anyway.
+     */
+    overscroll-behavior: none;
+    /* Prevents iOS Safari inflating text in landscape, which breaks any fixed layout. */
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    /* Respects the iPhone notch/home indicator when launched standalone. */
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-      env(safe-area-inset-left);
     -webkit-font-smoothing: antialiased;
+
+    /**
+     * **Tell: a long press pops up selection handles and a Copy/Share sheet.**
+     *
+     * Nothing says "web page" faster than accidentally selecting a heading. Chrome is
+     * unselectable by default and *content* opts back in via `.selectable` below — the inverse
+     * (opting chrome out one component at a time) is the version that gets forgotten.
+     */
+    user-select: none;
+    -webkit-user-select: none;
+
+    /**
+     * **Tell: tapping anything flashes a grey rectangle.**
+     *
+     * Removing it is only safe because every interactive element has a real `:active`/`:hover`
+     * state from `buttonVariants` — without that, taps would give no feedback at all, which is
+     * worse than the grey box.
+     */
+    -webkit-tap-highlight-color: transparent;
+
+    /**
+     * Safe-area insets are deliberately **not** applied here any more.
+     *
+     * With padding on `body`, a `position: fixed` bottom bar sits *above* the home indicator with
+     * a strip of page background beneath it. The insets moved into the app shell and the tab bar,
+     * which each need a different edge. See `routes/__root.tsx`.
+     */
+  }
+
+  /**
+   * Opt back in wherever a user would reasonably want to copy something — a document number, a
+   * note, an issuer. Applied in components, not guessed at globally.
+   */
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   /* A 16px minimum stops iOS Safari zooming the whole page when a field is focused. */
@@ -74,5 +129,48 @@
   textarea {
     font: inherit;
     font-size: max(1rem, 16px);
+  }
+
+  /**
+   * Text inputs must stay selectable despite the `user-select: none` above — otherwise iOS will
+   * not let you place a cursor or use the caret handles, which breaks editing entirely.
+   */
+  input,
+  textarea {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /**
+   * Respect a system reduced-motion preference; every animation here is decoration.
+   *
+   * **`!important` is deliberate and Biome's `noImportantStyles` is suppressed for it.** An
+   * accessibility override has to beat utility classes and inline styles it cannot know about —
+   * that is the whole point of the rule, and specificity alone cannot guarantee it. This is the
+   * canonical form of the reset.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      /* biome-ignore-start lint/complexity/noImportantStyles: an a11y override must win */
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      /* biome-ignore-end lint/complexity/noImportantStyles: an a11y override must win */
+    }
+  }
+}
+
+/**
+ * The skeleton shimmer. Defined here rather than in a component because `@theme`'s tokens are
+ * CSS-first in Tailwind v4 and a keyframe belongs alongside them.
+ */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
   }
 }

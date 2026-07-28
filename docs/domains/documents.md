@@ -242,13 +242,24 @@ Registered with pg-boss ([ADR-0012](../decisions/0012-pg-boss-background-jobs.md
 
 ## 7. UI surface
 
-- **Dashboard / home** — expiring in 30 and 90 days, recently added, documents with no file.
-  Proposed as the default route ([product/idea-backlog.md](../product/idea-backlog.md)).
+- **Dashboard / home** — **two** sections: *Needs attention* (expiring within 90 days) and
+  *Missing a file*. Plus a notifications card that hides itself when push is unconfigured.
+
+  > **This deviates from what §7 originally said** — "expiring in 30 and 90 days, recently added,
+  > documents with no file" — and the reason is worth keeping. The two expiry cards **duplicated each
+  > other**: `?expiring_before=` is a single upper bound, so anything inside 30 days is also inside
+  > 90 and appeared in both. The expiry badge already encodes urgency by colour, so one list ordered
+  > soonest-first says the same thing without repeating a row. And "recently added" repeated whatever
+  > the other sections showed, because the Documents tab is already the full list and on a small
+  > archive everything is recent. What is left answers the one question the
+  > [backlog entry](../product/idea-backlog.md) that proposed this screen actually posed: *what needs
+  > doing.*
 - **Document list** — search, filter by type and tag, sorted by expiry. Expiry badges.
 - **Document detail** — metadata, file versions, reminders, inline preview (M2).
 - **Create / edit** — title-first, everything else progressively disclosed. Capture friction
   is the main risk ([product/brain.md](../product/brain.md) principle 2).
-- **Upload** — drag-drop and camera capture, with progress.
+- **Upload** — the OS picker, which offers camera, photo library and files. `capture` is
+  deliberately **not** set: with it, a phone opens the camera and *only* the camera.
 - **Expiring soon** — a focused actionable list.
 
 ## 8. Cross-domain links
@@ -317,7 +328,10 @@ packages/shared/src/documents.ts   Zod contract, incl. custom_attrs per doc_type
 packages/shared/src/reminders.ts   the generic half
 apps/web/src/features/documents/   list, detail, form, files, reminders, expiry badge
 apps/web/src/routes/_authed/documents.*.tsx
+apps/web/src/components/TabBar.tsx persistent app chrome — read it before adding a route
+apps/web/src/components/ui/skeleton.tsx
 apps/web/public/push-sw.js         without this, a delivered notification shows nothing
+scripts/generate-icons.mjs         rasterises favicon.svg into the PWA icons (D16)
 
 apps/api/src/jobs/documents-extract.ts   (planned)  M2 — OCR
 ```

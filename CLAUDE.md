@@ -86,6 +86,7 @@ Four things worth knowing before you touch anything:
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
+| **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes. **Look at it at 390px before calling it done** (debt D37) |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |

@@ -30,10 +30,24 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         scope: '/',
+        /**
+         * **The maskable icon is a different image, not the same file relabelled.**
+         *
+         * Android crops a maskable icon to the launcher's shape and only guarantees the middle 80%
+         * survives. Pointing `purpose: 'maskable'` at the ordinary icon — which is what this used
+         * to do — means the rounded corners get cropped a second time and the glyph loses its
+         * edges. `pwa-512-maskable.png` is drawn full-bleed with the mark inside the safe zone.
+         * Both are produced by `scripts/generate-icons.mjs`.
+         */
         icons: [
-          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          {
+            src: '/pwa-512-maskable.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {

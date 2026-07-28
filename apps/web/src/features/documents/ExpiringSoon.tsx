@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { Alert } from '@/components/ui/alert'
+import { DocumentListSkeleton } from '@/components/ui/skeleton'
 import { ExpiryBadge } from './ExpiryBadge'
 import { useDocuments } from './useDocuments'
 
@@ -21,7 +22,7 @@ export function ExpiringSoon({ withinDays, limit = 10 }: { withinDays: number; l
     order: 'asc',
   })
 
-  if (documents.isPending) return <p className="text-sm text-muted-foreground">Loading…</p>
+  if (documents.isPending) return <DocumentListSkeleton count={2} />
   if (documents.isError) return <Alert variant="destructive">{documents.error.message}</Alert>
 
   const rows = documents.data.data
@@ -29,7 +30,7 @@ export function ExpiringSoon({ withinDays, limit = 10 }: { withinDays: number; l
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Nothing expiring in the next {withinDays} days.
+        Nothing expiring in the next {withinDays} days. That is the point.
       </p>
     )
   }
