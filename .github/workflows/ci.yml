@@ -20,13 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # NO SECRETS ARE USED BY THIS WORKFLOW, deliberately.
+    # NO SECRETS ARE USED BY THIS JOB, deliberately — and none by the deploy job either.
     #
-    # Deployment is manual (`fly deploy`, and Cloudflare Pages' own git integration), so CI needs
-    # no FLY_API_TOKEN, no database URL, and no R2 key. That is worth more than the convenience:
-    # debt D5 records that there is no credential-rotation procedure yet, so every long-lived
-    # secret is a liability. The API tests get a throwaway Postgres from the service container
-    # below, which needs no credential at all.
+    # The deploy job below authenticates to Google with **Workload Identity Federation**, which
+    # exchanges GitHub's short-lived OIDC token for a short-lived Google token. There is no JSON
+    # key, so there is nothing in this repository's secrets to leak or rotate. Debt D5 records
+    # that no credential-rotation procedure exists; the correct response is to hold as few
+    # long-lived credentials as possible rather than to write a runbook for them.
+    #
+    # The API tests get a throwaway Postgres from the service container below, which needs no
+    # credential at all.
     services:
       postgres:
         image: postgres:17-alpine
@@ -78,3 +81,114 @@ jobs:
       - run: pnpm test
 
       - run: pnpm build
+
+  # ───────────────────────────────────────────────────────────────────────────────────────────
+  # Deploy the API to Cloud Run.
+  #
+  # `needs: verify` is the point of putting this in the same workflow rather than its own: a
+  # separate `on: push` workflow would race the test job and could ship a commit whose tests
+  # failed. Here it cannot run until typecheck, lint, test and build are all green.
+  #
+  # The WEB app is not deployed here — Cloudflare Pages builds it from its own git integration
+  # (README.md § Deploying). Two mechanisms, deliberately: Pages needs no credential at all.
+  #
+  # ADR-0021 for why Cloud Run. `--min-instances=0` is load-bearing: 180k vCPU-seconds/month
+  # cannot cover an always-on instance, so it is the difference between free and billed.
+  deploy-api:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Only deploy when something the image actually contains has changed. Doc-only commits are
+    # frequent in this repo and a redeploy for them is pure waste (and pointless churn in
+    # Artifact Registry, whose cleanup policy keeps only the last 3 images).
+    permissions:
+      contents: read
+      # Required for Workload Identity Federation. Without it the auth step fails with an
+      # unhelpful "unable to get ID token" and no indication that a permission is missing.
+      id-token: write
+
+    env:
+      PROJECT_ID: life-manager-01
+      REGION: us-central1
+      SERVICE: life-manager-api
+      RUNTIME_SA: life-manager-api@life-manager-01.iam.gserviceaccount.com
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Did anything in the image change?
+        id: changed
+        run: |
+          # Compare against the previous commit on main. On the first run after adding this
+          # job, or on a force-push, fall back to deploying rather than silently skipping.
+          if git rev-parse "${{ github.event.before }}" >/dev/null 2>&1; then
+            if git diff --quiet "${{ github.event.before }}" HEAD -- \
+                 apps/api packages/shared cloudbuild.yaml pnpm-lock.yaml \
+                 pnpm-workspace.yaml tsconfig.base.json .github/workflows/ci.yml; then
+              echo "deploy=false" >> "$GITHUB_OUTPUT"
+              echo "No API-relevant changes; skipping deploy."
+            else
+              echo "deploy=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "No usable base commit; deploying to be safe."
+          fi
+
+      - id: auth
+        if: steps.changed.outputs.deploy == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          # No JSON key. The provider is restricted to this repository by an attribute
+          # condition on the Google side, so a workflow in another repo cannot use it.
+          workload_identity_provider: projects/830606060895/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: life-manager-deploy@life-manager-01.iam.gserviceaccount.com
+
+      - if: steps.changed.outputs.deploy == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build the image (Cloud Build, not the runner)
+        if: steps.changed.outputs.deploy == 'true'
+        # Built server-side on purpose: the Dockerfile needs the REPO ROOT as context for
+        # pnpm-lock.yaml, pnpm-workspace.yaml and packages/shared, and building here would mean
+        # shipping the runner's Docker layer cache instead of a reproducible one.
+        run: |
+          gcloud builds submit \
+            --config cloudbuild.yaml \
+            --substitutions=_TAG=${{ github.sha }} \
+            --project=$PROJECT_ID
+
+      - name: Deploy to Cloud Run
+        if: steps.changed.outputs.deploy == 'true'
+        # Secrets come from Secret Manager, read by the RUNTIME service account — which holds
+        # secretAccessor on four secrets and no project-level roles. The deploy account can act
+        # as it, but cannot read those secrets itself.
+        run: |
+          gcloud run deploy $SERVICE \
+            --image=$REGION-docker.pkg.dev/$PROJECT_ID/life-manager/api:${{ github.sha }} \
+            --region=$REGION --project=$PROJECT_ID --platform=managed \
+            --service-account=$RUNTIME_SA \
+            --min-instances=0 --max-instances=3 \
+            --update-env-vars=APP_VERSION=${{ github.sha }} \
+            --quiet
+
+      - name: Verify the deployment answers
+        if: steps.changed.outputs.deploy == 'true'
+        # A deploy that "succeeded" but serves 500s is not a successful deploy. This is the
+        # cheap half of scripts/verify-deployment.mjs; the full script needs database access for
+        # its cleanup step and therefore does not belong in CI.
+        run: |
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://api.mevivek.dev/api/v1/health || true)
+            if [ "$code" = "200" ]; then
+              echo "health 200"
+              curl -s https://api.mevivek.dev/api/v1/health
+              exit 0
+            fi
+            echo "attempt $i: got $code"
+            sleep 10
+          done
+          echo "API did not return 200 after deploy"
+          exit 1
