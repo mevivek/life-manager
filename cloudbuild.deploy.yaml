@@ -1,0 +1,191 @@
+# Test + build + deploy the API, triggered by a GitHub push webhook.
+#
+# WHY THIS EXISTS INSTEAD OF GITHUB ACTIONS
+# GitHub Actions is blocked at the account level on this repository: every run dies in seconds
+# with no runner assigned, no steps and no logs (conventions/testing.md §7). `.github/workflows/ci.yml`
+# is kept and still correct — if Actions is ever unblocked it takes over and this file can go.
+#
+# WHY IT RUNS THE TESTS
+# A plain "build and deploy on push" trigger would ship untested code. The GitHub Actions job it
+# replaces was gated on `needs: verify` precisely so that could not happen, and dropping that gate
+# was the main cost of moving here. So the gate is reproduced below: typecheck, lint and the full
+# test suite — against a REAL Postgres — must pass before the image is built.
+#
+# The steps run sequentially by default; each `waitFor` is left implicit except where a step must
+# not block.
+#
+# Manual run (uses the current main):
+#   gcloud builds submit --config cloudbuild.deploy.yaml --substitutions=_SHA=$(git rev-parse HEAD)
+
+substitutions:
+  _REGION: us-central1
+  _REPO: life-manager
+  _IMAGE: api
+  _SERVICE: life-manager-api
+  _RUNTIME_SA: life-manager-api@life-manager-01.iam.gserviceaccount.com
+  # Overridden by the webhook trigger from the push payload.
+  _SHA: main
+  # Also from the payload. A webhook trigger cannot filter on branch (this gcloud has no
+  # `--filter` for `triggers create webhook`), so the guard step below does it instead.
+  _REF: refs/heads/main
+
+steps:
+  # ── branch guard ──────────────────────────────────────────────────────────────────────────
+  # GitHub sends a push webhook for EVERY branch. Deploying a feature branch to production would
+  # be actively harmful, so anything that is not main exits 0 — success, not failure, because a
+  # skipped deploy is the correct outcome and a red build would train everyone to ignore red.
+  - id: guard
+    name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ "${_REF}" != "refs/heads/main" ]; then
+          echo "ref ${_REF} is not main — nothing to deploy."
+          # Leave a marker the later steps check; Cloud Build has no native early-exit.
+          touch /workspace/SKIP
+        else
+          echo "ref ${_REF} — proceeding."
+        fi
+
+  # ── source ────────────────────────────────────────────────────────────────────────────────
+  # Cloned rather than supplied by the trigger: a webhook trigger has no repo attached, and the
+  # repository is public so this needs no credential. --depth 1 on a specific ref keeps it small.
+  - id: clone
+    name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        git init -q .
+        git remote add origin https://github.com/mevivek/life-manager.git
+        git fetch -q --depth 1 origin "${_SHA}"
+        git checkout -q FETCH_HEAD
+        echo "checked out $(git rev-parse --short HEAD)"
+
+  # ── a real Postgres for the API integration tests ─────────────────────────────────────────
+  # Detached, on the `cloudbuild` network, so later steps reach it as host `postgres`.
+  # ADR-0018: these suites SKIP without a database, so without this the tests would pass while
+  # testing nothing — which is worse than failing.
+  - id: postgres
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - -d
+      - --network=cloudbuild
+      - --name=postgres
+      - -e
+      - POSTGRES_PASSWORD=postgres
+      - -e
+      - POSTGRES_DB=lm_test
+      - postgres:17-alpine
+
+  - id: install
+    name: node:22-alpine
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        corepack enable pnpm
+        pnpm install --frozen-lockfile
+    env:
+      - CI=true
+
+  - id: typecheck
+    name: node:22-alpine
+    entrypoint: sh
+    args: ['-c', 'corepack enable pnpm && pnpm typecheck']
+    env: ['CI=true']
+
+  - id: lint
+    name: node:22-alpine
+    entrypoint: sh
+    args: ['-c', 'corepack enable pnpm && pnpm lint']
+    env: ['CI=true']
+
+  - id: test
+    name: node:22-alpine
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        corepack enable pnpm
+        # Wait for the sidecar; `pg_isready` is not in this image, so probe the port.
+        for i in $(seq 1 30); do
+          nc -z postgres 5432 && break
+          echo "waiting for postgres ($i)"; sleep 2
+        done
+        pnpm test
+    env:
+      # CI=true makes the harness THROW rather than skip when no database is reachable, so a
+      # broken sidecar fails the build instead of silently passing.
+      - CI=true
+      - TEST_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/lm_test
+
+  # ── image ─────────────────────────────────────────────────────────────────────────────────
+  # Built from the REPO ROOT: the Dockerfile needs pnpm-lock.yaml, pnpm-workspace.yaml and
+  # packages/shared. BuildKit is required for its `RUN --mount=type=cache` lines.
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    env: ['DOCKER_BUILDKIT=1']
+    args:
+      - build
+      - --file=apps/api/Dockerfile
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_SHA}
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}']
+
+  # ── deploy ────────────────────────────────────────────────────────────────────────────────
+  # --min-instances=0 is load-bearing: 180k vCPU-seconds/month cannot cover an always-on
+  # instance, so it is the difference between free and billed (ADR-0021).
+  # Secrets are NOT set here — they are already bound to the service from Secret Manager, read by
+  # the runtime account. This build's identity cannot read them.
+  # The branch guard is enforced HERE rather than on the earlier steps. Testing and building a
+  # feature branch is harmless — wasted minutes at worst. *Deploying* one to production is not.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        if [ -f /workspace/SKIP ]; then echo "not main — skipping deploy"; exit 0; fi
+        gcloud run deploy ${_SERVICE} \
+          --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_IMAGE}:${_SHA} \
+          --region=${_REGION} --platform=managed \
+          --service-account=${_RUNTIME_SA} \
+          --min-instances=0 --max-instances=3 \
+          --update-env-vars=APP_VERSION=${_SHA} \
+          --quiet
+
+  # A deploy that "succeeded" while serving 500s is not a successful deploy.
+  - id: verify
+    name: gcr.io/cloud-builders/curl
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        if [ -f /workspace/SKIP ]; then echo "not main — nothing was deployed"; exit 0; fi
+        for i in $(seq 1 12); do
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://api.mevivek.dev/api/v1/health || true)
+          if [ "$code" = "200" ]; then
+            echo "health 200"; curl -s https://api.mevivek.dev/api/v1/health; exit 0
+          fi
+          echo "attempt $i: $code"; sleep 10
+        done
+        echo "API did not return 200 after deploy"; exit 1
+
+options:
+  # Required when the build runs as a user-specified service account.
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 2400s

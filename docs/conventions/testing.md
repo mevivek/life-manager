@@ -116,5 +116,28 @@ connect, not for coverage.
 GitHub Actions on every push and PR: `typecheck` → `lint` → `test` → `build`, plus
 integration tests against an ephemeral Postgres. **A red build does not get merged.**
 
+### Local green is not CI green — check the runs
+
+**`pnpm typecheck lint test build` passing on a laptop says nothing about CI.** This is not a
+hypothetical: for the whole of M0, every run failed and nobody noticed, because the checks were
+only ever run locally. The jobs died in seconds with **no runner assigned, no steps, and no logs**
+— an account-level GitHub Actions block, which looks nothing like a test failure and produces no
+output to read.
+
+So after pushing, confirm the run actually executed:
+
+```bash
+gh run list --branch <branch> --limit 3
+gh api repos/mevivek/life-manager/actions/runs/<id>/jobs \
+  --jq '.jobs[] | "\(.name) \(.conclusion) steps=\(.steps|length) runner=\(.runner_name)"'
+```
+
+**`steps=0` with an empty runner means the job never started.** Do not go hunting for a broken
+test — nothing ran. Check billing and account-level Actions settings instead.
+
+The reason this matters beyond tidiness: the deploy job is gated on `needs: verify`
+([ADR-0021](../decisions/0021-cloud-run-for-the-api.md)), so a CI that cannot run is also a
+deploy that cannot run. The gate behaved correctly and refused to ship — but silently.
+
 No coverage threshold. A percentage target produces tests written to hit the number rather
 than to catch bugs — the isolation test in §2 is worth more than 20 points of coverage.

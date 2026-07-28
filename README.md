@@ -314,13 +314,55 @@ Its first check greps the shipped JavaScript for the API origin, which is precis
 was broken. **If you change `VITE_API_URL`, you must rebuild** — editing the variable alone does
 nothing to already-built assets.
 
-##### Not yet done
+#### The API deploys on push too — from Cloud Build, not GitHub Actions
 
-- **GitHub Actions for the API.** The Cloud Build and Cloud Run commands above are proven, so a
-  workflow can now reproduce a known-good path rather than guessing. It needs a *deploy* service
-  account key as a repo secret; the runtime account above is **not** it and must not be given
-  deploy rights. Until this exists, API deploys still need `gcloud` from a terminal — the web half
-  deploys on push, the API half does not.
+**GitHub Actions does not run on this repository.** Every run dies in seconds with no runner
+assigned, no steps and no logs — an account-level block, on every commit, including ones predating
+any workflow change. Billing was corrected and a fresh push still failed identically.
+
+So **two files claim to be CI, and only one of them runs:**
+
+| File | Status |
+|---|---|
+| `.github/workflows/ci.yml` | **Never executes.** Kept because it is correct — if Actions is unblocked it takes over and the Cloud Build trigger can be deleted |
+| `cloudbuild.deploy.yaml` | **This is the real pipeline** |
+
+Trigger `deploy-api-on-push` is a **webhook** trigger, fired by a GitHub push webhook. A webhook
+trigger was chosen because it needs no browser step: connecting a repository to Cloud Build
+requires installing its GitHub App, whereas the trigger and the webhook can both be created from
+the command line. The repo is public, so the build clones itself with no credential.
+
+It runs `guard → clone → postgres → install → typecheck → lint → test → build → push → deploy →
+verify`. **It is not a bare build-and-deploy:** the GitHub Actions job it replaced was gated on
+`needs: verify`, and reproducing that gate was the point. A real Postgres sidecar runs on the
+`cloudbuild` network, and `CI=true` makes the harness throw rather than skip when no database is
+reachable — so a green build proves the integration tests actually ran.
+
+Branch filtering is a **guard step**, not a trigger filter (this gcloud has no `--filter` for
+webhook triggers). Non-`main` refs get tested and built but the deploy and verify steps skip, and
+the guard exits **0** rather than failing — a skipped deploy is the correct outcome, and a red
+build for it would train you to ignore red.
+
+##### The one footgun: the trigger holds an INLINE copy of the config
+
+A webhook trigger has no attached repository to read `cloudbuild.deploy.yaml` from, so the trigger
+stores a snapshot. **Editing that file changes nothing until you push the new copy to the trigger:**
+
+```bash
+gcloud builds triggers update webhook deploy-api-on-push \
+  --region=global --inline-config=cloudbuild.deploy.yaml --project=life-manager-01
+```
+
+Forget this and you will edit the pipeline, push, and watch the old pipeline run — with no error
+to tell you why.
+
+##### Identity
+
+The build runs as `life-manager-deploy`, which can deploy Cloud Run and `actAs` the runtime
+account but holds `secretAccessor` on **no secret** — verified against all three. The service's
+secrets stay bound from Secret Manager and are read by the runtime account, so **the thing that
+deploys cannot read them.** No long-lived credential exists: the webhook uses a Secret Manager
+secret and an API key restricted to the Cloud Build API.
 
 ## License
 
