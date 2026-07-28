@@ -151,8 +151,10 @@ to fail. Then sign up a second account and confirm it gets its own separate spac
 the first.
 
 **Verified on the deployed app**, not just locally: `node scripts/verify-deployment.mjs` asserts
-all of it in 23 checks — the `Secure; HttpOnly; SameSite=Lax` cookie with **no `Domain`**, the
-cross-subdomain session, and that the API origin is actually baked into the shipped JavaScript.
+all of it in 25 checks — the `Secure; HttpOnly; SameSite=Lax` cookie with **no `Domain`**, the
+cross-subdomain session, that the API origin is actually baked into the shipped JavaScript, and
+that every asset and lazy route chunk the app names is really served rather than answered by the
+SPA fallback.
 
 ## M1 — Documents, core + reminders
 

@@ -35,8 +35,12 @@ created a real account with a personal space. Schema is applied to the Neon dev 
 **It is deployed, and nothing runs on the maintainer's laptop.** `app.mevivek.dev` is Cloudflare
 Pages (builds on push from `main`); `api.mevivek.dev` is Cloud Run, scale-to-zero
 ([ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md), superseding ADR-0014's Fly choice);
-Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 23 checks,
+Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 25 checks,
 including the ones `localhost` structurally cannot perform.
+**Check the deployed app with `fetch`, not `curl`.** From an agent container `curl` goes through the
+agent HTTPS proxy, which has been seen returning the SPA fallback HTML for a large asset the origin
+serves correctly — so `curl` can invent a broken deploy that isn't. Node's `fetch` ignores
+`HTTPS_PROXY` and reaches the origin; confirm with it before believing any missing-asset finding.
 
 **Both halves deploy on push.** Web via Cloudflare Pages; API via the Cloud Build trigger
 `deploy-api-on-push`, which tests, builds, deploys and health-checks. **GitHub Actions does not

@@ -18,6 +18,10 @@
  * (`/* /index.html 200`) answers *every* path with HTML and a 200. Checking "does the app load"
  * is therefore worthless. §1 checks the API origin is actually baked into the shipped JavaScript,
  * which is the thing that was broken.
+ *
+ * That same fallback is why §1 also walks every asset the HTML names — plus every lazy route chunk
+ * the entry names — and asserts each one's **content-type**. A file that was never uploaded still
+ * answers 200, so status codes cannot see it. See the long comment in §1.
  */
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
@@ -64,12 +68,75 @@ console.log('\n[1] the shipped bundle points at the API (the check that matters)
   ok(html.includes('<div id="root"'), 'app HTML served')
 
   const names = new Set([...html.matchAll(/\/assets\/([A-Za-z0-9_.-]+\.js)/g)].map((m) => m[1]))
+  let swText = ''
   try {
-    const sw = await (await fetch(`${APP}/sw.js`)).text()
-    for (const m of sw.matchAll(/assets\/([A-Za-z0-9_.-]+\.js)/g)) names.add(m[1])
+    swText = await (await fetch(`${APP}/sw.js`)).text()
+    for (const m of swText.matchAll(/assets\/([A-Za-z0-9_.-]+\.js)/g)) names.add(m[1])
   } catch {
     /* no service worker in a dev build */
   }
+
+  /**
+   * **Every asset the app names must really exist — and a 200 does not prove that it does.**
+   *
+   * The SPA fallback in `_redirects` (`/* /index.html 200`) answers a *missing* asset with the
+   * app's own HTML at status 200. So `res.ok` is true for a file that was never uploaded, and a
+   * browser then refuses to execute HTML as a `type="module"` script: a blank screen that every
+   * other probe in this file would call healthy. §1's existing check cannot catch it either — it
+   * asks only whether *some* chunk contains the API host, which any one chunk can satisfy.
+   *
+   * So the assertion is on the CONTENT-TYPE, not the status. Same lesson as debt D33: a check that
+   * cannot distinguish "correct" from "never served" is not a check.
+   *
+   * The route chunks come from the entry's `__vite__mapDeps` table, which is how a code-split
+   * TanStack Router build names its lazy chunks. They are worth walking because a missing one
+   * breaks exactly one screen — the failure that survives a manual look at the dashboard.
+   *
+   * ── Use `fetch`, not `curl`, when checking this by hand ──
+   *
+   * From inside an agent container, `curl` goes through the agent HTTPS proxy, and the proxy has
+   * been observed returning the SPA fallback for a large asset that the origin serves correctly —
+   * i.e. it manufactures precisely the failure this check looks for. Node's `fetch` does not honour
+   * `HTTPS_PROXY` by default and reaches the origin. A "missing" asset seen only via `curl` is an
+   * artefact; confirm with `fetch` before believing it.
+   */
+  const referenced = new Map()
+  for (const m of html.matchAll(/(?:src|href)="(\/assets\/[A-Za-z0-9_.-]+\.(?:js|css))"/g)) {
+    referenced.set(m[1], 'index.html')
+  }
+  ok(referenced.size > 0, 'the HTML names hashed assets', `${referenced.size} referenced`)
+
+  const missing = []
+  const seen = new Set()
+  /** Fetches `url`, records it if the fallback answered, and returns the body (or null). */
+  const fetchAsset = async (url, source) => {
+    if (seen.has(url)) return null
+    seen.add(url)
+    const res = await fetch(`${APP}${url}`)
+    const type = res.headers.get('content-type') ?? ''
+    // An asset answered with HTML was never deployed; the fallback is replying on its behalf.
+    if (!res.ok || type.includes('text/html')) {
+      missing.push(`${url} (${source}) → ${res.status} ${type.split(';')[0]}`)
+      return null
+    }
+    return await res.text()
+  }
+
+  for (const [url, source] of [...referenced]) {
+    const body = await fetchAsset(url, source)
+    if (body === null || !url.endsWith('.js')) continue
+    for (const m of body.matchAll(/"(assets\/[A-Za-z0-9_.-]+\.js)"/g)) {
+      referenced.set(`/${m[1]}`, 'route chunk')
+    }
+  }
+  // Second pass: the lazy chunks discovered in the entry above.
+  for (const [url, source] of [...referenced]) await fetchAsset(url, source)
+
+  ok(
+    missing.length === 0,
+    `every referenced asset is really served, not the SPA fallback (${seen.size} fetched)`,
+    missing.join('; '),
+  )
 
   let hit = null
   for (const name of names) {
