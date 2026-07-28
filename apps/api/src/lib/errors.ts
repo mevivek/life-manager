@@ -74,6 +74,26 @@ export class ValidationError extends AppError {
   }
 }
 
+/**
+ * 503 — the feature exists in the code but is not configured on this deployment.
+ *
+ * Added at M1 for the two optional feature groups in `env.ts`: R2 (file endpoints) and VAPID (push
+ * delivery). Both are deliberately optional so that `pnpm test` and a fresh clone need no external
+ * credential, which means "unconfigured" is a real, expected runtime state rather than a bug.
+ *
+ * **Not a 500**, because nothing is broken, and **not a 404**, because the endpoint genuinely
+ * exists and will work once configured. conventions/api.md §3's table does not list 503; it was
+ * written before an optional-feature case existed, and §3 is updated alongside this.
+ */
+export class NotConfiguredError extends AppError {
+  readonly status = 503
+  readonly slug = 'not-configured'
+
+  constructor(message = 'That feature is not configured on this deployment.') {
+    super(message)
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError
 }

@@ -2,9 +2,12 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
 import { actorHook } from './auth/actor.hook.js'
 import { authRoutes } from './auth/auth.routes.js'
+import { documentsRoutes } from './domains/documents/documents.routes.js'
 import { healthRoutes } from './domains/health/health.routes.js'
 import { meRoutes } from './domains/me/me.routes.js'
+import { remindersRoutes } from './domains/reminders/reminders.routes.js'
 import { jobsPlugin } from './jobs/jobs.plugin.js'
+import { idempotencyPlugin } from './lib/idempotency.plugin.js'
 import { loggerOptions } from './lib/logger.js'
 import { openapiPlugin } from './lib/openapi.js'
 import { registerProblemHandlers } from './lib/problem.js'
@@ -35,7 +38,9 @@ export type BuildAppOptions = {
  *    actor hook can reject an `OPTIONS` request for having no session.
  * 4. OpenAPI, before the routes it must document.
  * 5. The actor hook, before any route, so `request.actor` exists for all of them.
- * 6. Routes. `authRoutes` last of the auth pieces, and NOT `fp()`-wrapped — see its file.
+ * 6. The idempotency plugin, AFTER the actor hook — it needs `request.actor` to scope a replay to
+ *    a space, and its `preHandler` would otherwise run against a null actor.
+ * 7. Routes. `authRoutes` last of the auth pieces, and NOT `fp()`-wrapped — see its file.
  */
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const { startJobs = true } = options
@@ -63,9 +68,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(securityPlugin)
   await app.register(openapiPlugin)
   await app.register(actorHook)
+  await app.register(idempotencyPlugin)
 
   await app.register(healthRoutes)
   await app.register(meRoutes)
+  await app.register(documentsRoutes)
+  await app.register(remindersRoutes)
   await app.register(authRoutes)
 
   if (startJobs) await app.register(jobsPlugin)

@@ -35,6 +35,25 @@ export default defineConfig({
       BETTER_AUTH_SECRET: 'test-secret-not-a-real-one-0000000000',
       API_BASE_URL: 'http://localhost:8080',
       WEB_ORIGIN: 'http://localhost:5173',
+
+      /**
+       * Fake R2 credentials, so the file endpoints exercise the **real** presign path.
+       *
+       * This works — and is not a fudge — because SigV4 presigning is a purely local computation:
+       * no network call, no credential validation against the service. So the tests cover key
+       * construction, the signed size/type headers and the whole upload state machine, and the
+       * only uncovered step is R2 accepting the PUT, which no test could cover anyway.
+       *
+       * Obvious fakes (conventions/testing.md §5). Without these the endpoints would answer 503 and
+       * every file test would be asserting the unconfigured path instead of the real one.
+       */
+      R2_ACCOUNT_ID: 'not-a-real-account',
+      R2_ACCESS_KEY_ID: 'not-a-real-access-key',
+      R2_SECRET_ACCESS_KEY: 'not-a-real-secret-key',
+      R2_BUCKET: 'test-bucket',
+
+      // Push stays UNCONFIGURED on purpose: `reminders.test.ts` asserts the not-configured path,
+      // which is a real runtime state and the one a deployment hits before VAPID keys are set.
     },
   },
 })

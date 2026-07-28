@@ -1,0 +1,455 @@
+import { z } from 'zod'
+import {
+  countryCodeSchema,
+  currencySchema,
+  decimalStringSchema,
+  isoDateSchema,
+  isoDateTimeSchema,
+  pageQueryShape,
+  sortOrderSchema,
+  uuidSchema,
+} from './common.js'
+
+/**
+ * The Documents contract. ADR-0004: these schemas are the ONLY source of the wire shape, and
+ * the spec they implement is domains/documents.md — read §3 (entities) and §4 (business
+ * rules) before changing anything here.
+ *
+ * Two project decisions are baked into this file and are not stylistic:
+ *
+ * - **Q2 (answered 2026-07-28): `title` is the only field required at capture.** Every other
+ *   field on `documentCreateSchema` is optional. That is a load-bearing product decision, not
+ *   laziness — see product/open-questions.md §2. It also means every consumer must handle a
+ *   document whose `doc_type` is `other` and whose every other field is null.
+ * - **Query schemas are `z.strictObject`.** conventions/api.md §7 requires unknown query
+ *   parameters to be rejected; a plain `z.object` strips them and answers 200. Debt D27.
+ */
+
+// ── Taxonomy ─────────────────────────────────────────────────────────────────
+
+/** domains/documents.md §3. `other` is the default, not an error state (Q2). */
+export const documentTypeSchema = z.enum([
+  'identity',
+  'financial',
+  'legal',
+  'warranty',
+  'receipt',
+  'certificate',
+  'other',
+])
+export type DocumentType = z.infer<typeof documentTypeSchema>
+
+/**
+ * The types that get automatic reminders at the default lead times (business rule 8).
+ * Identity documents and certificates are the ones with painful renewal timelines.
+ */
+export const AUTO_REMINDER_TYPES: readonly DocumentType[] = ['identity', 'certificate']
+
+/** Business rule 8. Days before `expires_on`, longest first. */
+export const DEFAULT_LEAD_DAYS: readonly number[] = [90, 30, 7]
+
+export const MAX_TITLE_LENGTH = 200
+export const MAX_TAGS = 25
+
+/**
+ * A tag, normalised to lowercase **by the contract** rather than by each caller.
+ *
+ * Not cosmetic: `documents.search_vector` folds tags in via `array_to_tsvector`, which produces
+ * lexemes verbatim — no case folding — so a tag stored as `Travel` would be unfindable by a
+ * search for `travel`. Normalising here means the database's assumption is guaranteed by the
+ * only schema that can write a tag. It also makes `?tag=` case-insensitive for free, which is
+ * what anyone typing a tag expects.
+ */
+export const tagSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .transform((tag) => tag.toLowerCase())
+
+/**
+ * **Last 4 characters only** — business rule 6. Never a full passport or account number: the
+ * full number is on the scan, which is access-controlled, so a plaintext column is a needless
+ * liability.
+ *
+ * The wire schema accepts up to 64 characters because §4 rule 6 says the API *truncates* at
+ * the boundary rather than rejecting — a client that sends more gets the last 4 stored, not an
+ * error. `truncateToLast4()` below is that truncation, and it runs server-side (invariant 5).
+ * These fields are in pino's redaction list so the discarded prefix never reaches a log.
+ */
+export const identifierInputSchema = z.string().min(1).max(64)
+
+/** The stored form: at most 4 characters. */
+export const identifierLast4Schema = z.string().max(4)
+
+/** Business rule 6, as the one function that implements it. */
+export function truncateToLast4(value: string): string {
+  return value.slice(-4)
+}
+
+// ── custom_attrs, per doc_type ───────────────────────────────────────────────
+
+/**
+ * domains/documents.md §3. JSONB in the database, but **not freeform over the wire** — a
+ * discriminated union on `doc_type` validates it at the API boundary
+ * (conventions/data.md §5), so a client cannot write arbitrary keys.
+ *
+ * `z.strictObject` on every member, deliberately: an unrecognised key in `custom_attrs` is a
+ * client bug or a typo'd field name, and silently dropping it would lose data the user
+ * thought they had saved.
+ *
+ * **Every field is optional** — capture friction is the bigger risk (Q2, brain.md principle
+ * 2). And **every money field is a decimal string plus a currency**, never a JSON number:
+ * see `decimalStringSchema`.
+ */
+const identityAttrs = z.strictObject({
+  document_number_last4: identifierLast4Schema.optional(),
+  issuing_authority: z.string().max(200).optional(),
+  nationality: countryCodeSchema.optional(),
+  place_of_issue: z.string().max(200).optional(),
+})
+
+const financialAttrs = z.strictObject({
+  counterparty: z.string().max(200).optional(),
+  account_last4: identifierLast4Schema.optional(),
+  value: decimalStringSchema.optional(),
+  currency: currencySchema.optional(),
+  renewal_terms: z.string().max(1000).optional(),
+})
+
+const legalAttrs = z.strictObject({
+  counterparty: z.string().max(200).optional(),
+  jurisdiction: z.string().max(200).optional(),
+  effective_from: isoDateSchema.optional(),
+  renewal_terms: z.string().max(1000).optional(),
+})
+
+const warrantyAttrs = z.strictObject({
+  vendor: z.string().max(200).optional(),
+  product: z.string().max(200).optional(),
+  serial_number: z.string().max(120).optional(),
+  purchase_price: decimalStringSchema.optional(),
+  currency: currencySchema.optional(),
+  purchased_on: isoDateSchema.optional(),
+  coverage_months: z.number().int().min(0).max(1200).optional(),
+})
+
+const receiptAttrs = z.strictObject({
+  vendor: z.string().max(200).optional(),
+  amount: decimalStringSchema.optional(),
+  currency: currencySchema.optional(),
+  purchased_on: isoDateSchema.optional(),
+  payment_method_last4: identifierLast4Schema.optional(),
+})
+
+const certificateAttrs = z.strictObject({
+  issuing_body: z.string().max(200).optional(),
+  credential_id: z.string().max(120).optional(),
+  level: z.string().max(120).optional(),
+  verify_url: z.url().max(2000).optional(),
+})
+
+/** `other` carries no structured attributes — freeform `notes` only (§3). */
+const otherAttrs = z.strictObject({})
+
+/**
+ * Keyed by `doc_type`. Exported so the service can validate `custom_attrs` **after** resolving
+ * which type a PATCH leaves the document in — a discriminated union cannot do that on its own,
+ * because a PATCH may change `doc_type` and `custom_attrs` in either order or one without the
+ * other.
+ */
+export const CUSTOM_ATTRS_BY_TYPE = {
+  identity: identityAttrs,
+  financial: financialAttrs,
+  legal: legalAttrs,
+  warranty: warrantyAttrs,
+  receipt: receiptAttrs,
+  certificate: certificateAttrs,
+  other: otherAttrs,
+} as const satisfies Record<DocumentType, z.ZodType>
+
+/**
+ * The permissive wire type for `custom_attrs`. The **real** validation is
+ * `CUSTOM_ATTRS_BY_TYPE[docType]`, applied in the service once the effective `doc_type` is
+ * known — see `validateCustomAttrs()`.
+ *
+ * This is not a loophole: the service rejects anything the per-type schema does not accept,
+ * and a route cannot skip that step because `custom_attrs` reaches the repository only through
+ * the service. Kept loose here purely so a PATCH that changes `doc_type` and `custom_attrs`
+ * together is validated against the *new* type rather than the old one.
+ */
+export const customAttrsWireSchema = z.record(z.string(), z.unknown())
+export type CustomAttrs = Record<string, unknown>
+
+/**
+ * Validates `custom_attrs` against the effective `doc_type`. Returns the parsed value or a
+ * list of problems — never throws, so the service decides the error type
+ * (conventions/code.md §6: services throw domain errors, helpers do not invent them).
+ */
+export function validateCustomAttrs(
+  docType: DocumentType,
+  attrs: CustomAttrs,
+): { ok: true; value: CustomAttrs } | { ok: false; issues: { path: string; message: string }[] } {
+  const result = CUSTOM_ATTRS_BY_TYPE[docType].safeParse(attrs)
+  if (result.success) return { ok: true, value: result.data as CustomAttrs }
+  return {
+    ok: false,
+    issues: result.error.issues.map((issue) => ({
+      path: `custom_attrs.${issue.path.join('.')}`,
+      message: issue.message,
+    })),
+  }
+}
+
+// ── The entity ───────────────────────────────────────────────────────────────
+
+export const documentSchema = z.object({
+  id: uuidSchema,
+  space_id: uuidSchema,
+  title: z.string().min(1).max(MAX_TITLE_LENGTH),
+  doc_type: documentTypeSchema,
+  issuer: z.string().nullable(),
+  identifier_last4: identifierLast4Schema.nullable(),
+  issued_on: isoDateSchema.nullable(),
+  expires_on: isoDateSchema.nullable(),
+  country: countryCodeSchema.nullable(),
+  notes: z.string().nullable(),
+  tags: z.array(z.string()),
+  custom_attrs: customAttrsWireSchema,
+  /** Denormalised for the list view, so rendering a list needs no N+1 (`has_file` filter). */
+  file_count: z.number().int().min(0),
+  created_at: isoDateTimeSchema,
+  updated_at: isoDateTimeSchema,
+})
+export type Document = z.infer<typeof documentSchema>
+
+// ── Files ────────────────────────────────────────────────────────────────────
+
+/** Business rule 11. Kept here rather than in the API so the client can pre-check for UX. */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+/** Business rule 11. An allowlist, never a denylist. */
+export const ALLOWED_UPLOAD_MIMES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/heic',
+  'image/webp',
+  'image/tiff',
+] as const
+
+export const uploadMimeSchema = z.enum(ALLOWED_UPLOAD_MIMES)
+export type UploadMime = z.infer<typeof uploadMimeSchema>
+
+export const documentFileSchema = z.object({
+  id: uuidSchema,
+  document_id: uuidSchema,
+  version: z.number().int().min(1),
+  mime: z.string(),
+  size_bytes: z.number().int().min(0),
+  sha256: z.string(),
+  is_primary: z.boolean(),
+  uploaded_at: isoDateTimeSchema.nullable(),
+  created_at: isoDateTimeSchema,
+  /**
+   * Deliberately absent: `storage_key`. The API chooses it (invariant 6,
+   * ADR-0008) and a client has no use for it — it talks to R2 through presigned URLs only.
+   * Exposing it would invite a client to construct one.
+   */
+})
+export type DocumentFile = z.infer<typeof documentFileSchema>
+
+// ── Reminder, as nested in a document detail response ────────────────────────
+
+export const reminderChannelSchema = z.enum(['web_push', 'email', 'fcm', 'apns'])
+export type ReminderChannel = z.infer<typeof reminderChannelSchema>
+
+export const reminderSchema = z.object({
+  id: uuidSchema,
+  entity_type: z.literal('document'),
+  entity_id: uuidSchema,
+  due_on: isoDateSchema,
+  lead_days: z.number().int().min(0).max(3650),
+  channel: reminderChannelSchema,
+  sent_at: isoDateTimeSchema.nullable(),
+  dismissed_at: isoDateTimeSchema.nullable(),
+  created_at: isoDateTimeSchema,
+})
+export type Reminder = z.infer<typeof reminderSchema>
+
+// ── Create ───────────────────────────────────────────────────────────────────
+
+/**
+ * **`title` is the only required field** (Q2, business rule 1). Resist adding a second one:
+ * a required field is paid on every capture forever, and the answer to Q2 was explicit that
+ * capture friction is the bigger risk than incomplete records.
+ */
+export const documentCreateSchema = z.strictObject({
+  title: z.string().trim().min(1, 'A title is required').max(MAX_TITLE_LENGTH),
+  doc_type: documentTypeSchema.default('other'),
+  issuer: z.string().trim().max(200).nullish(),
+  /** Truncated to the last 4 characters server-side — business rule 6. */
+  identifier: identifierInputSchema.nullish(),
+  issued_on: isoDateSchema.nullish(),
+  expires_on: isoDateSchema.nullish(),
+  country: countryCodeSchema.nullish(),
+  notes: z.string().max(10_000).nullish(),
+  tags: z.array(tagSchema).max(MAX_TAGS).default([]),
+  custom_attrs: customAttrsWireSchema.default({}),
+})
+export type DocumentCreate = z.infer<typeof documentCreateSchema>
+
+// ── Update ───────────────────────────────────────────────────────────────────
+
+/**
+ * `PATCH` semantics per conventions/api.md §8: **an absent key means "don't change"**, and an
+ * explicit `null` means "clear this field". Those are genuinely different, which is why every
+ * nullable field is `.nullish()` on an all-optional object rather than `.partial()` of the
+ * create schema — `.partial()` cannot distinguish the two.
+ */
+export const documentUpdateSchema = z
+  .strictObject({
+    title: z.string().trim().min(1).max(MAX_TITLE_LENGTH).optional(),
+    doc_type: documentTypeSchema.optional(),
+    issuer: z.string().trim().max(200).nullish(),
+    identifier: identifierInputSchema.nullish(),
+    issued_on: isoDateSchema.nullish(),
+    expires_on: isoDateSchema.nullish(),
+    country: countryCodeSchema.nullish(),
+    notes: z.string().max(10_000).nullish(),
+    tags: z.array(tagSchema).max(MAX_TAGS).optional(),
+    custom_attrs: customAttrsWireSchema.optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'A patch must change at least one field',
+  })
+export type DocumentUpdate = z.infer<typeof documentUpdateSchema>
+
+// ── List query ───────────────────────────────────────────────────────────────
+
+export const documentSortSchema = z.enum(['expires_on', 'created_at', 'title'])
+export type DocumentSort = z.infer<typeof documentSortSchema>
+
+/**
+ * A repeatable query parameter arrives as a string for one value and an array for several.
+ * Normalising to an array here means the repository never branches on arity.
+ */
+const repeatable = <T extends z.ZodType>(item: T) =>
+  z.union([item, z.array(item)]).transform((value) => (Array.isArray(value) ? value : [value]))
+
+/**
+ * `GET /api/v1/documents`. domains/documents.md §5.
+ *
+ * **`z.strictObject`, and that is the whole point of debt D27** — `?expiring_befor=2026-12-31`
+ * must be a 400, not a silent full-table read. If you add a filter, add it here; if a client
+ * sends something not listed here, it is a typo and it fails loudly.
+ *
+ * Default sort is `expires_on asc, nulls last` — §5 is explicit that this, not `created_at`,
+ * is the useful default: the question this domain answers is "what needs doing about it".
+ */
+export const documentListQuerySchema = z.strictObject({
+  ...pageQueryShape,
+  q: z.string().trim().min(1).max(200).optional(),
+  type: repeatable(documentTypeSchema).optional(),
+  tag: repeatable(tagSchema).optional(),
+  expiring_before: isoDateSchema.optional(),
+  has_file: z.stringbool().optional(),
+  sort: documentSortSchema.default('expires_on'),
+  order: sortOrderSchema.default('asc'),
+})
+export type DocumentListQuery = z.infer<typeof documentListQuerySchema>
+
+// ── Responses ────────────────────────────────────────────────────────────────
+
+/**
+ * Written out rather than built with `paginated(documentSchema)` because the OpenAPI document
+ * is nicer with a named shape here, and because this list carries no extra fields — if it ever
+ * needs a total or a facet count, it gets added here and `paginated()` stays generic.
+ */
+export const documentListResponseSchema = z.object({
+  data: z.array(documentSchema),
+  next_cursor: z.string().nullable(),
+})
+export type DocumentListResponse = z.infer<typeof documentListResponseSchema>
+
+/** `GET /api/v1/documents/:id` — includes files and reminders (§5). */
+export const documentDetailResponseSchema = documentSchema.extend({
+  files: z.array(documentFileSchema),
+  reminders: z.array(reminderSchema),
+})
+export type DocumentDetailResponse = z.infer<typeof documentDetailResponseSchema>
+
+// ── File endpoints ───────────────────────────────────────────────────────────
+
+/**
+ * `POST /documents/:id/files:presign-upload`.
+ *
+ * **No storage key, path, or destination filename** — invariant 6 and business rule 5. A
+ * request carrying one is rejected, which `z.strictObject` does for free: there is no key here
+ * for it to land in. `filename` is absent for the same reason; the client's local filename is
+ * not the API's business and would be an obvious path-traversal vector.
+ */
+export const presignUploadRequestSchema = z.strictObject({
+  mime: uploadMimeSchema,
+  /** Checked against the limit **before any bytes move** — §5 notes the 413 happens here. */
+  size_bytes: z.number().int().min(1).max(MAX_UPLOAD_BYTES),
+  /** Business rule 3: a new version becomes primary unless told otherwise. */
+  make_primary: z.boolean().default(true),
+})
+export type PresignUploadRequest = z.infer<typeof presignUploadRequestSchema>
+
+export const presignUploadResponseSchema = z.object({
+  file_id: uuidSchema,
+  upload_url: z.string(),
+  /**
+   * Returned for transparency and debugging, **not** for the client to use or echo back.
+   * `:confirm` takes `file_id` alone precisely so the key cannot be influenced.
+   */
+  storage_key: z.string(),
+  version: z.number().int().min(1),
+  expires_at: isoDateTimeSchema,
+})
+export type PresignUploadResponse = z.infer<typeof presignUploadResponseSchema>
+
+/** `POST /documents/:id/files:confirm`. The client reports what it actually uploaded. */
+export const confirmUploadRequestSchema = z.strictObject({
+  file_id: uuidSchema,
+  sha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/, 'Must be a lowercase hex SHA-256 digest')
+    .optional(),
+})
+export type ConfirmUploadRequest = z.infer<typeof confirmUploadRequestSchema>
+
+/**
+ * `POST /documents/:id/files:presign-download`.
+ *
+ * The file is named in the **body**, mirroring `:confirm`, rather than in the path. That is not a
+ * style preference: a `:verb` suffix immediately after a path parameter
+ * (`/files/:fileId:presign-download`) generates a **broken OpenAPI path** —
+ * `/files/{fileId}:{presign}-download` — even though Fastify routes it correctly. Measured, not
+ * guessed; see the block comment in `documents.routes.ts` and conventions/api.md §2.
+ */
+export const presignDownloadRequestSchema = z.strictObject({
+  file_id: uuidSchema,
+})
+export type PresignDownloadRequest = z.infer<typeof presignDownloadRequestSchema>
+
+export const presignDownloadResponseSchema = z.object({
+  download_url: z.string(),
+  expires_at: isoDateTimeSchema,
+})
+export type PresignDownloadResponse = z.infer<typeof presignDownloadResponseSchema>
+
+/** `PATCH /documents/:id/files/:fileId` — `is_primary` only (§5). */
+export const documentFileUpdateSchema = z.strictObject({
+  is_primary: z.literal(true, {
+    message: 'Only promotion to primary is supported; demote by promoting another file',
+  }),
+})
+export type DocumentFileUpdate = z.infer<typeof documentFileUpdateSchema>
+
+// ── Params ───────────────────────────────────────────────────────────────────
+
+export const documentIdParamsSchema = z.object({ id: uuidSchema })
+export const documentFileParamsSchema = z.object({ id: uuidSchema, fileId: uuidSchema })

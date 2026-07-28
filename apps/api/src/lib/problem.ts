@@ -28,6 +28,7 @@ const TITLES: Record<string, string> = {
   'payload-too-large': 'Payload too large',
   'rate-limited': 'Too many requests',
   'unsupported-media-type': 'Unsupported media type',
+  'not-configured': 'Feature not configured',
   'internal-error': 'Internal server error',
 }
 
@@ -79,6 +80,8 @@ function slugForStatus(status: number): string {
       return 'unprocessable'
     case 429:
       return 'rate-limited'
+    case 503:
+      return 'not-configured'
     default:
       return 'internal-error'
   }

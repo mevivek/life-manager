@@ -91,6 +91,50 @@ const envSchema = z
      */
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+
+    /**
+     * Cloudflare R2 (ADR-0008). Optional as a **group of four**: with none of them, file
+     * endpoints answer 503 and the rest of Documents works normally. That matters more than it
+     * sounds — it means `pnpm test` and a fresh clone need no storage credential at all, and
+     * presigning is pure local computation so tests exercise the real code path with fake keys.
+     *
+     * `R2_PUBLIC_BASE_URL` is deliberately absent and must stay absent: the bucket has no public
+     * access, ever (ADR-0008). Every read goes through a presigned GET.
+     */
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    R2_BUCKET: z.string().min(1).optional(),
+
+    /** How long a presigned upload or download URL stays valid. Minutes, per ADR-0008. */
+    R2_PRESIGN_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(600),
+
+    /**
+     * Web Push / VAPID (RFC 8292), for reminder delivery.
+     *
+     * Optional as a **group** for the same reason as R2. The public key is public by design — it
+     * is served to the browser so it can subscribe — while the private key never leaves the API.
+     * Generate a pair with `node scripts/generate-vapid-keys.mjs`; the format is that script's,
+     * not the one other VAPID tools emit, so do not mix sources.
+     */
+    VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+    VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+    /** `mailto:` or an https URL. RFC 8292 requires a contact for the push service operator. */
+    VAPID_SUBJECT: z.string().min(1).optional(),
+
+    /**
+     * Whether to register pg-boss's recurring schedules.
+     *
+     * **Off by default, decided 2026-07-27** (product/open-questions.md §2): a daily cron against
+     * a database with three test documents earns nothing, and a schedule means *something must
+     * always be running*, which is what forces an always-on host and keeps Neon's compute awake
+     * (ADR-0012, ADR-0014). Handlers are registered regardless, so `boss.send('reminders.scan',
+     * {})` still works in development — only the clock is switched off.
+     */
+    ENABLE_SCHEDULED_JOBS: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
   })
   .refine(
     (value) =>
@@ -99,6 +143,33 @@ const envSchema = z
       message:
         'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together, or neither. Half-configured OAuth fails at the redirect, which is a confusing place to discover it.',
       path: ['GOOGLE_CLIENT_SECRET'],
+    },
+  )
+  .refine(
+    (value) => {
+      const parts = [
+        value.R2_ACCOUNT_ID,
+        value.R2_ACCESS_KEY_ID,
+        value.R2_SECRET_ACCESS_KEY,
+        value.R2_BUCKET,
+      ]
+      return parts.every((part) => part === undefined) || parts.every((part) => part !== undefined)
+    },
+    {
+      message:
+        'R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET must all be set, or none. A half-configured bucket fails at the first upload, long after boot.',
+      path: ['R2_BUCKET'],
+    },
+  )
+  .refine(
+    (value) => {
+      const parts = [value.VAPID_PUBLIC_KEY, value.VAPID_PRIVATE_KEY, value.VAPID_SUBJECT]
+      return parts.every((part) => part === undefined) || parts.every((part) => part !== undefined)
+    },
+    {
+      message:
+        'VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT must all be set, or none. A half-configured pair fails at delivery time, which is a background job and therefore invisible.',
+      path: ['VAPID_PRIVATE_KEY'],
     },
   )
 
@@ -143,3 +214,58 @@ export const isTest = env.NODE_ENV === 'test'
  * the thing being tested would not be the thing that ships (security-model.md §2, ADR-0019).
  */
 export const useSecureCookies = new URL(env.API_BASE_URL).protocol === 'https:'
+
+/**
+ * Narrowed accessors for the two optional feature groups.
+ *
+ * Returning a fully-typed object or `null` — rather than letting callers read four independent
+ * `string | undefined`s — is what stops every call site re-deriving "is this configured?" and
+ * getting it subtly different. The `refine` above guarantees all-or-nothing, so one check here is
+ * enough to narrow all four.
+ */
+export function r2Config(): {
+  accountId: string
+  accessKeyId: string
+  secretAccessKey: string
+  bucket: string
+  ttlSeconds: number
+} | null {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = env
+  if (
+    R2_ACCOUNT_ID === undefined ||
+    R2_ACCESS_KEY_ID === undefined ||
+    R2_SECRET_ACCESS_KEY === undefined ||
+    R2_BUCKET === undefined
+  ) {
+    return null
+  }
+
+  return {
+    accountId: R2_ACCOUNT_ID,
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY,
+    bucket: R2_BUCKET,
+    ttlSeconds: env.R2_PRESIGN_TTL_SECONDS,
+  }
+}
+
+export function vapidConfig(): {
+  publicKey: string
+  privateKey: string
+  subject: string
+} | null {
+  const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = env
+  if (
+    VAPID_PUBLIC_KEY === undefined ||
+    VAPID_PRIVATE_KEY === undefined ||
+    VAPID_SUBJECT === undefined
+  ) {
+    return null
+  }
+
+  return {
+    publicKey: VAPID_PUBLIC_KEY,
+    privateKey: VAPID_PRIVATE_KEY,
+    subject: VAPID_SUBJECT,
+  }
+}

@@ -22,6 +22,28 @@ export const isoDateTimeSchema = z.iso.datetime()
 export const spaceRoleSchema = z.enum(['owner', 'member'])
 export type SpaceRole = z.infer<typeof spaceRoleSchema>
 
+/**
+ * A decimal amount, **as a string**. conventions/data.md §4 says money is `numeric(19,4)` and
+ * never a float — and a JSON number *is* a float64, so sending one over the wire would throw
+ * away the precision the column exists to keep. Postgres `numeric` accepts this string
+ * directly and Drizzle returns it as one, so the value never becomes a float anywhere.
+ *
+ * Up to 15 integer digits and 4 decimal places, matching `numeric(19,4)` exactly.
+ */
+export const decimalStringSchema = z
+  .string()
+  .regex(/^-?\d{1,15}(\.\d{1,4})?$/, 'Must be a decimal amount, e.g. "1250.00"')
+
+/** ISO 4217, uppercase. Paired with every money field (conventions/data.md §4). */
+export const currencySchema = z.string().regex(/^[A-Z]{3}$/, 'Must be a 3-letter currency code')
+
+/** ISO 3166-1 alpha-2, uppercase. */
+export const countryCodeSchema = z.string().regex(/^[A-Z]{2}$/, 'Must be a 2-letter country code')
+
+/** conventions/api.md §7: `order` is `asc` or `desc` and nothing else. */
+export const sortOrderSchema = z.enum(['asc', 'desc'])
+export type SortOrder = z.infer<typeof sortOrderSchema>
+
 // ── Pagination ───────────────────────────────────────────────────────────────
 //
 // Defined here at M0 but used by NOTHING yet: no list endpoint exists. It lives here so
@@ -38,10 +60,24 @@ export const MAX_PAGE_LIMIT = 200
  */
 export const cursorSchema = z.string().min(1).max(512)
 
-export const pageQuerySchema = z.object({
+/**
+ * The two pagination fields, as a raw shape so a domain can spread them into its own
+ * **`z.strictObject`**:
+ *
+ *     export const listDocumentsQuerySchema = z.strictObject({ ...pageQueryShape, q: ... })
+ *
+ * Spreading a shape rather than `.extend()`ing a schema is deliberate: `.extend()` on a
+ * non-strict object produces a non-strict object, and **strictness is the point** —
+ * conventions/api.md §7 requires unknown query parameters to be *rejected*, and a plain Zod
+ * object silently strips them instead (debt D27, which is exactly this mistake made once
+ * already at the Fastify level).
+ */
+export const pageQueryShape = {
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
   cursor: cursorSchema.optional(),
-})
+} as const
+
+export const pageQuerySchema = z.strictObject(pageQueryShape)
 export type PageQuery = z.infer<typeof pageQuerySchema>
 
 /** `next_cursor` is `null` on the last page. */

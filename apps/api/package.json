@@ -18,6 +18,8 @@
     "auth:generate": "pnpm dlx auth@latest generate --config src/auth/auth.ts --output src/db/schema/auth.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1095.0",
+    "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@better-auth/drizzle-adapter": "^1.6.25",
     "@fastify/cors": "^11.3.0",
     "@fastify/rate-limit": "^11.1.0",
@@ -31,6 +33,7 @@
     "pg": "^8.22.0",
     "pg-boss": "^12.26.3",
     "pino": "^10.3.1",
+    "webpush-webcrypto": "^1.0.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

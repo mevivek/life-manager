@@ -1,5 +1,7 @@
 export * from './auth.js'
 export * from './common.js'
+export * from './documents.js'
 export * from './health.js'
 export * from './me.js'
+export * from './reminders.js'
 export * from './spaces.js'

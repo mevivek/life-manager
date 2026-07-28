@@ -73,6 +73,51 @@ export function authAs(fixture: { sessionCookie: string }): { headers: { cookie:
   return { headers: { cookie: fixture.sessionCookie } }
 }
 
+/**
+ * Creates a document through the **real endpoint**, for the same reason `seedUserWithSpace` uses
+ * the real signup: a fixture that inserted rows directly would keep passing after the service's
+ * business rules broke.
+ *
+ * Returns the parsed response so a test can assert on ids without re-fetching.
+ */
+export async function createDocument(
+  app: FastifyInstance,
+  user: UserFixture,
+  overrides: Record<string, unknown> = {},
+): Promise<{ id: string; body: Record<string, unknown> }> {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/documents',
+    ...authAs(user),
+    payload: { title: 'Passport', ...overrides },
+  })
+
+  if (response.statusCode !== 201) {
+    throw new Error(`createDocument: expected 201, got ${response.statusCode}: ${response.body}`)
+  }
+
+  const body = response.json<Record<string, unknown>>()
+  const id = body.id
+  if (typeof id !== 'string') throw new Error(`createDocument: no id in ${response.body}`)
+
+  return { id, body }
+}
+
+/**
+ * Two users in two separate spaces — the fixture every cross-space test needs.
+ *
+ * conventions/testing.md §2: "a test with a single user cannot catch a missing space filter." This
+ * exists so that writing the mandatory cross-space 404 test is a one-liner and nobody skips it for
+ * being tedious.
+ */
+export async function seedTwoUsers(
+  app: FastifyInstance,
+): Promise<{ alice: UserFixture; bob: UserFixture }> {
+  const alice = await seedUserWithSpace(app, { name: 'Alice' })
+  const bob = await seedUserWithSpace(app, { name: 'Bob' })
+  return { alice, bob }
+}
+
 function cookieHeader(response: { cookies: { name: string; value: string }[] }): string {
   return response.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ')
 }
