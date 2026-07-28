@@ -11,6 +11,13 @@ assumed and correct it.
 Only questions where **different answers lead to different work** belong here. Routine
 judgment calls get made and noted, not queued.
 
+> **A "Leaning" is not a decision.** Every open question below records one, with reasoning, so the
+> human has something concrete to react to rather than a blank page. It is a *proposal*
+> ([ADR-0017](../decisions/0017-product-brain.md); [CLAUDE.md](../../CLAUDE.md) invariant 12).
+> **Do not build on a leaning and do not move a question to §2 without an explicit answer.** If a
+> question blocks the work in front of you, say it is blocking and pick up something else — a
+> wrong schema built on an assumed answer costs far more than a delay.
+
 Answered questions move to §2 and stay forever — they are the record of *why*.
 
 ---
@@ -18,6 +25,8 @@ Answered questions move to §2 and stay forever — they are the record of *why*
 ## 1. Open
 
 ### Q1 — Should documents without an expiry date be nagged about at all?
+
+> **BLOCKING M1.** Decides the shape of the `reminders` table beyond `due_on`.
 
 **Why it matters:** Reminders are the core value (principle 1), but most documents — a
 deed, a birth certificate, an old contract — never expire. If the reminder system only
@@ -34,6 +43,8 @@ per document.
 **Blocks:** the shape of the `reminders` table beyond `due_on`. Answer before M1 finishes.
 
 ### Q2 — How much metadata is required at capture time?
+
+> **BLOCKING M1.** Decides the create form and its Zod schema.
 
 **Why it matters:** Direct tension between principle 2 (effortless capture) and the app
 being useful — a document with no type and no expiry is a file in a folder, which is the

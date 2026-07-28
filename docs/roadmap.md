@@ -25,8 +25,42 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 - **A Pages build with `VITE_API_URL` unset ships a broken-but-healthy-looking site** (debt D23).
   It happened once. Run the verify script after every deploy; status codes cannot detect it.
 
-**Next:** answer **Q1 and Q2** in [product/open-questions.md](product/open-questions.md); they
-block M1's schema and forms. Then M1.
+---
+
+## Next actions, in order — read this before starting anything
+
+A session that skips to "the first milestone that isn't done" will start M1 and get two things
+wrong. Do these first.
+
+### 1. Run the M0 review — **before** any M1 work
+
+All four lenses in [product/review.md](product/review.md), findings to the debt register. This is
+a **deliverable, not a nicety**, and it is listed here rather than only in the standing rules at
+the bottom because that is where it was being missed.
+
+Two reasons it earns its keep this time. M0 produced a lot of doc drift — a wrong
+`COOKIE_DOMAIN` in ADR-0019, a Postgres version wrong in three places, a
+`nextCursor`/`next_cursor` contradiction, and CI reported green for weeks while never running
+once. Those were all found incidentally, which implies others were not. And **lens 4 is
+answerable for the first time**: the app is deployed, so "is it actually being used?" has a real
+answer.
+
+Prefer a session that did not build M0 — [review.md](product/review.md) §5 explains why
+reviewing your own work in the same session shows you intent rather than what is there.
+
+### 2. Get **Q1 and Q2** answered by the maintainer
+
+[product/open-questions.md](product/open-questions.md). They decide the shape of the `reminders`
+table and the create form.
+
+**Do not proceed on the recorded leaning.** Each question carries a "Leaning" with supporting
+reasoning, and it is easy to mistake for a decision. It is not one
+([ADR-0017](decisions/0017-product-brain.md): the AI proposes, the human decides;
+[CLAUDE.md](../CLAUDE.md) invariant 12). If they are still unanswered, say so and work on
+something else — M1 has plenty that is not blocked, and building the blocked parts on an
+assumed answer is how a wrong schema gets written and then migrated.
+
+### 3. Then M1
 
 
 
