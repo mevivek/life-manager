@@ -37,12 +37,24 @@ file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `register
 **scheduled jobs are deliberately off in development**), full-text search, `Idempotency-Key`
 handling, password reset, and Playwright. Several of those look like missing conventions rather
 than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D9–D20 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D9–D26 with triggers, so check there
 before "fixing" one.
 
-**What blocks progress:** **Q1 and Q2** in
-[open-questions.md](docs/product/open-questions.md) block M1's schema and forms. Nothing else —
-the work is on `main`, deployed, and verified.
+## Start here — next actions, in order
+
+**Do not skip to "the first unfinished milestone".** That leads straight to M1 and gets two
+things wrong. Full detail in [roadmap.md](docs/roadmap.md) § Next actions.
+
+1. **Run the M0 review first** — all four lenses in
+   [product/review.md](docs/product/review.md), findings to the debt register. A deliverable, not
+   a nicety. M0 produced real doc drift (a wrong `COOKIE_DOMAIN`, a Postgres version wrong in
+   three places, CI green for weeks while never running) and all of it was found incidentally,
+   which implies more was missed. Best done by a session that did **not** build M0.
+2. **Get Q1 and Q2 answered by the maintainer** —
+   [open-questions.md](docs/product/open-questions.md). They decide the `reminders` table and the
+   create form. **Each records a "Leaning"; that is a proposal, not a decision** (invariant 12).
+   If unanswered, say so and work on something not blocked.
+3. **Then M1** — Documents.
 
 ---
 
@@ -59,7 +71,7 @@ the work is on `main`, deployed, and verified.
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D9–D17 are M0's known gaps, each with a trigger |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D26, each with a trigger. D24/D25 are traps, not gaps |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
