@@ -30,7 +30,9 @@ including the ones `localhost` structurally cannot perform.
 `deploy-api-on-push`, which tests, builds, deploys and health-checks. **GitHub Actions does not
 run on this repo at all** — `.github/workflows/ci.yml` looks authoritative and executes nothing
 (debt D24). `cloudbuild.deploy.yaml` is the real pipeline, and editing it requires pushing the new
-copy to the trigger (debt D25). See [README.md](README.md) § Deploying.
+copy to the trigger — which needs a delete-and-recreate, not an update (debt D25).
+**A doc-only commit deliberately deploys nothing**, so do not read a skipped build as a broken
+pipeline. See [README.md](README.md) § Deploying.
 
 What does **not** exist yet: any domain table (`documents` is [M1](docs/roadmap.md)), R2 or any
 file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `registerJobs` is empty and
