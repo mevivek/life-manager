@@ -348,13 +348,29 @@ build for it would train you to ignore red.
 A webhook trigger has no attached repository to read `cloudbuild.deploy.yaml` from, so the trigger
 stores a snapshot. **Editing that file changes nothing until you push the new copy to the trigger:**
 
+**`gcloud builds triggers update webhook` cannot do it.** It rejects `--inline-config` with a bare
+`INVALID_ARGUMENT` and has no `--substitutions` flag at all. The trigger must be deleted and
+recreated — the name is preserved, so the GitHub webhook URL keeps working:
+
 ```bash
-gcloud builds triggers update webhook deploy-api-on-push \
-  --region=global --inline-config=cloudbuild.deploy.yaml --project=life-manager-01
+P=life-manager-01
+gcloud builds triggers delete deploy-api-on-push --region=global --project=$P --quiet
+gcloud builds triggers create webhook --name=deploy-api-on-push --project=$P --region=global \
+  --inline-config=cloudbuild.deploy.yaml \
+  --secret="projects/$P/secrets/github-webhook-secret/versions/1" \
+  --service-account="projects/$P/serviceAccounts/life-manager-deploy@$P.iam.gserviceaccount.com" \
+  --substitutions='_SHA=$(body.after),_REF=$(body.ref)'
 ```
 
-Forget this and you will edit the pipeline, push, and watch the old pipeline run — with no error
-to tell you why.
+Then confirm it took, because a silent no-op is the failure mode:
+
+```bash
+gcloud builds triggers describe deploy-api-on-push --region=global --project=$P \
+  --format="value(build.steps[].id)"
+```
+
+Forget this and you will edit the pipeline, push, and watch the old pipeline run — with nothing to
+tell you why.
 
 ##### Identity
 
