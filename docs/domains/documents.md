@@ -1,6 +1,6 @@
 # Domain: Documents
 
-- **Status:** planned
+- **Status:** **built** (M1, 2026-07-28). M2 additions still planned — see §3 `document_text`.
 - **Milestone:** M1 (core + reminders), M2 (OCR, previews) — [roadmap.md](../roadmap.md)
 - **Sensitivity tier:** **0 — server-readable.** Deliberate; see
   [ADR-0009](../decisions/0009-sensitivity-tiers.md)
@@ -110,7 +110,7 @@ A specific uploaded file. Versioned — renewing a passport must not destroy the
 | `storage_key` | `text not null` | **Chosen by the API**: `spaces/{spaceId}/documents/{documentId}/{fileId}` |
 | `mime` | `text not null` | Validated against an allowlist |
 | `size_bytes` | `bigint not null` | |
-| `sha256` | `text not null` | Integrity, and duplicate detection |
+| `sha256` | `text null` | Integrity, and duplicate detection. **Nullable** — the client supplies it optionally; see §9(5) |
 | `is_primary` | `boolean not null default false` | The version shown by default |
 | `uploaded_at` | `timestamptz null` | `null` until the client confirms the upload |
 
@@ -194,21 +194,40 @@ GET    /api/v1/documents/:id                 includes files[] and reminders[]
 PATCH  /api/v1/documents/:id
 DELETE /api/v1/documents/:id                 soft delete
 
+GET    /api/v1/documents/issuers             distinct issuers, for the §9(1) autocomplete
+
 POST   /api/v1/documents/:id/files:presign-upload
-       → { fileId, uploadUrl, storageKey, expiresAt }
-POST   /api/v1/documents/:id/files:confirm    → records the row, enqueues OCR
-POST   /api/v1/documents/:id/files/:fileId:presign-download
+       → { file_id, upload_url, storage_key, version, expires_at }
+POST   /api/v1/documents/:id/files:confirm            { file_id, sha256? }
+POST   /api/v1/documents/:id/files:presign-download   { file_id }
 DELETE /api/v1/documents/:id/files/:fileId
 PATCH  /api/v1/documents/:id/files/:fileId    is_primary only
 
 GET    /api/v1/documents/:id/reminders
 POST   /api/v1/documents/:id/reminders        { due_on, lead_days, channel }
 DELETE /api/v1/reminders/:id
-POST   /api/v1/reminders/:id:dismiss
+POST   /api/v1/reminders/:id/dismiss
+
+GET    /api/v1/push/public-key                the VAPID key, or null when unconfigured
+POST   /api/v1/push/subscriptions             register this browser for reminders
 ```
 
-Notable: `413` when the declared `sizeBytes` exceeds the limit — checked at presign time,
-before any bytes move. `409` on a `:confirm` for a file already confirmed.
+**Two of these moved from what this section originally specified, for a measured reason.**
+`:presign-download` took the file in the path (`/files/:fileId:presign-download`) and `:dismiss`
+was a suffix on `/reminders/:id`. A `:verb` suffix immediately after a **path parameter** breaks:
+Fastify routes it correctly, but `@fastify/swagger` emits `/files/{fileId}:{presign}-download`, and
+[conventions/api.md](../conventions/api.md) calls the OpenAPI document the contract. So the file is
+now named in the body — mirroring `:confirm`, which already did — and `dismiss` is a plain path
+segment. §2 of api.md records the rule; a `:verb` after a *static* segment is fine and unchanged.
+
+Notable: **`400`**, not 413, when the declared `size_bytes` exceeds the limit — it is a Zod
+rejection at presign time, before any bytes move, and §3's table of statuses reserves 413 for a
+body that is itself too large. `409` on a `:confirm` for a file already confirmed. `503` from the
+file endpoints when R2 is unconfigured, which is a normal state rather than an error.
+
+**The size and mime limits are enforced by storage too, not only by us.** Both are signed into the
+presigned URL, so a client that ignores the declared values gets `SignatureDoesNotMatch` from R2.
+Verified against a real S3 implementation.
 
 ## 6. Background jobs
 
@@ -264,23 +283,47 @@ Domain-internal. Product-level questions live in
 4. **Whether `reminders` should carry a nullable `document_id` FK** alongside the
    polymorphic key, purely to get referential integrity for the common case. Rejected for
    now as inconsistent, which is why rule 10's sweep job exists — but the trade is real.
-5. **Duplicate detection.** `sha256` is stored, but nothing acts on it yet. Warn on
-   re-uploading identical bytes, or allow it silently?
+5. **Duplicate detection.** `sha256` is stored **when the client sends it**, and nothing acts on
+   it yet. Warn on re-uploading identical bytes, or allow it silently?
+
+   Built as optional rather than required, which §3's `not null` originally implied: the browser
+   would have to read the whole file to hash it before uploading, doubling the work on a phone, for
+   a feature nobody has asked for. The column is nullable and the API records what it is given.
 
 ## 10. Files
 
-All `(planned)` — the domain is not built.
+Real paths, as built.
 
 ```
 apps/api/src/domains/documents/
-  documents.routes.ts        (planned)
-  documents.service.ts       (planned)
-  documents.repository.ts    (planned)
-  documents.schema.ts        (planned)  Drizzle tables
-  documents.test.ts          (planned)
-apps/api/src/domains/reminders/          (planned)  generic, not Documents-owned
-apps/api/src/jobs/reminders.ts           (planned)
-apps/api/src/jobs/documents-extract.ts   (planned)  M2
-packages/shared/src/documents.ts         (planned)  Zod schemas
-apps/web/src/features/documents/         (planned)
+  documents.routes.ts              HTTP. Read the `::` block comment before adding a route
+  documents.service.ts             metadata rules 1, 2, 6, 7, 8, 9
+  documents.files.service.ts       the upload state machine — rules 3, 4, 5, 10, 11
+  documents.repository.ts          the only SQL. See the note on `fileCountSql`
+  documents.schema.ts              Drizzle tables, re-exported from db/schema/index.ts
+  documents.test.ts                metadata, list, search, pagination, cross-space
+  documents.files.test.ts          the file lifecycle
+apps/api/src/domains/reminders/
+  reminders.repository.ts          reminders + push_subscriptions
+  reminders.service.ts
+  reminders.routes.ts              the endpoints NOT nested under a document
+  reminders.test.ts                endpoints and the job handlers, called directly
+apps/api/src/jobs/reminders.ts     scan · deliver · sweep
+apps/api/src/lib/storage.ts        R2 presigning; the ONLY place an object key is built
+apps/api/src/lib/push.ts           Web Push (webpush-webcrypto, MIT — not web-push, MPL-2.0)
+apps/api/src/lib/cursor.ts         keyset pagination, shared across domains
+apps/api/src/lib/idempotency.*     Idempotency-Key, closing debt D9
+packages/shared/src/documents.ts   Zod contract, incl. custom_attrs per doc_type
+packages/shared/src/reminders.ts   the generic half
+apps/web/src/features/documents/   list, detail, form, files, reminders, expiry badge
+apps/web/src/routes/_authed/documents.*.tsx
+apps/web/public/push-sw.js         without this, a delivered notification shows nothing
+
+apps/api/src/jobs/documents-extract.ts   (planned)  M2 — OCR
 ```
+
+**Two files this doc did not originally anticipate.** `documents.files.service.ts` exists because
+the upload lifecycle is a separate state machine and one 600-line service would have buried the
+metadata rules. `apps/web/public/push-sw.js` exists because `userVisibleOnly: true` obliges every
+push to show a notification, so a worker with no `push` listener receives the message and displays
+nothing — the reminder feature ends in that file, not in the API.

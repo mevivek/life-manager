@@ -19,12 +19,13 @@ Statuses: `raw` → `shaped` → `ready` → `roadmap` → `built`, or `rejected
 Already committed. Detail lives in [roadmap.md](../roadmap.md); listed here only so the
 backlog is a complete picture.
 
-| Idea | Milestone | Domains |
-|---|---|---|
-| Documents CRUD + file upload/versioning | M1 | Documents |
-| **Expiry reminders with push delivery** | M1 | Documents |
-| Full-text search over metadata | M1 | Documents |
-| OCR / search inside documents | M2 | Documents |
+| Idea | Milestone | Domains | Status |
+|---|---|---|---|
+| Documents CRUD + file upload/versioning | M1 | Documents | **built** 2026-07-28 |
+| **Expiry reminders with push delivery** | M1 | Documents | **built** 2026-07-28 — delivery unproven until VAPID keys exist and a real phone subscribes |
+| Full-text search over metadata | M1 | Documents | **built** 2026-07-28 — title/issuer/notes/tags, weighted |
+| Expiring-soon dashboard as the home screen | M1 | Documents | **built** 2026-07-28 (shaped below; brought forward into M1 as §7 predicted) |
+| OCR / search inside documents | M2 | Documents | roadmap |
 | Offline read cache | M2 | — |
 | Family sharing (invites, roles, space switcher) | M3 | All |
 | Assets domain | M4 | Assets |
@@ -61,6 +62,16 @@ backlog is a complete picture.
   this exists to remove.
 
 ### Expiring-soon dashboard as the app's home screen
+
+> **Built in M1, 2026-07-28** — `apps/web/src/routes/_authed/home.tsx`. Shipped as expiring-in-30,
+> expiring-in-90, recently added, and missing-a-file, exactly as the approach below describes. It is
+> not yet the *default* route (`/` still redirects to `/home`, which is this page), and the success
+> criterion — "opened and closed with nothing to do, and that feels informative" — cannot be judged
+> until there is real data in it.
+>
+> The recorded risk was right: **empty-state design mattered.** Every panel needed a specific empty
+> message rather than a blank space, and one panel had to learn to hide itself entirely when the
+> feature behind it is unconfigured.
 
 - **Problem:** Opening the app to a list of everything you own answers no question. Opening
   it to *"three things need attention"* does.

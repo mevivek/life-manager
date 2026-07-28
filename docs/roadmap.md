@@ -4,7 +4,7 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M0 complete, deployed, and verified on the real domain.**
+**Current position: M1 built and verified locally. Not yet deployed, and not yet used for real.**
 
 Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
 Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
@@ -31,9 +31,8 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 
 ## Next actions, in order — read this before starting anything
 
-**The two things that used to block M1 are done.** The M0 review has been run, and Q1 and Q2 have
-been answered by the maintainer. **M1 is now the next action** — but read the three notes below
-first, because the review changed what M1 has to do.
+**M1 is built. It is not done.** Everything is green locally; nothing is deployed and nobody has used
+it. The next actions are §4 below — deployment and credentials — not M2, and not more code.
 
 ### 1. ✅ The M0 review — done 2026-07-28
 
@@ -59,9 +58,40 @@ Both **(a)**. Recorded with reasoning in
 - **Q2 → title only.** Everything else optional. **This is a constraint, not a permission:** M1 has
   to render, list and search half-empty documents gracefully rather than treating them as broken.
 
-### 3. Then M1 — now unblocked
+### 3. ✅ M1 built — 2026-07-28
 
+The Documents domain, its files, its reminders and the web app. 136 tests, zero skipped, against a
+real Postgres. Findings and what was actually verified are in
+[product/review.md](product/review.md) §6; new debt is **D32–D36**.
 
+**But M1 is not done, and the distinction matters.** The standing rule is that a milestone is done
+when it works *on your phone* — and M1's own "done when" is a real passport, a real licence and a
+real warranty in the system, with a real notification before one expires. None of that has happened.
+What is true today is that it works locally, including a genuine upload to a real S3 and a full
+browser pass at phone width.
+
+### 4. What M1 still needs — in order
+
+1. **Deploy it.** Push to `main` and let both halves build. Then run
+   `node scripts/verify-deployment.mjs`.
+2. **Provision R2** — four `R2_*` variables. Until then the file endpoints answer 503, which is a
+   deliberate, honest state but not a shippable one for a document archive.
+3. **Provision VAPID** — `node scripts/generate-vapid-keys.mjs`, three variables. Until then the
+   notification card hides itself and reminders have nowhere to go.
+4. **Rotate the Neon credential (D18).** Its trigger is "before the first real document is stored",
+   and step 5 is exactly that. Do not skip it.
+5. **Put your real documents in**, then leave it a week.
+6. **Switch `ENABLE_SCHEDULED_JOBS=true`** so the daily scan actually runs unattended — and note
+   that this fires **D8**: measure Neon compute hours that month.
+7. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
+   incomplete without it.
+
+### 5. Then M2
+
+Only after step 7. M2 (OCR, previews, offline read cache) is the *next milestone*, but starting it
+before M1 has a week of real use would repeat the mistake the working agreements name first: "one
+domain at a time — finish and actually use it before starting the next"
+([product/brain.md](product/brain.md) §5).
 
 ---
 
@@ -112,12 +142,15 @@ cross-subdomain session, and that the API origin is actually baked into the ship
 
 The first real domain. See [domains/documents.md](domains/documents.md) for the full spec.
 
-- `documents`, `document_files`, `reminders` tables
-- Full CRUD for documents; list with filters `?q=&type=&expiring_before=&tag=`
-- File upload/download via API-minted presigned R2 URLs; file versioning
-- Full-text search over title/issuer/notes/tags (`tsvector`)
-- **Reminders**: pg-boss daily scan + Web Push delivery
-- Web UI: document list, detail, create/edit, upload, expiring-soon view
+- [x] `documents`, `document_files`, `reminders` tables — plus `push_subscriptions` and
+      `idempotency_keys`, neither of which this list anticipated
+- [x] Full CRUD for documents; list with filters `?q=&type=&expiring_before=&tag=&has_file=`
+- [x] File upload/download via API-minted presigned R2 URLs; file versioning
+- [x] Full-text search over title/issuer/notes/tags (`tsvector`)
+- [x] **Reminders**: pg-boss scan + deliver + sweep, and Web Push delivery.
+      **The schedule is registered but switched off** (`ENABLE_SCHEDULED_JOBS`), so the scan has
+      never run unattended — see next actions
+- [x] Web UI: dashboard, document list, detail, create/edit, upload, expiring-soon
 
 **Reminders ship in M1, not later.** [prior-art.md](prior-art.md) §3 found an entire product
 category that does nothing but expiry tracking — storage without reminders is the commodity
@@ -135,6 +168,10 @@ triggers in [product/review.md](product/review.md) §3 before writing `GET /docu
 
 **Done when:** your real passport, driving licence, and a warranty are in the system, and
 your phone notifies you before one expires.
+
+> **Still not met.** Everything above is built and green, but the database holds test documents and
+> no notification has reached a real phone. The gap is deployment plus R2 and VAPID credentials,
+> not code — see § Next actions step 4.
 
 ## M2 — Documents, enrichment
 

@@ -11,8 +11,14 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 
 ## Status
 
-**[M0](docs/roadmap.md) done and verified on a real phone.** The monorepo, API, web app, database
-schema, auth and CI exist and work. `pnpm typecheck lint test build` are green and 40 tests pass.
+**[M1](docs/roadmap.md) — Documents — is BUILT but NOT DONE.** The domain, its files, its reminders
+and the web app all exist; `pnpm typecheck lint test build` are green and **136 tests pass with zero
+skipped** against a real Postgres. But nothing is deployed, R2 and VAPID are unconfigured, the
+database holds test documents, and no reminder has reached a real phone. M1's "done when" is a real
+passport and a real notification — see [roadmap.md](docs/roadmap.md) § Next actions §4 for the seven
+remaining steps, which are deployment and credentials rather than code.
+
+**[M0](docs/roadmap.md) done and verified on a real phone**, and reviewed 2026-07-28.
 
 **It has run on the real domain, not just `localhost`.** Verified 2026-07-27 over a Cloudflare
 Tunnel serving `app.mevivek.dev` and `api.mevivek.dev`: 21/21 public checks, including the
@@ -34,34 +40,37 @@ copy to the trigger — which needs a delete-and-recreate, not an update (debt D
 **A doc-only commit deliberately deploys nothing**, so do not read a skipped build as a broken
 pipeline. See [README.md](README.md) § Deploying.
 
-What does **not** exist yet: any domain table (`documents` is [M1](docs/roadmap.md)), R2 or any
-file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `registerJobs` is empty and
-**scheduled jobs are deliberately off in development**), full-text search, `Idempotency-Key`
-handling, password reset, and Playwright. Several of those look like missing conventions rather
-than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D9–D31 with triggers, so check there
+What M1 added, so you do not go looking for it: `documents`, `document_files`, `reminders`,
+`push_subscriptions`, `idempotency_keys`; full-text search; presigned R2 upload/download with
+versioning; Web Push; three pg-boss handlers; cursor pagination; `Idempotency-Key`.
+
+What still does **not** exist: OCR and previews (M2), offline read caching (M2), password reset,
+Playwright, and R2 object deletion. **`ENABLE_SCHEDULED_JOBS` is off**, so the reminder scan is
+registered and manually triggerable but has never run unattended. Several of these look like missing
+conventions rather than deferred work — they are in the
+[debt register](docs/product/review.md#3-debt-register) as D1–D36 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
 
-**M1 — Documents — is the next action, and it is unblocked.** Both prerequisites cleared
-2026-07-28: the M0 review is done, and Q1 and Q2 are answered. Full detail in
-[roadmap.md](docs/roadmap.md) § Next actions.
+**Do not start M2, and do not write more features.** M1's code is finished; what is missing is
+deployment and two sets of credentials. Full list in [roadmap.md](docs/roadmap.md) § Next actions §4.
+In order: deploy · provision R2 · provision VAPID · **rotate the Neon credential (D18)** · put real
+documents in · switch `ENABLE_SCHEDULED_JOBS=true` (this fires D8) · redo lens 4 of the M1 review.
 
-Three things the review changed, all of which affect M1 directly:
+Four things worth knowing before you touch anything:
 
-1. **Q1 → expiry-only reminders; Q2 → title-only capture** (both option (a), reasoning in
-   [open-questions.md](docs/product/open-questions.md) §2). So `reminders` needs nothing beyond
-   `due_on`, and **M1 must render half-empty documents gracefully** — "untyped" is a valid state,
-   not an error.
-2. **Four debts come due in M1, three on one endpoint** — D27 (strict querystrings; unknown
-   parameters are *not* currently rejected despite api.md §7), D10 (cursor shape unproven), D9
-   (`Idempotency-Key` unimplemented), D18 (rotate the exposed Neon credential before real data).
-   The table in [roadmap.md](docs/roadmap.md) M1 says what each requires.
-3. **Trust the invariants, verify the tests.** All twelve invariants were checked mechanically and
-   hold. But `pnpm test` **skips** the 17 database-backed tests without Docker or
-   `TEST_DATABASE_URL` — M0 reported "40 tests pass" from a machine where they never ran. Check the
-   skip count, every time.
+1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
+   Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
+   136/0 is the current green.
+2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
+   that were found by measurement and both fail silently in the too-permissive direction —
+   [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.
+3. **When you assert a count, assert a non-zero one.** `file_count` was 0 for all of M1 because
+   every test happened to expect 0 (debt D33). The browser found it; the suite could not.
+4. **Q1 → expiry-only reminders; Q2 → title-only capture.** Both are decisions, not defaults
+   ([open-questions.md](docs/product/open-questions.md) §2). Do not add a required field or a
+   review-date column without re-answering them.
 
 ---
 
@@ -70,6 +79,7 @@ Three things the review changed, all of which affect M1 directly:
 | Task | Read |
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
+| **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |
@@ -78,7 +88,7 @@ Three things the review changed, all of which affect M1 directly:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D31, each with a trigger. D24/D25 are traps, not gaps. D27 is a convention that looks enforced and isn't |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D36, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
@@ -136,9 +146,10 @@ Non-negotiable. Breaking one is a bug even if tests pass. Each links to its reas
 | Database | Postgres 18 on Neon | 18.4 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
 | ORM | Drizzle + drizzle-kit | 0.45 / 0.31 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
 | Auth | Better Auth, self-hosted in our Postgres | 1.6 | [0007](docs/decisions/0007-better-auth-self-hosted.md) |
-| Files | Cloudflare R2, private, presigned URLs | **not installed — M1** | [0008](docs/decisions/0008-object-storage-r2.md) |
-| Jobs | pg-boss on the same Postgres — no Redis | 12.26, zero handlers | [0012](docs/decisions/0012-pg-boss-background-jobs.md) |
-| Tests | Vitest (real Postgres) + MSW; Playwright **not installed** | vitest 4.1 · msw 2.15 | [0016](docs/decisions/0016-testing-and-tooling.md) · [0018](docs/decisions/0018-testcontainers-for-api-tests.md) |
+| Files | Cloudflare R2, private, presigned URLs | `@aws-sdk/client-s3` 3.1096 · **bucket not provisioned** | [0008](docs/decisions/0008-object-storage-r2.md) |
+| Jobs | pg-boss on the same Postgres — no Redis | 12.26 · 3 handlers · **schedules OFF** | [0012](docs/decisions/0012-pg-boss-background-jobs.md) |
+| Tests | Vitest (real Postgres) + MSW; Playwright **still not installed** (D35) | vitest 4.1 · msw 2.15 | [0016](docs/decisions/0016-testing-and-tooling.md) · [0018](docs/decisions/0018-testcontainers-for-api-tests.md) |
+| Web Push | `webpush-webcrypto` — **not `web-push`, which is MPL-2.0** | 1.0.5 (MIT, zero deps) | — |
 | Lint/format | Biome | 2.5 | [0016](docs/decisions/0016-testing-and-tooling.md) |
 | Hosting | Cloudflare Pages · **Cloud Run** · Neon · R2 | **deployed** 2026-07-27; R2 not yet used | [0021](docs/decisions/0021-cloud-run-for-the-api.md) · [0019](docs/decisions/0019-same-site-subdomain-deployment.md) |
 
@@ -179,6 +190,11 @@ docs/              See docs/README.md
 **Two files are worth reading before touching anything space-scoped:**
 `apps/api/src/db/scoped.ts` (the only place the tenant filter is written) and
 `apps/api/src/db/schema/scoped-columns.ts` (the columns and index every domain table gets).
+
+**Domain tables live in their domain folder**, not in `db/schema/` — `documents.schema.ts` sits
+beside the repository that queries it, per [add-a-domain.md](docs/agent-playbooks/add-a-domain.md) §3.
+`db/schema/index.ts` is the single barrel `drizzle.config.ts` and `db/client.ts` read, so **a table
+not re-exported there does not exist** as far as migrations are concerned.
 
 ---
 

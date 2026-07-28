@@ -59,8 +59,20 @@ cannot catch a missing space filter, which is exactly the bug that matters.
 - Validation boundaries: the value just outside what Zod accepts
 - Soft delete: deleted records disappear from lists and reads
 - Anything that has broken before — a regression test is the cheapest doc there is
+- **A non-zero count, whenever you assert a count at all** — and assert that it *changes*
 - **All crypto, when the vault is built** — key derivation, wrap/unwrap round-trips,
   recovery-code unlock, and the negative cases (wrong passphrase fails cleanly)
+
+> ### Assert the interesting value, not the empty one
+>
+> M1 shipped a `file_count` that was **always 0**, and 136 tests passed. Every assertion on that
+> field happened to expect zero — a freshly created document, an unconfirmed upload — because those
+> are the easy fixtures to write. A query that returned a constant zero satisfied all of them, and
+> the bug was found by looking at the screen, not by the suite.
+>
+> The general shape: **a test that only ever asserts the default value cannot distinguish "correct"
+> from "never computed".** If a field can be 0, empty, `null`, or `false`, at least one test must
+> drive it to something else and back. Debt D33.
 
 **Don't bother:**
 
@@ -69,6 +81,12 @@ cannot catch a missing space filter, which is exactly the bug that matters.
 - Getters, trivial mappers, pure re-exports
 - Snapshot tests of rendered markup — they break on cosmetic changes and get regenerated
   without being read, which makes them worse than nothing
+
+**Also, before calling a milestone built: run the flow in a browser.** Two of M1's real bugs were
+invisible to the suite and immediately obvious on screen — a count that read "no file" beside a file,
+and an empty bordered panel where an unconfigured feature should have rendered nothing. Neither is
+the kind of thing an assertion is naturally written for. Debt D35 tracks automating this; until then
+it is a manual step, and skipping it means shipping what M1 nearly shipped.
 
 ## 4. Structure
 

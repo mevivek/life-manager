@@ -45,6 +45,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0019](0019-same-site-subdomain-deployment.md) | One domain, two subdomains | accepted, **amended** | `app.` + `api.mevivek.dev` are same-site, so `SameSite=Lax` survives two hosting providers |
 | [0020](0020-google-oauth-alongside-password.md) | Google sign-in | accepted | Google OAuth **alongside** email+password, with google as a trusted linking provider |
 | [0021](0021-cloud-run-for-the-api.md) | Cloud Run for the API | accepted | Supersedes 0014's Fly choice; --min-instances=0 is what keeps it free |
+| [0022](0022-web-push-library.md) | Web Push library | accepted | `webpush-webcrypto` (MIT), because `web-push` is MPL-2.0 and hand-rolling RFC 8291 is forbidden |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -81,6 +82,9 @@ first
 
 **Deciding what to build, reviewing it, changing the plan**
 0017 project brain · 0015 documentation structure
+
+**Notifications and background work**
+0022 Web Push library · 0012 pg-boss
 
 ---
 

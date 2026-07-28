@@ -26,7 +26,7 @@ Everything derives from here
 ([ADR-0004](../decisions/0004-zod-single-contract-source.md)).
 
 ```ts
-export const listDocumentsQuerySchema = z.object({
+export const listDocumentsQuerySchema = z.strictObject({   // strictObject, ALWAYS — see below
   q:      z.string().min(1).max(200).optional(),
   type:   z.array(documentTypeSchema).optional(),
   limit:  z.number().int().min(1).max(200).default(50),
@@ -47,6 +47,10 @@ export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>
 - [ ] Types via `z.infer`. Never hand-write a type that mirrors a schema.
 - [ ] Reuse shared primitives from `packages/shared/src/common.ts` (cursor, timestamps, id)
       rather than redefining them.
+- [ ] **Query schemas are `z.strictObject`, never `z.object`.** api.md §7 requires unknown query
+      parameters to be *rejected*; a plain object strips them and answers 200, so a typo'd filter
+      would silently return the unfiltered list. Spread `pageQueryShape`, do not `.extend()` a
+      schema — extending a non-strict object stays non-strict.
 
 ## 2. Repository — `<domain>.repository.ts`
 
@@ -92,6 +96,10 @@ app.get('/documents', {
 ```
 
 - [ ] Registered under `/api/v1/`
+- [ ] **A literal colon in the pattern is written `::`**, and never directly after a path
+      parameter — [conventions/api.md](../conventions/api.md) §2. Both halves of that rule fail
+      silently and permissively: an unescaped `:verb` matches any suffix, and an escaped one after a
+      parameter generates a wrong OpenAPI path
 - [ ] Requires a session — **protected is the default**; public is an explicit opt-out
 - [ ] Passes `req.actor`; does not construct an `ActorContext`
 - [ ] No SQL, no business logic — if the handler is more than a few lines, it's doing too
@@ -137,6 +145,8 @@ Against a real Postgres ([ADR-0016](../decisions/0016-testing-and-tooling.md)).
 | Response type hand-written | Derive with `z.infer` from the response schema |
 | Returning 403 for another space's record | Return **404** — 403 confirms the record exists |
 | Repository function without `actor` | Add it as the first parameter. No exceptions |
-| Offset pagination | Cursor only — offsets break when rows are inserted mid-scroll |
+| Offset pagination | Cursor only — offsets break when rows are inserted mid-scroll. Use `lib/cursor.ts`; do not re-derive the `id` tie-break or the nulls-last predicate |
+| A `:verb` route matching a garbage suffix | The pattern needs `::` — api.md §2 |
+| `z.object` on a querystring | `z.strictObject`, or unknown parameters are silently ignored |
 | Test with a single user | Cannot catch a missing space filter. Seed two users in two spaces |
 | Un-awaited promise for "background" work | Use a pg-boss job. Unhandled rejections vanish |

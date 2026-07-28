@@ -4,7 +4,18 @@ Schema rules for every table in life-manager. These exist so a future session ca
 table without re-deriving the ownership, timestamp, and deletion patterns — and, more
 importantly, so it cannot accidentally create a table that leaks across spaces.
 
-Defined with Drizzle in `apps/api/src/db/schema/`, one file per domain.
+Defined with Drizzle. **Foundation tables** (auth, spaces, and the cross-domain
+`idempotency_keys`) live in `apps/api/src/db/schema/`. **Domain tables live in their domain
+folder** — `apps/api/src/domains/documents/documents.schema.ts` — beside the repository that queries
+them, per [conventions/code.md](code.md) §3 and
+[agent-playbooks/add-a-domain.md](../agent-playbooks/add-a-domain.md) §3.
+
+*(This line said `db/schema/` for everything until M1, contradicting both of those. The domain-folder
+layout won because two more specific documents specified it and it keeps one domain in one place.)*
+
+Either way, **`db/schema/index.ts` is the single barrel** that `drizzle.config.ts` and
+`db/client.ts` read: a table not re-exported from it does not exist as far as migrations or the query
+builder are concerned.
 
 ---
 
@@ -105,6 +116,21 @@ create index on <table> using gin (search_vector);
 
 Generated, not trigger-maintained — Postgres keeps it correct with no application code to
 forget. Weighting matters: a title match should outrank a note match.
+
+> **Every expression in a generated column must be IMMUTABLE, and that set is narrower than it
+> looks.** Learned at M1:
+>
+> - `to_tsvector('english', …)` — the **two**-argument form is immutable. The one-argument form
+>   reads `default_text_search_config` and is only STABLE.
+> - **`array_to_string(tags, ' ')` is STABLE and will not compile.** Postgres rejects the whole
+>   table with `generation expression is not immutable`. Use **`array_to_tsvector(tags)`**, which is
+>   immutable.
+> - `array_to_tsvector` emits lexemes **verbatim** — no stemming, no case folding, no positions. So
+>   tags must already be lowercase to be findable (`tagSchema` guarantees it), and `setweight` is a
+>   no-op on them because weights attach to positions.
+>
+> When in doubt, ask the database rather than guessing:
+> `select proname, provolatile from pg_proc where proname = '…'` — `i` is immutable, `s` stable.
 
 Search is still scoped by `space_id`. Full-text search is not an authorization bypass.
 

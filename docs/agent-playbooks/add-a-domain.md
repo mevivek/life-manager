@@ -57,10 +57,24 @@ domain is the vault. Anything else needs an ADR
 `apps/api/src/domains/<domain>/<domain>.schema.ts`. Follow
 [change-the-schema.md](change-the-schema.md) §2–4.
 
-- [ ] Universal columns on every table, **including `space_id`**
+- [ ] Universal columns on every table, **including `space_id`** — use `spaceScoped()`,
+      `timestamps()`, `softDelete()` rather than writing them out
+- [ ] **Re-export the tables from `db/schema/index.ts`.** That barrel is the only thing
+      `drizzle.config.ts` and `db/client.ts` read, so a table missing from it does not exist as far
+      as migrations or the query builder are concerned — and the failure is a silently absent table,
+      not an error
 - [ ] Indexes: `(space_id) where deleted_at is null`, plus the dominant sort
 - [ ] Generated `tsvector` if the domain is searchable
+- [ ] **Add the new tables to `truncateAll()` in `src/test/db.ts`.** Forgetting this shows up as one
+      suite polluting the next, which looks like flakiness rather than a missing line
 - [ ] Migration generated; seed script extended
+
+> **Generated columns must be IMMUTABLE, which is narrower than it looks.** M1 lost time to this:
+> `array_to_string(tags, ' ')` is **STABLE**, and Postgres rejects the entire table with
+> `generation expression is not immutable`. Use `array_to_tsvector` for a text array, and always the
+> two-argument `to_tsvector('english', …)` — the one-argument form reads
+> `default_text_search_config` and is only STABLE too. Check `provolatile` in `pg_proc` if unsure
+> rather than guessing.
 
 ## 4. Repository
 
@@ -69,6 +83,14 @@ domain is the vault. Anything else needs an ADR
 - [ ] Every function takes `actor: ActorContext` first
 - [ ] Every query uses the shared `scoped(actor, table)` helper
 - [ ] No business logic, no transactions of its own
+- [ ] A function that genuinely cannot take an actor (a cron job, a maintenance sweep) is named
+      `…ForMaintenance` and carries a comment saying why — see `reminders.repository.ts`
+
+> **Do not hand-write a correlated subquery in a select-field position.** Drizzle renders columns
+> *unqualified* there, so `where ${child.parentId} = ${parent.id}` becomes
+> `where "parent_id" = "id"` and silently resolves `"id"` to the child's own column. Use
+> `db.$count(table, where)`, which qualifies by construction. This cost M1 a bug that 136 tests
+> missed — debt D33.
 
 ## 5. Service
 
@@ -101,10 +123,16 @@ If domain doc §6 lists any: `apps/api/src/jobs/<domain>-*.ts`, registered with 
 Colocated, against a real Postgres.
 
 - [ ] **A cross-space 404 test for every data endpoint.** Non-negotiable
-      ([conventions/testing.md](../conventions/testing.md) §2)
-- [ ] One test per business rule in §4
+      ([conventions/testing.md](../conventions/testing.md) §2). `seedTwoUsers(app)` exists so this is
+      a one-liner and nobody skips it for being tedious
+- [ ] One test per business rule in §4, each naming the rule number
 - [ ] Factory helpers (`seedUserWithSpace`, `create<Entity>`) added to the shared fixtures
 - [ ] Job handlers tested directly, including the failure path
+- [ ] **Assert a non-zero count, and assert it changes.** M1's `file_count` was broken for the whole
+      milestone because every assertion happened to expect `0` — a new record, an unconfirmed
+      upload — so a constant-zero query satisfied all of them (debt D33)
+- [ ] **Run the flow in a browser before calling the domain built.** Two of M1's real bugs were
+      invisible to the suite and obvious on screen
 
 ## 9. Web client
 
@@ -119,7 +147,8 @@ Colocated, against a real Postgres.
 
 ## 10. Close out
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass
+- [ ] `pnpm typecheck && pnpm lint && pnpm test` pass — **and check the skip count**, since the
+      database suites skip silently without Docker or `TEST_DATABASE_URL`
 - [ ] Endpoints correct in `/api/v1/openapi.json`
 - [ ] Domain doc §10 **Files** lists real paths, `(planned)` markers removed
 - [ ] Domain doc status → `built`

@@ -3,12 +3,16 @@
 A personal life-management app — one coherent place for the documents, possessions, money,
 people, and secrets that make up a life.
 
-**Status: M0 scaffold complete, deployed, and verified on a real phone.** The monorepo, API, web
-app, database schema and auth all work — and they work on the real domain, not just `localhost`:
-`app.mevivek.dev` on Cloudflare Pages, `api.mevivek.dev` on Cloud Run, Postgres on Neon. **Nothing
-runs on the maintainer's laptop.** Both halves deploy on push; re-verify any deploy with
-`node scripts/verify-deployment.mjs`. See [`docs/roadmap.md`](docs/roadmap.md) for what's next
-(M1 — Documents) and § Deploying below for how the pipeline actually works.
+**Status: M1 — Documents — is built, but not yet deployed or used for real.** The domain, its files,
+its expiry reminders and the web app all work locally: 136 tests pass against a real Postgres, and
+the upload path has been verified end to end against a real S3. What has *not* happened is the part
+that counts — nothing is deployed, the storage bucket and push keys are unprovisioned, and no
+reminder has reached a phone. [`docs/roadmap.md`](docs/roadmap.md) § Next actions lists the seven
+remaining steps; they are deployment and credentials, not code.
+
+**M0 is deployed and verified on a real phone.** `app.mevivek.dev` on Cloudflare Pages,
+`api.mevivek.dev` on Cloud Run, Postgres on Neon. **Nothing runs on the maintainer's laptop.** Both
+halves deploy on push; re-verify any deploy with `node scripts/verify-deployment.mjs`.
 
 One caveat that matters more than it looks: **CI is not GitHub Actions.** `.github/workflows/ci.yml`
 is committed, looks authoritative, and never executes — see § Deploying.
@@ -53,7 +57,7 @@ Built one domain at a time, starting with Documents.
 ## Stack
 
 TypeScript throughout. Vite + React PWA, Fastify API, Postgres on Neon with Drizzle, Better
-Auth, Cloudflare R2 for files, pg-boss for background jobs.
+Auth, Cloudflare R2 for files, pg-boss for background jobs, Web Push for reminders.
 
 Rationale for each choice — and the alternatives rejected — is in
 [`docs/decisions/`](docs/decisions/index.md).
@@ -125,6 +129,31 @@ everything is same-origin locally and cookies need no special handling.
 | `pnpm --filter api db:migrate` | Apply committed migrations |
 | `pnpm --filter api db:seed` | Idempotent; repairs any user missing a personal space |
 | `pnpm --filter api auth:generate` | Regenerate Better Auth's tables — read the header comment in `src/db/schema/auth.ts` first |
+| `node scripts/generate-vapid-keys.mjs` | Generate a Web Push key pair. Use this, not another VAPID tool — see the script's header |
+
+### Optional features: files and notifications
+
+Documents works without either. Both are **all-or-nothing groups** in `apps/api/.env`, and with
+neither set the app is fully usable — file endpoints answer `503` and the notification card hides
+itself, rather than half-working.
+
+| Feature | Variables | Without it |
+|---|---|---|
+| **Files** (ADR-0008) | `R2_ACCOUNT_ID` `R2_ACCESS_KEY_ID` `R2_SECRET_ACCESS_KEY` `R2_BUCKET` | Upload and download return `503` |
+| **Notifications** | `VAPID_PUBLIC_KEY` `VAPID_PRIVATE_KEY` `VAPID_SUBJECT` | Reminders are stored and visible in the app, but nothing is pushed |
+
+`R2_ENDPOINT` points the S3 client at any S3-compatible server instead of R2 — its purpose is
+verifying the upload path end to end against a local MinIO, which is the one part of ADR-0008's flow
+that unit tests structurally cannot reach (presigning is offline, so fake credentials never fail).
+Leave it unset in production.
+
+**Background jobs are off by default.** `ENABLE_SCHEDULED_JOBS` is unset, so the reminder scan is
+registered but never fires on its own — a schedule means something must always be running, which is
+what keeps Neon's compute awake (ADR-0012, debt D8). Trigger one by hand instead:
+
+```js
+await getBoss().send('reminders.scan', {})
+```
 
 ### Running the database-backed tests
 

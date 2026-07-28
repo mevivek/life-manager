@@ -36,8 +36,33 @@ unmistakably distinct from an `:id` segment:
 
 ```
 POST /api/v1/documents/:id/files:presign-upload
-POST /api/v1/documents/:id/files/:fileId:presign-download
+POST /api/v1/documents/:id/files:confirm
 ```
+
+> ### Two rules for `:verb`, both learned the hard way at M1
+>
+> **1. A literal colon in a Fastify route pattern must be written `::`.**
+>
+> Fastify treats `:` as the start of a path parameter, so registering
+> `'/documents/:id/files:presign-upload'` does not do what it looks like — it registers `files`
+> plus a parameter named `presign-upload`. Measured consequences: `POST /documents/x/filesGARBAGE`
+> **matched**, and on a two-parameter route `request.params.fileId` came back `undefined`. Write
+> `'/documents/:id/files::presign-upload'`. The URL clients call is unchanged; only the
+> registration string is escaped.
+>
+> **2. A `:verb` may only follow a STATIC segment, never a parameter.**
+>
+> `@fastify/swagger` mistranslates the escape when it sits directly after a parameter:
+> `'/files/:fileId::presign-download'` routes correctly but generates the OpenAPI path
+> `/files/{fileId}:{presign}-download`. §3 of this file calls the OpenAPI document the contract, so
+> a wrong path there is a wrong contract.
+>
+> When the action targets a specific sub-resource, put its id **in the body** — as
+> `:presign-download` and `:confirm` both do — or use a plain path segment, as
+> `POST /reminders/:id/dismiss` does. Do not write a colon after a parameter.
+>
+> `documents.test.ts` asserts both the 404 and the generated OpenAPI paths, because both failures
+> are silent and in the too-permissive direction.
 
 `PATCH`, not `PUT` — clients send only what changed, which matters on mobile connections
 and avoids lost updates from stale full-object writes.
@@ -68,10 +93,16 @@ Every error is `application/problem+json`. No bare strings, no `{ error: "..." }
 | 422 | Well-formed but violates a business rule |
 | 429 | Rate limited |
 | 500 | Bug. Logged with full context; the response body says nothing useful |
+| 503 | The feature exists but is **not configured on this deployment** — see below |
 
 **404 vs 403 is deliberate.** A record in a space the actor doesn't belong to returns
 **404, not 403** — a 403 would confirm the record exists, which leaks across spaces. Reserve
 403 for "you are in this space but lack the role."
+
+**503 is for an unconfigured optional feature**, added at M1. R2 (file endpoints) and VAPID (push
+delivery) are deliberately optional so that `pnpm test` and a fresh clone need no external
+credential — which makes "unconfigured" a real, expected runtime state. Not a 500, because nothing
+is broken; not a 404, because the endpoint exists and works once configured.
 
 **Never leak internals.** No stack traces, no SQL, no upstream error text in a response.
 Log it; return a generic `detail`.
@@ -96,6 +127,19 @@ server-side — treat an incoming cursor as attacker-controlled.
 The wire name is `next_cursor`, not `nextCursor`: §8's snake_case rule applies to every
 field, including this one. The shape is defined once, in `packages/shared`'s `paginated()`.
 
+**Implemented at M1 in `apps/api/src/lib/cursor.ts`** (debt D10, now closed), shared across domains
+rather than written per endpoint — because the two parts everyone gets wrong belong in one place:
+
+- **The `id` tie-break is not optional.** Ordering by the sort column alone means two rows sharing a
+  value can straddle a page boundary, and one is skipped or repeated. Every query orders by
+  `(sortColumn, id)`.
+- **Nulls sort last, in both directions**, and the resume predicate has to agree with the `ORDER BY`
+  or the page silently starts in the wrong place. That is why `afterCursor()` does not take a
+  nulls-position option.
+
+A malformed cursor is a **422**, not a silent page one: a cursor the client did not get from us is a
+bug worth surfacing, and resetting to the first page looks like the list randomly jumping.
+
 ## 5. Idempotency
 
 Every `POST`, `PATCH`, and `DELETE` accepts an `Idempotency-Key` header. Mobile clients
@@ -104,6 +148,19 @@ retry on flaky connections; without this, a retried upload creates two documents
 - Key + endpoint + actor → cached response, replayed for 24 hours.
 - Same key with a *different* body → `409`.
 - Clients should send a UUID per logical operation, not per attempt.
+
+**Implemented at M1** (debt D9, now closed) as one plugin — `apps/api/src/lib/idempotency.plugin.ts`
+— not per route. Four details that are not obvious from the rules above:
+
+- **The header is optional.** A mutation without one behaves exactly as it did before. Requiring it
+  would break `curl` and every hand-written request for a guarantee only an unreliable client needs.
+- The key is claimed with a single `insert … on conflict do nothing`, so two concurrent requests are
+  decided by a unique index rather than by timing. The loser gets a `409` while the first is still
+  in flight.
+- The body hash is of the **parsed** body, so two retries differing only in key order are the same
+  operation rather than a conflict.
+- **A failed operation releases its claim**, so a real retry still works. Without that, one
+  transient 500 would leave a key answering 409 forever.
 
 ## 6. Authentication
 
@@ -132,13 +189,17 @@ Query parameters, `snake_case`, all validated by Zod:
 **rejected**, not ignored — a typo in a filter should fail loudly rather than silently
 return unfiltered data.
 
-> **Not yet enforced — debt D27.** No endpoint takes a querystring at M0, and the rejection does
-> **not** come for free: a plain Zod object *strips* unknown keys and answers 200. The rule needs
-> `.strict()` (or `z.strictObject`) on each querystring schema, plus a test. Fastify's `ajv`
-> options cannot do it — `fastify-type-provider-zod` replaces ajv for Zod-schema routes, and an
-> `ajv` setting added here in this rule's name was found to be inert during the M0 review.
-> **The first list endpoint is where this gets implemented** — the whole point is that
-> `?expiring_befor=2026-12-31` must not quietly return every document.
+> **Enforced per schema, with `z.strictObject`** — debt D27, closed at M1.
+>
+> The rejection does **not** come for free, which is why it went unimplemented through M0: a plain
+> `z.object` *strips* unknown keys and answers 200. Fastify's `ajv` options cannot do it either,
+> because `fastify-type-provider-zod` replaces ajv for Zod-schema routes — an `ajv` setting added in
+> this rule's name was found to be completely inert.
+>
+> So **every querystring schema must be `z.strictObject`**, and `pageQueryShape` in
+> `packages/shared` is exported as a raw shape rather than a schema precisely so that spreading it
+> cannot silently produce a non-strict object. `?expiring_befor=2026-12-31` is a 400 naming the
+> unrecognised key.
 
 ## 8. Request and response shape
 
