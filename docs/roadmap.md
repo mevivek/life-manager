@@ -4,7 +4,7 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M1 built and verified locally. Not yet deployed, and not yet used for real.**
+**Current position: M1 built and DEPLOYED. Not yet used for real, and files/notifications are unprovisioned.**
 
 Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
 Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
@@ -72,12 +72,17 @@ browser pass at phone width.
 
 ### 4. What M1 still needs — in order
 
-1. **Deploy it.** Push to `main` and let both halves build. Then run
-   `node scripts/verify-deployment.mjs`.
-2. **Provision R2** — four `R2_*` variables. Until then the file endpoints answer 503, which is a
-   deliberate, honest state but not a shippable one for a document archive.
-3. **Provision VAPID** — `node scripts/generate-vapid-keys.mjs`, three variables. Until then the
-   notification card hides itself and reminders have nowhere to go.
+1. ✅ **Deployed** — 2026-07-28, commit `09d0ace`. Both halves live: `api.mevivek.dev` reports that
+   version, `app.mevivek.dev` serves the documents routes with the API origin baked in. Verified on
+   production by writing a document, reading back its three automatic reminders, searching for it,
+   replaying an `Idempotency-Key`, and confirming a typo'd filter 400s. **This deploy needed
+   [ADR-0023](decisions/0023-migrate-on-boot.md) first** — nothing was applying migrations, and it
+   would have shipped an API reporting healthy with five missing tables.
+2. **Provision R2** — four `R2_*` variables. Confirmed answering `503` on production right now,
+   which is the deliberate honest state but not a shippable one for a document archive.
+3. **Provision VAPID** — `node scripts/generate-vapid-keys.mjs`, three variables. Confirmed
+   `public_key: null` on production, so the notification card hides itself and reminders have
+   nowhere to go.
 4. **Rotate the Neon credential (D18).** Its trigger is "before the first real document is stored",
    and step 5 is exactly that. Do not skip it.
 5. **Put your real documents in**, then leave it a week.
@@ -85,6 +90,17 @@ browser pass at phone width.
    that this fires **D8**: measure Neon compute hours that month.
 7. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
    incomplete without it.
+
+> **One piece of litter to clear.** Verifying the deploy created a throwaway account,
+> `deploy-check-1785260209@example.test`, and the session that made it had no database credential to
+> clean up with. Running `node scripts/verify-deployment.mjs` removes every
+> `deploy-check-%@example.test` user as its last step, so the next verification tidies it — or
+> delete it by hand.
+>
+> **Not verified: the deployed app in a browser.** The container's egress proxy relays `CONNECT`
+> only, and Chromium's requests are reset, so production was checked over HTTP rather than driven.
+> The UI itself was driven in a browser locally against the identical bundle. M1's "done when" is
+> your phone anyway — step 5 covers it.
 
 ### 5. Then M2
 

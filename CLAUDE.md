@@ -11,12 +11,18 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 
 ## Status
 
-**[M1](docs/roadmap.md) — Documents — is BUILT but NOT DONE.** The domain, its files, its reminders
-and the web app all exist; `pnpm typecheck lint test build` are green and **136 tests pass with zero
-skipped** against a real Postgres. But nothing is deployed, R2 and VAPID are unconfigured, the
-database holds test documents, and no reminder has reached a real phone. M1's "done when" is a real
-passport and a real notification — see [roadmap.md](docs/roadmap.md) § Next actions §4 for the seven
-remaining steps, which are deployment and credentials rather than code.
+**[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
+test build` are green and **137 tests pass with zero skipped** against a real Postgres. Deployed
+2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
+**R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
+deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
+when" is a real passport and a real notification: see [roadmap.md](docs/roadmap.md) § Next actions
+§4, where the remaining steps are credentials and a week of use rather than code.
+
+**Deploying M1 first required [ADR-0023](docs/decisions/0023-migrate-on-boot.md).** Nothing had been
+applying migrations since ADR-0021 dropped Fly's `release_command`, and because `/health` does not
+touch the database, both the pipeline's check and the deploy verifier would have gone green against
+an API with five missing tables. The API now migrates itself on boot, under an advisory lock.
 
 **[M0](docs/roadmap.md) done and verified on a real phone**, and reviewed 2026-07-28.
 
