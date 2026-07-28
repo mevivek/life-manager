@@ -128,6 +128,7 @@ lives only as long as the laptop is awake, so it verifies the design without bei
 **Also:** losing or changing the domain breaks production login. That is a real single point of
 failure, and the mitigation is simply knowing it — recorded in the debt register.
 
-**Revisit if:** the domain changes (update `COOKIE_DOMAIN`, `API_BASE_URL`, `WEB_ORIGIN`,
-`VITE_API_URL`, and `apps/web/public/_headers` together), or browsers change same-site semantics
+**Revisit if:** the domain changes (update `API_BASE_URL`, `WEB_ORIGIN`, `VITE_API_URL`, and
+`apps/web/public/_headers` together — **not `COOKIE_DOMAIN`**, which the amendment above and §53
+establish is not required and is deliberately left unset), or browsers change same-site semantics
 for subdomains — which would be a much larger event than this project.

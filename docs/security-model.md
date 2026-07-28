@@ -232,11 +232,17 @@ These apply to all code, all tiers.
 
 Honest list of what is *not* handled yet. Do not assume these are done.
 
-| Gap | Trigger to fix |
-|---|---|
-| Postgres RLS not enabled | Before going public |
-| No audit log of reads/writes | Before multi-member spaces ship |
-| No 2FA / passkeys | Before going public |
-| No backup/restore runbook | Before storing anything irreplaceable |
-| Vault entirely unbuilt | M5 — see [roadmap.md](roadmap.md) |
-| No key rotation procedure for R2 / DB credentials | Before going public |
+| Gap | Debt | Trigger to fix |
+|---|---|---|
+| Postgres RLS not enabled | D1 | Before going public |
+| No audit log of reads/writes | D2 | Before multi-member spaces ship |
+| No 2FA / passkeys. **Google sign-in is not a second factor** — it is a second password-grade route ([ADR-0020](decisions/0020-google-oauth-alongside-password.md)) | D3 | Before going public; hard prerequisite for the vault |
+| No backup/restore runbook; Neon PITR never tested | D4 | Before storing anything irreplaceable |
+| No key rotation procedure for R2 / DB credentials | D5 | Before going public |
+| **No password reset and no email verification.** `requireEmailVerification: false`, no mail provider. A password-only account has no recovery path but editing the database | D11 | Before M3, or sooner if it bites |
+| **The Neon dev credential was exposed in a chat transcript and is unrotated.** Neon's free tier has no IP allowlist, so the string alone is full read/write/drop | D18 | **Before the first real document is stored** |
+| Vault entirely unbuilt | — | M5 — see [roadmap.md](roadmap.md) |
+
+**This table restates [review.md](product/review.md) §3 and has drifted from it once already** —
+D11 and D18 were missing until the M0 review (debt D31). If you change one, change both; the
+register is the authoritative list.

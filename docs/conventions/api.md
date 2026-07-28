@@ -132,6 +132,14 @@ Query parameters, `snake_case`, all validated by Zod:
 **rejected**, not ignored — a typo in a filter should fail loudly rather than silently
 return unfiltered data.
 
+> **Not yet enforced — debt D27.** No endpoint takes a querystring at M0, and the rejection does
+> **not** come for free: a plain Zod object *strips* unknown keys and answers 200. The rule needs
+> `.strict()` (or `z.strictObject`) on each querystring schema, plus a test. Fastify's `ajv`
+> options cannot do it — `fastify-type-provider-zod` replaces ajv for Zod-schema routes, and an
+> `ajv` setting added here in this rule's name was found to be inert during the M0 review.
+> **The first list endpoint is where this gets implemented** — the whole point is that
+> `?expiring_befor=2026-12-31` must not quietly return every document.
+
 ## 8. Request and response shape
 
 - JSON only. `Content-Type: application/json` required on bodies.

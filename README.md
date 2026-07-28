@@ -3,9 +3,15 @@
 A personal life-management app — one coherent place for the documents, possessions, money,
 people, and secrets that make up a life.
 
-**Status: M0 scaffold complete, not yet deployed.** The monorepo, API, web app, database schema,
-auth and CI all work locally. Nothing has run anywhere but `localhost` yet — see
-[`docs/roadmap.md`](docs/roadmap.md) for what remains.
+**Status: M0 scaffold complete, deployed, and verified on a real phone.** The monorepo, API, web
+app, database schema and auth all work — and they work on the real domain, not just `localhost`:
+`app.mevivek.dev` on Cloudflare Pages, `api.mevivek.dev` on Cloud Run, Postgres on Neon. **Nothing
+runs on the maintainer's laptop.** Both halves deploy on push; re-verify any deploy with
+`node scripts/verify-deployment.mjs`. See [`docs/roadmap.md`](docs/roadmap.md) for what's next
+(M1 — Documents) and § Deploying below for how the pipeline actually works.
+
+One caveat that matters more than it looks: **CI is not GitHub Actions.** `.github/workflows/ci.yml`
+is committed, looks authoritative, and never executes — see § Deploying.
 
 ---
 
@@ -182,13 +188,17 @@ Four things that will bite, all already handled in config — don't undo them:
 
 ### Deploying
 
-**Not done, and no deploy has ever been executed.** The tunnel above covers phone testing; hosting
-is only needed for the app to work with the laptop closed.
+**Done. Both halves are deployed and both deploy on push** — web on Cloudflare Pages, API on Cloud
+Run. The tunnel section above is no longer the routing path; it is kept because it is still the
+cheapest way to re-verify the [ADR-0019](docs/decisions/0019-same-site-subdomain-deployment.md)
+cookie behaviour after an auth change.
 
-`apps/api/fly.toml` and `apps/api/Dockerfile` exist but have never run.
-[ADR-0014](docs/decisions/0014-hosting-topology.md) records Fly as the choice **but was amended**:
-now that no cron is scheduled, nothing must run unattended, so Cloud Run's free tier is viable too
-and the host choice is genuinely open. Whoever picks one writes the superseding ADR.
+The host choice is **settled**: [ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md) chose Cloud
+Run and supersedes [ADR-0014](docs/decisions/0014-hosting-topology.md)'s Fly decision.
+`apps/api/fly.toml` and the Fly notes in `apps/api/Dockerfile` are still in the repo and have never
+run — deliberately kept to make reverting cheap, but **not the deployment path.** Comments naming
+Fly elsewhere in `apps/api/src` are stale in the same way; the reasoning in them still holds on
+Cloud Run, only the provider name is wrong.
 
 #### Deploy from CI, not from a laptop
 
@@ -199,38 +209,43 @@ and the host choice is genuinely open. Whoever picks one writes the superseding 
 - the deploy depends on locally installed CLIs and a local login that expires;
 - nothing is reproducible.
 
-So both halves should deploy **on push to this branch**:
+Both halves therefore deploy **on push to `main`**, and both do today:
 
 | Half | Mechanism | Local tooling needed |
 |---|---|---|
 | Web | Cloudflare Pages ↔ GitHub integration | **none** — configured once in the dashboard |
-| API | GitHub Actions → Cloud Build → Cloud Run | **none** — the image builds server-side |
+| API | GitHub push webhook → **Cloud Build** → Cloud Run | **none** — the image builds server-side |
+
+**Note the API row: Cloud Build, fired by a webhook — not GitHub Actions.** That is not the design
+anyone would choose first; it is a workaround for Actions being blocked on this account. See § The
+API deploys on push too below, which is the authoritative description of the pipeline.
 
 The API path deliberately avoids local Docker (not installed, and not worth requiring). Cloud
 Build builds the existing `apps/api/Dockerfile` **with the repo root as context** — that is not
 optional, since the build needs `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `packages/shared`.
 
-**Browser-only prerequisites** (all doable from a phone):
+**Prerequisites — all done, recorded so a rebuild from scratch is possible.** Every one was doable
+from a browser:
 
-1. **Cloudflare Pages** → connect `mevivek/life-manager`, branch `redo/architecture-scaffold`,
-   build `pnpm build --filter=@life-manager/web`, output `apps/web/dist`, env
-   `VITE_API_URL=https://api.mevivek.dev`. Then attach `app.mevivek.dev`.
-2. **Google Cloud** → in project `life-manager`, enable Cloud Run, Cloud Build and Artifact
-   Registry; create a deploy service account; download a JSON key.
-3. **GitHub** → repo secrets: `GCP_PROJECT_ID`, `GCP_SA_KEY`, plus the API's runtime config
-   (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_SECRET`).
+1. **Cloudflare Pages** → connected to `mevivek/life-manager`, production branch **`main`**, build
+   `pnpm turbo run build --filter=@life-manager/web`, output `apps/web/dist`, env
+   `VITE_API_URL=https://api.mevivek.dev`. `app.mevivek.dev` attached. (Settings table below.)
+2. **Google Cloud** → project `life-manager-01`, with Cloud Run, Cloud Build and Artifact Registry
+   enabled and a `life-manager-deploy` service account. **No JSON key was ever downloaded** — see
+   § Identity.
+3. **Secrets** → in **Secret Manager**, not GitHub: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`,
+   `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_SECRET`.
 
-**The DNS records already point at the tunnel**, so cutting over means repointing
-`api.mevivek.dev` and `app.mevivek.dev` away from it — plan for the tunnel and the deployment not
-to coexist on the same hostnames.
+**DNS now points at the deployment, not the tunnel** — `api.mevivek.dev` at the Cloud Run domain
+mapping, `app.mevivek.dev` at Pages. The tunnel and the deployment cannot serve the same hostnames
+at once, so running the tunnel again means repointing DNS back and then forward.
 
-**Generate a fresh `BETTER_AUTH_SECRET` for production.** Do not reuse the local one; it has been
-on a development machine.
+Production uses a **`BETTER_AUTH_SECRET` generated for it**, never the local one.
 
-#### What is actually deployed (done 2026-07-27)
+#### What is actually deployed
 
-**The API runs on Cloud Run.** The web app does not — it is still served from the laptop by the
-tunnel above.
+**Both halves.** The API on Cloud Run, the web app on Cloudflare Pages (its own section below).
+Nothing is served from the maintainer's laptop.
 
 | | |
 |---|---|

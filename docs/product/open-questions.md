@@ -24,40 +24,6 @@ Answered questions move to §2 and stay forever — they are the record of *why*
 
 ## 1. Open
 
-### Q1 — Should documents without an expiry date be nagged about at all?
-
-> **BLOCKING M1.** Decides the shape of the `reminders` table beyond `due_on`.
-
-**Why it matters:** Reminders are the core value (principle 1), but most documents — a
-deed, a birth certificate, an old contract — never expire. If the reminder system only
-handles expiries, it is silent for the majority of the archive.
-
-**Options:** (a) expiry-only, silent otherwise; (b) periodic review nudges — *"you haven't
-looked at this in two years, is it still current?"*; (c) user-set arbitrary review dates
-per document.
-
-**Leaning:** (a) for M1, since it is the proven pattern
-([prior-art.md](../prior-art.md) §3), with (c) as a small addition if (a) feels thin in use.
-(b) risks becoming noise, and a notification people learn to ignore is worse than none.
-
-**Blocks:** the shape of the `reminders` table beyond `due_on`. Answer before M1 finishes.
-
-### Q2 — How much metadata is required at capture time?
-
-> **BLOCKING M1.** Decides the create form and its Zod schema.
-
-**Why it matters:** Direct tension between principle 2 (effortless capture) and the app
-being useful — a document with no type and no expiry is a file in a folder, which is the
-thing this app is supposed to beat.
-
-**Options:** (a) title only, everything else optional and backfilled later; (b) title +
-type required; (c) type-specific required fields.
-
-**Leaning:** (a). Capture friction is the bigger risk, and OCR (M2) can backfill. But it
-means M1 must handle half-empty documents gracefully rather than treating them as broken.
-
-**Blocks:** the create form and Zod schema in M1.
-
 ### Q3 — When family sharing lands, is sharing per-space or per-document?
 
 **Why it matters:** [ADR-0006](../decisions/0006-space-based-ownership.md) makes *space*
@@ -136,6 +102,50 @@ role check yet. Answer during M3 planning, not sooner.
 ## 2. Answered
 
 Decisions already made. Kept permanently.
+
+### Q1 — Reminders are expiry-only. Documents without an expiry stay silent
+
+**Answered:** 2026-07-28 · **was blocking M1**
+
+Option (a). A document with no expiry generates **no reminder of any kind**. No periodic review
+nudges, and no user-set arbitrary review dates.
+
+**Reasoning:** it is the proven pattern — [prior-art.md](../prior-art.md) §3 found a whole product
+category built on expiry tracking alone. Periodic nudges (b) risk becoming noise, and a
+notification people learn to ignore is worse than none, which would undermine the one feature
+principle 1 calls core. Arbitrary review dates (c) were considered as a small addition and
+deliberately **not** taken in M1: it is easy to add later against real use, and adding it now means
+guessing at a need nobody has felt yet.
+
+**What this settles concretely:** `reminders` needs `due_on` and no second date concept.
+Non-expiring documents are a normal, silent case — not a gap to design around.
+
+**Revisit if** the archive fills with non-expiring documents and the app feels inert. Then (c) is
+the cheap next step, not (b).
+
+→ [roadmap.md](../roadmap.md) M1, [domains/documents.md](../domains/documents.md)
+
+### Q2 — Title only at capture. Everything else optional
+
+**Answered:** 2026-07-28 · **was blocking M1**
+
+Option (a). The create form requires a **title and nothing else**. Type, issuer, expiry, tags and
+notes are all optional and backfillable.
+
+**Reasoning:** capture friction is the bigger risk to this app than thin metadata (principle 2 —
+and [brain.md](brain.md) notes time-to-capture degrades silently, so it must be defended early). A
+required field is paid on every single capture forever; missing metadata is fixable at any time, and
+OCR at M2 can backfill much of it.
+
+**The cost, stated so it is not discovered late:** M1 must handle half-empty documents **gracefully
+rather than as broken**. A document with no type must still list, filter, search and render
+sensibly; "untyped" is a valid state, not an error to badge. This is a real constraint on the list
+and detail views, not just on the form.
+
+**Revisit if** the archive becomes hard to navigate because too little is filled in. The fix then is
+prompting after the fact, not blocking at capture.
+
+→ [roadmap.md](../roadmap.md) M1, [domains/documents.md](../domains/documents.md)
 
 ### Google sign-in added, but email+password kept
 

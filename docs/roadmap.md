@@ -18,10 +18,12 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 
 **Three caveats, all real:**
 
-- **Only the web app deploys on push.** API deploys still need `gcloud` from a terminal, so a
-  session without shell access cannot ship an API change (debt D22).
+- **CI is `cloudbuild.deploy.yaml`, not GitHub Actions.** Both halves now deploy on push (D22
+  fixed), but Actions never runs on this account, so `.github/workflows/ci.yml` enforces nothing
+  (debt D24) and editing the Cloud Build config needs a delete-and-recreate (debt D25).
 - **`SIGTERM` graceful shutdown is still unverified** (debt D14). Windows does not deliver POSIX
-  signals — but Cloud Run does, so this is now *testable* for the first time rather than blocked.
+  signals — but Cloud Run does, and `--min-instances=0` fires it several times a day, so this is
+  now checkable from the logs with no deploy required. Nobody has looked.
 - **A Pages build with `VITE_API_URL` unset ships a broken-but-healthy-looking site** (debt D23).
   It happened once. Run the verify script after every deploy; status codes cannot detect it.
 
@@ -29,38 +31,35 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 
 ## Next actions, in order — read this before starting anything
 
-A session that skips to "the first milestone that isn't done" will start M1 and get two things
-wrong. Do these first.
+**The two things that used to block M1 are done.** The M0 review has been run, and Q1 and Q2 have
+been answered by the maintainer. **M1 is now the next action** — but read the three notes below
+first, because the review changed what M1 has to do.
 
-### 1. Run the M0 review — **before** any M1 work
+### 1. ✅ The M0 review — done 2026-07-28
 
-All four lenses in [product/review.md](product/review.md), findings to the debt register. This is
-a **deliverable, not a nicety**, and it is listed here rather than only in the standing rules at
-the bottom because that is where it was being missed.
+All four lenses, by a session that did not build M0. Findings and the full record of what was
+checked are in [product/review.md](product/review.md) §6; new debt is **D27–D31**.
 
-Two reasons it earns its keep this time. M0 produced a lot of doc drift — a wrong
-`COOKIE_DOMAIN` in ADR-0019, a Postgres version wrong in three places, a
-`nextCursor`/`next_cursor` contradiction, and CI reported green for weeks while never running
-once. Those were all found incidentally, which implies others were not. And **lens 4 is
-answerable for the first time**: the app is deployed, so "is it actually being used?" has a real
-answer.
+Worth carrying forward, because it changes how much you should trust things:
 
-Prefer a session that did not build M0 — [review.md](product/review.md) §5 explains why
-reviewing your own work in the same session shows you intent rather than what is there.
+- **The invariants are in good shape.** All twelve hold, checked mechanically rather than by eye.
+- **The database-backed tests were verified to actually execute** for the first time — 40/40 with a
+  real Postgres, where the default environment silently skips 17 of them. Check the skip count.
+- **Most of M0's drift was documentation, and it was one mechanism** (D28): deployment status is
+  asserted in five files and the deploy work updated two. Expect this class of bug again.
+- **D27 is the one that will bite M1 directly** — see note under M1 below.
 
-### 2. Get **Q1 and Q2** answered by the maintainer
+### 2. ✅ Q1 and Q2 — answered 2026-07-28
 
-[product/open-questions.md](product/open-questions.md). They decide the shape of the `reminders`
-table and the create form.
+Both **(a)**. Recorded with reasoning in
+[product/open-questions.md](product/open-questions.md) §2 — read it there, not here.
 
-**Do not proceed on the recorded leaning.** Each question carries a "Leaning" with supporting
-reasoning, and it is easy to mistake for a decision. It is not one
-([ADR-0017](decisions/0017-product-brain.md): the AI proposes, the human decides;
-[CLAUDE.md](../CLAUDE.md) invariant 12). If they are still unanswered, say so and work on
-something else — M1 has plenty that is not blocked, and building the blocked parts on an
-assumed answer is how a wrong schema gets written and then migrated.
+- **Q1 → expiry-only reminders.** `reminders` needs no more than `due_on`; documents without an
+  expiry are silent. Do not add a review-date column "while you're there".
+- **Q2 → title only.** Everything else optional. **This is a constraint, not a permission:** M1 has
+  to render, list and search half-empty documents gracefully rather than treating them as broken.
 
-### 3. Then M1
+### 3. Then M1 — now unblocked
 
 
 
@@ -71,7 +70,9 @@ assumed answer is how a wrong schema gets written and then migrated.
 Make the repo runnable end to end with one trivial vertical slice. No product features.
 
 - [x] pnpm workspace: `apps/web`, `apps/api`, `packages/shared`; Turborepo pipeline
-- [x] Biome, TypeScript strict, GitHub Actions CI (typecheck, lint, test, build)
+- [x] Biome, TypeScript strict, CI (typecheck, lint, test, build) — **via Cloud Build, not GitHub
+      Actions.** The workflow file was written and committed and has never executed once; debt D24.
+      Do not read this checkbox as "Actions works"
 - [x] Fastify app with `/api/v1/health`, Zod type provider, OpenAPI served at
       `/api/v1/openapi.json`, pino logging, RFC 9457 error mapping
 - [x] Drizzle + drizzle-kit; `users`, `spaces`, `space_members` (+ `sessions`, `accounts`,
@@ -120,7 +121,17 @@ The first real domain. See [domains/documents.md](domains/documents.md) for the 
 
 **Reminders ship in M1, not later.** [prior-art.md](prior-art.md) §3 found an entire product
 category that does nothing but expiry tracking — storage without reminders is the commodity
-half of the feature.
+half of the feature. Per **Q1**, expiry-only: `due_on` and nothing more.
+
+**Four registered debts come due in M1, and three of them land on the same endpoint.** Read their
+triggers in [product/review.md](product/review.md) §3 before writing `GET /documents`, not after:
+
+| Debt | What M1 must do about it |
+|---|---|
+| **D27** | `?q=&type=&expiring_before=&tag=` is the first querystring in the codebase, and unknown query parameters are **not** currently rejected despite [api.md](conventions/api.md) §7 saying they are. A typo'd `?expiring_befor=` silently returns the *unfiltered* list. Make the querystring schema strict and test it |
+| **D10** | The cursor primitives in `packages/shared` have never been used by an endpoint. This list is where the shape gets proven, or found wrong |
+| **D9** | `Idempotency-Key` is documented and unimplemented. `POST /documents` is the first mutation, and a retried upload creating two documents is exactly what it exists to prevent |
+| **D18** | The exposed Neon dev credential must be rotated **before the first real document is stored** — which is M1's "done when" |
 
 **Done when:** your real passport, driving licence, and a warranty are in the system, and
 your phone notifies you before one expires.

@@ -39,24 +39,29 @@ file handling, Web Push, pg-boss job handlers (the lifecycle is wired, `register
 **scheduled jobs are deliberately off in development**), full-text search, `Idempotency-Key`
 handling, password reset, and Playwright. Several of those look like missing conventions rather
 than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D9–D26 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D9–D31 with triggers, so check there
 before "fixing" one.
 
-## Start here — next actions, in order
+## Start here — next actions
 
-**Do not skip to "the first unfinished milestone".** That leads straight to M1 and gets two
-things wrong. Full detail in [roadmap.md](docs/roadmap.md) § Next actions.
+**M1 — Documents — is the next action, and it is unblocked.** Both prerequisites cleared
+2026-07-28: the M0 review is done, and Q1 and Q2 are answered. Full detail in
+[roadmap.md](docs/roadmap.md) § Next actions.
 
-1. **Run the M0 review first** — all four lenses in
-   [product/review.md](docs/product/review.md), findings to the debt register. A deliverable, not
-   a nicety. M0 produced real doc drift (a wrong `COOKIE_DOMAIN`, a Postgres version wrong in
-   three places, CI green for weeks while never running) and all of it was found incidentally,
-   which implies more was missed. Best done by a session that did **not** build M0.
-2. **Get Q1 and Q2 answered by the maintainer** —
-   [open-questions.md](docs/product/open-questions.md). They decide the `reminders` table and the
-   create form. **Each records a "Leaning"; that is a proposal, not a decision** (invariant 12).
-   If unanswered, say so and work on something not blocked.
-3. **Then M1** — Documents.
+Three things the review changed, all of which affect M1 directly:
+
+1. **Q1 → expiry-only reminders; Q2 → title-only capture** (both option (a), reasoning in
+   [open-questions.md](docs/product/open-questions.md) §2). So `reminders` needs nothing beyond
+   `due_on`, and **M1 must render half-empty documents gracefully** — "untyped" is a valid state,
+   not an error.
+2. **Four debts come due in M1, three on one endpoint** — D27 (strict querystrings; unknown
+   parameters are *not* currently rejected despite api.md §7), D10 (cursor shape unproven), D9
+   (`Idempotency-Key` unimplemented), D18 (rotate the exposed Neon credential before real data).
+   The table in [roadmap.md](docs/roadmap.md) M1 says what each requires.
+3. **Trust the invariants, verify the tests.** All twelve invariants were checked mechanically and
+   hold. But `pnpm test` **skips** the 17 database-backed tests without Docker or
+   `TEST_DATABASE_URL` — M0 reported "40 tests pass" from a machine where they never ran. Check the
+   skip count, every time.
 
 ---
 
@@ -73,7 +78,7 @@ things wrong. Full detail in [roadmap.md](docs/roadmap.md) § Next actions.
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D26, each with a trigger. D24/D25 are traps, not gaps |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D31, each with a trigger. D24/D25 are traps, not gaps. D27 is a convention that looks enforced and isn't |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
@@ -135,7 +140,7 @@ Non-negotiable. Breaking one is a bug even if tests pass. Each links to its reas
 | Jobs | pg-boss on the same Postgres — no Redis | 12.26, zero handlers | [0012](docs/decisions/0012-pg-boss-background-jobs.md) |
 | Tests | Vitest (real Postgres) + MSW; Playwright **not installed** | vitest 4.1 · msw 2.15 | [0016](docs/decisions/0016-testing-and-tooling.md) · [0018](docs/decisions/0018-testcontainers-for-api-tests.md) |
 | Lint/format | Biome | 2.5 | [0016](docs/decisions/0016-testing-and-tooling.md) |
-| Hosting | Cloudflare Pages · Fly.io · Neon · R2 | configured, **never deployed** | [0014](docs/decisions/0014-hosting-topology.md) · [0019](docs/decisions/0019-same-site-subdomain-deployment.md) |
+| Hosting | Cloudflare Pages · **Cloud Run** · Neon · R2 | **deployed** 2026-07-27; R2 not yet used | [0021](docs/decisions/0021-cloud-run-for-the-api.md) · [0019](docs/decisions/0019-same-site-subdomain-deployment.md) |
 
 **Version couplings — bumping one of these forces the others:**
 `@vitejs/plugin-react@6` peer-requires `vite@^8` exactly · `fastify-type-provider-zod@7` needs
@@ -187,7 +192,7 @@ docs/              See docs/README.md
 | `tsconfig.base.json` | `strict` + `noUncheckedIndexedAccess`, monorepo-wide |
 | `turbo.json` | `pnpm typecheck`, `pnpm build` — ordered so `packages/shared` builds first |
 | `vitest.config.ts` (root) | `pnpm test` runs all three packages |
-| `.github/workflows/ci.yml` | typecheck → lint → test → build on every push and PR, no secrets |
+| `cloudbuild.deploy.yaml` | typecheck → lint → test → build → deploy on push, no secrets. **The real pipeline.** `.github/workflows/ci.yml` describes the same steps and enforces *nothing* — Actions never runs here (debt D24) |
 
 Two traps worth knowing before you edit tooling config:
 

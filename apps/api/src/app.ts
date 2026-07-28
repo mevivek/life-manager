@@ -42,11 +42,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const app = Fastify({
     logger: loggerOptions,
-    // Fly terminates TLS and forwards X-Forwarded-*; without this, `request.ip` is the
+    // Cloud Run terminates TLS and forwards X-Forwarded-*; without this, `request.ip` is the
     // proxy's address and rate limiting keys every user to the same bucket.
     trustProxy: true,
-    // conventions/api.md §7: "Unknown query parameters are rejected, not ignored."
-    ajv: { customOptions: { removeAdditional: false } },
+    // NOTE: there was an `ajv: { customOptions: { removeAdditional: false } }` here, claiming to
+    // implement conventions/api.md §7 ("unknown query parameters are rejected, not ignored"). It
+    // did nothing, twice over: `setValidatorCompiler(validatorCompiler)` below replaces ajv
+    // entirely for Zod-schema routes, and `false` is ajv's default anyway. Removed rather than
+    // kept, because an inert line that names a rule reads as that rule being enforced.
+    //
+    // §7 is enforced per-schema instead — a strict Zod object — and nothing enforces it yet
+    // because no endpoint takes a querystring. Debt D27, triggered by M1's `GET /documents`.
   })
 
   app.setValidatorCompiler(validatorCompiler)

@@ -196,14 +196,15 @@ Universal column rules are in [conventions/data.md](conventions/data.md).
 ## 9. Deployment topology
 
 All free or near-free at single-user traffic
-([ADR-0014](decisions/0014-hosting-topology.md)).
+([ADR-0021](decisions/0021-cloud-run-for-the-api.md), superseding
+[ADR-0014](decisions/0014-hosting-topology.md)). **Live since 2026-07-27**, except R2.
 
 | Component | Host | Notes |
 |---|---|---|
-| Web PWA | Cloudflare Pages | Static build, global CDN, no server |
-| API | Fly.io | Node container, scale-to-zero |
+| Web PWA | Cloudflare Pages | Static build, global CDN, no server. Builds on push from `main` |
+| API | **Cloud Run** | Node container, `--min-instances=0`. Not Fly — [ADR-0021](decisions/0021-cloud-run-for-the-api.md) |
 | Database | Neon | Serverless Postgres, branching, scale-to-zero |
-| Files | Cloudflare R2 | Private bucket, zero egress fees |
+| Files | Cloudflare R2 | Private bucket, zero egress fees. **Not provisioned yet — M1** |
 
 The web build is static and the API is a stateless container, so nothing about this
 topology is load-bearing — every component can be moved to another provider without a
