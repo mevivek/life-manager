@@ -36,7 +36,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0010](0010-vault-key-hierarchy.md) | Vault key hierarchy | accepted | Argon2id → keypair → space key → per-item DEK, plus a recovery code |
 | [0011](0011-pre-v1-schema-resets.md) | Pre-v1 schema resets | accepted | Reset the dev database rather than migrate it — **until M3** |
 | [0012](0012-pg-boss-background-jobs.md) | pg-boss for jobs | accepted | Queue on the existing Postgres; jobs enqueue transactionally. No Redis |
-| [0013](0013-read-only-offline-v1.md) | Read-only offline in v1 | accepted | Cache reads; writes need connectivity. Offline writes are their own project |
+| [0013](0013-read-only-offline-v1.md) | Read-only offline in v1 | **superseded by 0024** | Cache reads; writes need connectivity. The read half is built and still stands; the no-writes half is superseded |
 | [0014](0014-hosting-topology.md) | Hosting topology | **superseded by 0021** | Cloudflare Pages + Fly.io + Neon + R2; free except a few dollars for the API |
 | [0015](0015-docs-as-orientation.md) | Docs as orientation | accepted | Documentation is a routing system for sessions with no memory |
 | [0016](0016-testing-and-tooling.md) | Testing and tooling | accepted | Vitest against real Postgres, Playwright, Biome; a cross-space test per endpoint |
@@ -47,6 +47,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0021](0021-cloud-run-for-the-api.md) | Cloud Run for the API | accepted | Supersedes 0014's Fly choice; --min-instances=0 is what keeps it free |
 | [0022](0022-web-push-library.md) | Web Push library | accepted | `webpush-webcrypto` (MIT), because `web-push` is MPL-2.0 and hand-rolling RFC 8291 is forbidden |
 | [0023](0023-migrate-on-boot.md) | Migrations applied on API boot | accepted | Nothing else applied them once ADR-0021 dropped Fly's release_command; the fix has to ship in the image because of D25 |
+| [0024](0024-offline-writes-outbox.md) | Offline writes via an outbox | accepted | Supersedes 0013's no-writes half. Server `version` precondition, stale write → **409**, IndexedDB outbox replayed on reconnect, conflicts SURFACED never merged |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot

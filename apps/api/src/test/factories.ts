@@ -84,7 +84,7 @@ export async function createDocument(
   app: FastifyInstance,
   user: UserFixture,
   overrides: Record<string, unknown> = {},
-): Promise<{ id: string; body: Record<string, unknown> }> {
+): Promise<{ id: string; version: number; body: Record<string, unknown> }> {
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/documents',
@@ -100,7 +100,20 @@ export async function createDocument(
   const id = body.id
   if (typeof id !== 'string') throw new Error(`createDocument: no id in ${response.body}`)
 
-  return { id, body }
+  /**
+   * `version` is returned so every `PATCH` in the suite can send its precondition (ADR-0024).
+   *
+   * Asserted rather than defaulted, and asserted to be a real starting version rather than merely
+   * present. A `?? 1` here would let the response schema stop returning `version` entirely while the
+   * whole suite carried on passing against a hard-coded guess — which is exactly how `file_count`
+   * stayed 0 for the whole of M1 (debt D33).
+   */
+  const version = body.version
+  if (typeof version !== 'number' || version < 1) {
+    throw new Error(`createDocument: expected a version >= 1, got ${JSON.stringify(version)}`)
+  }
+
+  return { id, version, body }
 }
 
 /**

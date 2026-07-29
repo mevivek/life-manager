@@ -16,7 +16,7 @@ import {
 import type { ActorContext } from '../../auth/actor.js'
 import { db } from '../../db/client.js'
 import { type Cursor, decodeCursor, toPage } from '../../lib/cursor.js'
-import { NotFoundError, ValidationError } from '../../lib/errors.js'
+import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js'
 import type { ReminderRow } from '../reminders/reminders.repository.js'
 import * as remindersRepository from '../reminders/reminders.repository.js'
 import type { DocumentFileRow, DocumentRow } from './documents.repository.js'
@@ -88,6 +88,7 @@ function toDocument(row: DocumentRow): Document {
     file_count: row.fileCount,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+    version: row.version,
   }
 }
 
@@ -277,8 +278,25 @@ export async function update(
   const expiryChanged = 'expires_on' in patch && expiresOn !== existing.expiresOn
 
   await db.transaction(async (tx) => {
-    const changed = await repository.update(actor, id, values, tx)
-    if (changed === 0) throw new NotFoundError('No such document.')
+    const newVersion = await repository.update(actor, id, values, patch.version, tx)
+
+    /**
+     * `null` means the conditional update matched nothing, which is either "gone" or "moved on".
+     * We already read the row above, so the version is the discriminator (ADR-0024):
+     *
+     *  - a different version ⇒ somebody else wrote first ⇒ **409**, and the client resolves it
+     *  - otherwise ⇒ the row was deleted between our read and our write ⇒ **404**
+     *
+     * The 409 carries the current version so the client can re-read and retry without guessing.
+     */
+    if (newVersion === null) {
+      if (existing.version !== patch.version) {
+        throw new ConflictError(
+          `This document was changed elsewhere. You edited version ${patch.version}; it is now at version ${existing.version}.`,
+        )
+      }
+      throw new NotFoundError('No such document.')
+    }
 
     /**
      * Business rule 7: setting or changing `expires_on` reconciles pending reminders; clearing it
