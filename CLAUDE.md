@@ -12,7 +12,11 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-test build` are green and **137 tests pass with zero skipped** against a real Postgres. Deployed
+build` are green. **The suite is 203 tests: web 85 · shared 27 · api 91.** The last run against a real
+Postgres was 2026-07-28 and recorded 137/0 — a figure now stale twice over, because the offline-cache
+commit and then ADR-0024 both added tests without a database to hand. The 2026-07-29 session measured
+**121 passed / 82 skipped** (all 82 are the API's, skipped for want of Docker) and could not confirm
+203/0. **Run it somewhere with a database before quoting a total.** Deployed
 2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
 **R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
 deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
@@ -63,11 +67,29 @@ caches of Tier 0 data would mean two purge paths. Three things about it are easy
 rejects), `shouldDehydrateMutation: () => false`, and the sign-out/sign-in purge in
 `apps/web/src/lib/session.ts`.
 
+**The whole web client now wears the Ledger design system
+([ADR-0024](docs/decisions/0024-ledger-design-system.md), 2026-07-29)** — warm paper light + dark at
+parity, Newsreader + IBM Plex self-hosted, and colour spent *only* on expiry status. Read that ADR
+before touching anything visual. Four things in it will bite a session that does not:
+
+1. **`cn()` must be told about every new `--text-*`, `--radius-*` or `--spacing-*` token**
+   (`apps/web/src/lib/utils.ts`). `tailwind-merge` cannot tell a colour from a size, and getting this
+   wrong shipped a button rendering **ink on ink** with perfectly correct markup. `utils.test.ts`
+   walks the lists.
+2. **The expiry ladder is five states that each change shape, words, weight AND case**
+   (`ExpiryStatus.tsx`). Colour is the fourth wheel — the ladder must stay readable in greyscale.
+3. **45 days is the only threshold in the client**, and it decides a glyph and a sentence. Reminders
+   still fire at 90/30/7 server-side; the two are allowed to disagree.
+4. **Three tabs, forever.** ADR-0024 §4 reverses the old one-tab-per-domain plan: domains become a
+   switcher on the Documents title, and that switcher **must not be drawn until domain two exists**.
+
 What still does **not** exist: OCR and previews (M2), offline *file* access (ruled out for v1 by
-ADR-0013), password reset, Playwright, and R2 object deletion. **`ENABLE_SCHEDULED_JOBS` is off**, so
+ADR-0013), password reset, Playwright, R2 object deletion, and **any way for a user to undo a delete**
+(soft-delete sets `deleted_at`, but there is no restore endpoint — so no "Undo" and no "recoverable for
+30 days" copy; ADR-0024 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D40 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D42 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -81,7 +103,8 @@ Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   136/0 is the current green.
+   **203/0 is the target; 121/82 is what a container with no Docker shows you** — the 82 skipped are
+   all the API's, and 85 of the 121 that do run are web tests needing no database.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
    [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.
@@ -99,7 +122,9 @@ Four things worth knowing before you touch anything:
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
-| **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes. **Look at it at 390px before calling it done** (debt D37) |
+| **Anything visual — a screen, a component, a colour, a size** | [`ADR-0024`](docs/decisions/0024-ledger-design-system.md) **in full**, then the token block in `apps/web/src/styles.css` and `apps/web/src/lib/utils.ts`. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37) |
+| **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0024 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
+| **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0013`](docs/decisions/0013-read-only-offline-v1.md) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it, and a *mutation* must never be |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
@@ -109,7 +134,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D36, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D42, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
@@ -162,7 +187,8 @@ Non-negotiable. Breaking one is a bug even if tests pass. Each links to its reas
 | Contract | Zod | **4.4** | [0004](docs/decisions/0004-zod-single-contract-source.md) |
 | Web | Vite + React SPA, PWA via `vite-plugin-pwa` | vite 8.1 · react 19.2 · pwa 1.3 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
 | Routing / data | TanStack Router + TanStack Query | router 1.170 · query 5.101 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| UI | Tailwind v4 + shadcn/ui primitives | tailwind 4.3 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) |
+| UI | Tailwind v4 + shadcn/ui primitives, wearing the **Ledger** design system | tailwind 4.3 | [0003](docs/decisions/0003-vite-spa-pwa-over-nextjs.md) · [0024](docs/decisions/0024-ledger-design-system.md) |
+| Type | Newsreader (serif) + IBM Plex Sans/Mono, **self-hosted** — not the Google CDN, which breaks offline | `@fontsource*`, OFL-1.1, latin only | [0024](docs/decisions/0024-ledger-design-system.md) |
 | API | Fastify + `fastify-type-provider-zod` → OpenAPI 3.1 | fastify 5.10 · provider 7.0 | [0004](docs/decisions/0004-zod-single-contract-source.md) |
 | Database | Postgres 18 on Neon | 18.4 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |
 | ORM | Drizzle + drizzle-kit | 0.45 / 0.31 | [0005](docs/decisions/0005-postgres-neon-drizzle.md) |

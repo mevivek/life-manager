@@ -9,6 +9,18 @@ import { Label } from '@/components/ui/label'
 import { signIn } from '@/lib/auth-client'
 import { GoogleButton } from './GoogleButton'
 
+/**
+ * Sign in. ADR-0024 draws this screen, and two things about its ORDER are deliberate.
+ *
+ * **Email and password come first, Google second.** The comp puts the ink primary immediately under
+ * the fields and "Continue with Google" beneath it as a secondary. The previous version had Google at
+ * the top followed by an "or" divider, which reads as *the* way in — and for a private single-user app
+ * where the password is the account's own credential, promoting the third party above it is the wrong
+ * emphasis.
+ *
+ * **There is no "or" divider.** Two buttons in different weights already say "either of these"; a rule
+ * between them implies two *sections*, which is a stronger separation than exists.
+ */
 export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
   const [serverError, setServerError] = useState<string | null>(null)
   const {
@@ -30,12 +42,10 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
   })
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-      <GoogleButton />
+    <form onSubmit={submit} className="flex flex-col gap-2.5" noValidate>
+      {serverError !== null && <Alert>{serverError}</Alert>}
 
-      {serverError !== null && <Alert variant="destructive">{serverError}</Alert>}
-
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -44,10 +54,10 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
           aria-invalid={errors.email !== undefined}
           {...register('email')}
         />
-        {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+        {errors.email && <p className="text-body text-status-late">{errors.email.message}</p>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
@@ -56,12 +66,14 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
           aria-invalid={errors.password !== undefined}
           {...register('password')}
         />
-        {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+        {errors.password && <p className="text-body text-status-late">{errors.password.message}</p>}
       </div>
 
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" size="lg" className="mt-1.5 w-full" disabled={isSubmitting}>
         {isSubmitting ? 'Signing in…' : 'Sign in'}
       </Button>
+
+      <GoogleButton />
     </form>
   )
 }

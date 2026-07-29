@@ -248,39 +248,76 @@ export const api = {
     /**
      * PUTs the bytes **straight to storage**, not through the API (ADR-0008).
      *
-     * The one `fetch` in this file that does not go to our own origin, and the one that must NOT
+     * The one request in this file that does not go to our own origin, and the one that must NOT
      * send credentials: the presigned URL carries its own authorisation, and attaching our session
-     * cookie to a third-party request would leak it. `credentials: 'omit'` is deliberate.
+     * cookie to a third-party request would leak it. `withCredentials = false` is the default and is
+     * asserted below rather than assumed.
      *
      * `content-type` and `content-length` are signed into the URL, so they must match what was
      * declared at presign time or storage rejects the upload.
+     *
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  `XMLHttpRequest`, not `fetch`, and only because of `onProgress`.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * `fetch` cannot report upload progress. A request body stream would let you *count bytes you
+     * hand over*, but that is not the same number as bytes acknowledged, it needs `duplex: 'half'`,
+     * and Safari does not support it at all. `XMLHttpRequest.upload.onprogress` is the only thing that
+     * reports real progress in every browser this app runs in.
+     *
+     * A percentage is worth this: a 6MB scan over a phone connection is the app's slowest operation by
+     * an order of magnitude, and a spinner with no number is indistinguishable from a hang. ADR-0024
+     * §5 draws the bar; a faked animation would be a lie about the one thing the user is waiting on.
      */
-    upload: async (uploadUrl: string, file: File): Promise<void> => {
-      let response: Response
-      try {
-        response = await fetch(uploadUrl, {
-          method: 'PUT',
-          credentials: 'omit',
-          headers: { 'content-type': file.type },
-          body: file,
-        })
-      } catch (cause) {
-        // Needs its own translation: this `fetch` bypasses `request()` entirely, so without it an
-        // offline upload is the one write that still reports "Failed to fetch".
-        throw new OfflineError('write', cause)
-      }
+    upload: (
+      uploadUrl: string,
+      file: File,
+      onProgress?: (fraction: number) => void,
+    ): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const request_ = new XMLHttpRequest()
+        request_.open('PUT', uploadUrl, true)
+        request_.withCredentials = false
+        request_.setRequestHeader('content-type', file.type)
 
-      if (!response.ok) {
-        // Storage errors are XML, not problem+json, so there is nothing useful to parse. Surface
-        // the status rather than swallowing it (conventions/code.md §6).
-        throw new ApiError({
-          type: 'about:blank',
-          title: 'Upload failed',
-          status: response.status,
-          detail: `Storage rejected the upload (${response.status}).`,
-        })
-      }
-    },
+        request_.upload.onprogress = (event) => {
+          // `lengthComputable` is false for a chunked body. Reporting nothing is better than
+          // reporting a fraction of an unknown total.
+          if (event.lengthComputable && event.total > 0) onProgress?.(event.loaded / event.total)
+        }
+
+        request_.onload = () => {
+          if (request_.status >= 200 && request_.status < 300) {
+            resolve()
+            return
+          }
+          // Storage errors are XML, not problem+json, so there is nothing useful to parse. Surface
+          // the status rather than swallowing it (conventions/code.md §6).
+          reject(
+            new ApiError({
+              type: 'about:blank',
+              title: 'Upload failed',
+              status: request_.status,
+              detail: `Storage rejected the upload (${request_.status}).`,
+            }),
+          )
+        }
+
+        /**
+         * Both handlers, not just `onerror`.
+         *
+         * A dropped connection mid-upload fires `onerror`, but a request the browser aborts — closing
+         * the tab, navigating away — fires `onabort` and nothing else. Without it that promise never
+         * settles, and the mutation sits `isPending` forever with a progress bar frozen at 70%.
+         *
+         * Needs its own translation because this request bypasses `request()` entirely; without it an
+         * offline upload is the one write that still reports a raw network error.
+         */
+        request_.onerror = () => reject(new OfflineError('write', new Error('Upload failed')))
+        request_.onabort = () => reject(new OfflineError('write', new Error('Upload aborted')))
+
+        request_.send(file)
+      }),
   },
 
   reminders: {

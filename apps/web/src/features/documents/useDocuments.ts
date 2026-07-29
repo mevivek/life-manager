@@ -5,6 +5,7 @@ import type {
   ReminderCreate,
 } from '@life-manager/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { api } from '@/lib/api'
 
 /**
@@ -98,8 +99,19 @@ export function useDeleteDocument() {
 export function useUploadFile(documentId: string) {
   const queryClient = useQueryClient()
 
-  return useMutation({
+  /**
+   * Upload progress, 0–1.
+   *
+   * Deliberately **not** in the mutation's own state and deliberately not in the Query cache. It
+   * changes many times a second, so putting it in the cache would mean a cache write per progress
+   * event — and `persister.ts` would then throttle-write the whole cache to IndexedDB while a file is
+   * uploading. It is transient view state and belongs in `useState`.
+   */
+  const [progress, setProgress] = useState<number | null>(null)
+
+  const mutation = useMutation({
     mutationFn: async (file: File) => {
+      setProgress(0)
       const presigned = await api.files.presignUpload(documentId, {
         // The mime is validated server-side against the allowlist; this cast is the browser's own
         // reported type, and a value outside the allowlist comes back as a 400.
@@ -108,14 +120,25 @@ export function useUploadFile(documentId: string) {
         make_primary: true,
       })
 
-      await api.files.upload(presigned.upload_url, file)
+      await api.files.upload(presigned.upload_url, file, setProgress)
 
+      /**
+       * Progress is pinned at 1 for the confirm round-trip rather than reset to null.
+       *
+       * The bytes really are all uploaded at this point, and `:confirm` is a fast call to our own API
+       * — but clearing the bar first makes the row flick back to "no progress" for a beat, which reads
+       * as the upload restarting.
+       */
+      setProgress(1)
       return api.files.confirm(documentId, { file_id: presigned.file_id })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })
     },
+    onSettled: () => setProgress(null),
   })
+
+  return Object.assign(mutation, { progress })
 }
 
 /** Narrowed at the API boundary; the browser hands us an arbitrary string. */
