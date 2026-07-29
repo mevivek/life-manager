@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+#
+# Binds a credential group to the deployed API, one group at a time.
+#
+#     ./scripts/provision.sh r2       # the four R2_* values
+#     ./scripts/provision.sh vapid    # the three VAPID_* values
+#     ./scripts/provision.sh neon     # rotate DATABASE_URL + DATABASE_URL_UNPOOLED (debt D18)
+#     ./scripts/provision.sh status   # what is bound right now, names only
+#
+# ── Why a script rather than a list of commands in the README ──
+#
+# Three of the steps are easy to get subtly wrong in ways that fail late:
+#
+#  1. **Each group is all-or-none.** `apps/api/src/env.ts` rejects a partially-set group at BOOT, so
+#     setting two of the four R2 values produces a revision that never becomes healthy. Every group
+#     here is therefore bound in a SINGLE `gcloud run services update` call.
+#  2. **`--set-secrets` / `--set-env-vars` REPLACE the whole list.** Using them would silently unbind
+#     DATABASE_URL, DATABASE_URL_UNPOOLED, BETTER_AUTH_SECRET and GOOGLE_CLIENT_SECRET. This script
+#     only ever uses the `--update-` forms.
+#  3. **The runtime service account has `secretAccessor` per-secret, not project-wide** (README
+#     § Secrets, deliberately — it is not the broadly-privileged default compute account). A new
+#     secret is unreadable until it is granted explicitly, and the failure looks like a boot crash
+#     rather than a permission error.
+#
+# ── How secrets are handled ──
+#
+# Values are read from an interactive prompt with echo OFF, and piped to `gcloud` via `--data-file=-`.
+# They are never passed as command-line arguments and never written to a file, so they do not land in
+# shell history, in `ps` output, or in this repo (CLAUDE.md invariant 11, security-model.md §6).
+#
+# Nothing here prints a secret value. `status` prints names and bindings only.
+
+set -euo pipefail
+
+PROJECT="${PROJECT:-life-manager-01}"
+REGION="${REGION:-us-central1}"
+SERVICE="${SERVICE:-life-manager-api}"
+RUNTIME_SA="${RUNTIME_SA:-life-manager-api@life-manager-01.iam.gserviceaccount.com}"
+
+die() {
+  printf '\nerror: %s\n' "$1" >&2
+  exit 1
+}
+
+note() { printf '  %s\n' "$1"; }
+
+# Checked per-action rather than at the top of the file, so `usage` and `--help` still work on a
+# machine without gcloud — including the container this was written in.
+require_gcloud() {
+  command -v gcloud >/dev/null 2>&1 ||
+    die "gcloud is not installed. This script must run on your machine, not in an agent container."
+}
+
+# ── helpers ──────────────────────────────────────────────────────────────────────────────────────
+
+# Prompts for a value with echo off. Rejects empty input rather than storing a blank secret, which
+# would satisfy env.ts's `.min(1)` check nowhere and fail at boot.
+read_secret() {
+  local prompt="$1" value=""
+  while [ -z "$value" ]; do
+    printf '  %s: ' "$prompt" >&2
+    read -rs value
+    printf '\n' >&2
+    [ -z "$value" ] && printf '  (empty — try again)\n' >&2
+  done
+  printf '%s' "$value"
+}
+
+# Prompts for a NON-secret value, echoed so it can be checked for typos.
+read_plain() {
+  local prompt="$1" value=""
+  while [ -z "$value" ]; do
+    printf '  %s: ' "$prompt" >&2
+    read -r value
+    [ -z "$value" ] && printf '  (empty — try again)\n' >&2
+  done
+  printf '%s' "$value"
+}
+
+# Creates the secret if it does not exist, otherwise adds a new version. Idempotent on purpose: a
+# re-run after a typo must not fail, and rotation is the same operation as creation.
+store_secret() {
+  local name="$1" value="$2"
+  if gcloud secrets describe "$name" --project="$PROJECT" >/dev/null 2>&1; then
+    printf %s "$value" | gcloud secrets versions add "$name" --data-file=- --project="$PROJECT" >/dev/null
+    note "$name — new version added"
+  else
+    printf %s "$value" | gcloud secrets create "$name" --data-file=- --project="$PROJECT" >/dev/null
+    note "$name — created"
+  fi
+
+  # Idempotent: re-granting an existing binding is a no-op.
+  gcloud secrets add-iam-policy-binding "$name" \
+    --member="serviceAccount:${RUNTIME_SA}" \
+    --role=roles/secretmanager.secretAccessor \
+    --project="$PROJECT" >/dev/null
+  note "$name — runtime account granted secretAccessor"
+}
+
+confirm_target() {
+  printf '\nTarget\n'
+  note "project  $PROJECT"
+  note "region   $REGION"
+  note "service  $SERVICE"
+  printf '\nThis modifies a PRODUCTION service. Type the project id to continue: '
+  local typed
+  read -r typed
+  [ "$typed" = "$PROJECT" ] || die "aborted (typed '$typed')"
+}
+
+# ── groups ───────────────────────────────────────────────────────────────────────────────────────
+
+provision_r2() {
+  require_gcloud
+  cat <<'EOF'
+
+R2 — file storage (ADR-0008)
+────────────────────────────
+Create the bucket and an "Object Read & Write" API token scoped to it, in the Cloudflare dashboard.
+
+  ⚠ Also set the bucket's CORS policy, or every browser upload fails while the API looks healthy.
+    The browser PUTs straight to R2, so the bucket must allow your app's origin. See README
+    § Running the file path locally / § Provisioning R2 for the exact JSON.
+
+EOF
+  local account_id bucket access_key secret_key
+  account_id=$(read_plain 'R2 account id')
+  bucket=$(read_plain 'R2 bucket name')
+  access_key=$(read_secret 'R2 access key id')
+  secret_key=$(read_secret 'R2 secret access key')
+
+  confirm_target
+
+  printf '\nStoring credentials\n'
+  store_secret R2_ACCESS_KEY_ID "$access_key"
+  store_secret R2_SECRET_ACCESS_KEY "$secret_key"
+
+  # ONE call: env.ts requires all four together, so a two-step bind would leave a broken revision.
+  printf '\nBinding to %s\n' "$SERVICE"
+  gcloud run services update "$SERVICE" \
+    --region="$REGION" --project="$PROJECT" \
+    --update-secrets=R2_ACCESS_KEY_ID=R2_ACCESS_KEY_ID:latest,R2_SECRET_ACCESS_KEY=R2_SECRET_ACCESS_KEY:latest \
+    --update-env-vars="R2_ACCOUNT_ID=${account_id},R2_BUCKET=${bucket}" \
+    --quiet
+  note 'done'
+
+  printf '\nVerify: file endpoints should stop answering 503.\n'
+  note "node scripts/verify-deployment.mjs"
+}
+
+provision_vapid() {
+  require_gcloud
+  cat <<'EOF'
+
+VAPID — Web Push for reminders (RFC 8292)
+─────────────────────────────────────────
+Generate the pair FIRST, in another terminal, and keep it out of any transcript:
+
+    node scripts/generate-vapid-keys.mjs
+
+Use that script and not `web-push --generate-vapid-keys`: webpush-webcrypto encodes its private key
+in its own format, and a pair from elsewhere will not load.
+
+EOF
+  local public_key private_key subject
+  # The public key is public by design — it is served to browsers by GET /api/v1/push/public-key —
+  # so it is echoed, which also lets you eyeball it against the generator's output.
+  public_key=$(read_plain 'VAPID public key')
+  subject=$(read_plain 'VAPID subject (mailto:you@example.com)')
+  private_key=$(read_secret 'VAPID private key')
+
+  confirm_target
+
+  printf '\nStoring credentials\n'
+  store_secret VAPID_PRIVATE_KEY "$private_key"
+
+  printf '\nBinding to %s\n' "$SERVICE"
+  gcloud run services update "$SERVICE" \
+    --region="$REGION" --project="$PROJECT" \
+    --update-secrets=VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest \
+    --update-env-vars="VAPID_PUBLIC_KEY=${public_key},VAPID_SUBJECT=${subject}" \
+    --quiet
+  note 'done'
+
+  printf '\nVerify: the endpoint should return a key rather than null.\n'
+  note "curl -s https://api.mevivek.dev/api/v1/push/public-key"
+}
+
+provision_neon() {
+  require_gcloud
+  cat <<'EOF'
+
+Neon credential rotation (debt D18)
+───────────────────────────────────
+The current credential was exposed in a chat transcript and is unrotated. Neon's free tier has no IP
+allowlist, so the string alone is full read/write/drop. Its trigger is "before the first real
+document is stored" — so do this BEFORE putting real documents in, not after.
+
+Reset the role password in the Neon console first, then paste both connection strings here.
+Remember to update apps/api/.env too; verify-deployment.mjs reads DATABASE_URL_UNPOOLED from it.
+
+EOF
+  local pooled unpooled
+  pooled=$(read_secret 'new DATABASE_URL (pooled)')
+  unpooled=$(read_secret 'new DATABASE_URL_UNPOOLED (direct)')
+
+  confirm_target
+
+  printf '\nStoring credentials\n'
+  store_secret DATABASE_URL "$pooled"
+  store_secret DATABASE_URL_UNPOOLED "$unpooled"
+
+  printf '\nBinding to %s\n' "$SERVICE"
+  gcloud run services update "$SERVICE" \
+    --region="$REGION" --project="$PROJECT" \
+    --update-secrets=DATABASE_URL=DATABASE_URL:latest,DATABASE_URL_UNPOOLED=DATABASE_URL_UNPOOLED:latest \
+    --quiet
+  note 'done'
+
+  printf '\nVerify: the API migrates on boot (ADR-0023), so a healthy revision means it connected.\n'
+  note "curl -s https://api.mevivek.dev/api/v1/health"
+  printf '\nThen mark D18 closed in docs/product/review.md and security-model.md §7 — BOTH lists.\n'
+}
+
+show_status() {
+  require_gcloud
+  printf '\nSecrets in %s\n' "$PROJECT"
+  gcloud secrets list --project="$PROJECT" --format='value(name)' 2>/dev/null | sed 's/^/  /' || note '(none readable)'
+
+  printf '\nBound to %s (names only, no values)\n' "$SERVICE"
+  gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT" \
+    --format='value(spec.template.spec.containers[0].env[].name)' 2>/dev/null | tr ';' '\n' | sed 's/^/  /'
+}
+
+case "${1:-}" in
+  r2) provision_r2 ;;
+  vapid) provision_vapid ;;
+  neon) provision_neon ;;
+  status) show_status ;;
+  *)
+    cat <<'EOF'
+usage: ./scripts/provision.sh <r2|vapid|neon|status>
+
+  r2      bind the four R2_* values      (file storage; also set bucket CORS — see README)
+  vapid   bind the three VAPID_* values  (run scripts/generate-vapid-keys.mjs first)
+  neon    rotate the database credential (debt D18 — before the first real document)
+  status  show what is bound, names only
+
+Override the target with PROJECT=, REGION=, SERVICE=, RUNTIME_SA= if it ever moves.
+EOF
+    exit 1
+    ;;
+esac
