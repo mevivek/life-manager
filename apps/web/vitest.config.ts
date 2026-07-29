@@ -11,6 +11,14 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  /**
+   * Must mirror `vite.config.ts`'s `define`. This config is separate from the build's, so a global
+   * declared only there is `undefined` here and any module reading it at import time throws
+   * `__APP_VERSION__ is not defined` — which looks like a broken test rather than a missing define.
+   */
+  define: {
+    __APP_VERSION__: JSON.stringify('test'),
+  },
   test: {
     name: 'web',
     environment: 'jsdom',

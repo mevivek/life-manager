@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SignUpForm } from '@/features/auth/SignUpForm'
-import { meQueryKey } from '@/features/spaces/useMe'
+import { beginSession } from '@/lib/session'
 
 export const Route = createFileRoute('/signup')({ component: SignUpPage })
 
@@ -23,7 +23,9 @@ function SignUpPage() {
       <CardContent className="flex flex-col gap-4">
         <SignUpForm
           onSuccess={async () => {
-            await queryClient.invalidateQueries({ queryKey: meQueryKey })
+            // Same purge-then-invalidate as sign-in: a brand-new account must never inherit a
+            // previous user's persisted cache on a shared device. See lib/session.ts.
+            await beginSession(queryClient)
             await navigate({ to: '/home' })
           }}
         />

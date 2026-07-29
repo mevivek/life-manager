@@ -7,7 +7,7 @@ import { DocumentList } from '@/features/documents/DocumentList'
 import { ExpiringSoon } from '@/features/documents/ExpiringSoon'
 import { NotificationsCard } from '@/features/documents/NotificationsCard'
 import { useMe } from '@/features/spaces/useMe'
-import { signOut } from '@/lib/auth-client'
+import { endSession } from '@/lib/session'
 
 export const Route = createFileRoute('/_authed/home')({ component: HomePage })
 
@@ -58,10 +58,10 @@ function HomePage() {
           size="sm"
           className="shrink-0 text-muted-foreground"
           onClick={async () => {
-            await signOut()
-            // Drop every cached server response. Leaving `/me` or a document list in the cache
-            // would show the previous user's data to the next one on a shared device.
-            queryClient.clear()
+            // Signs out AND deletes the IndexedDB cache. Since the Query cache is persisted,
+            // `queryClient.clear()` alone would leave the previous user's document list on disk for
+            // the next person on a shared device. See lib/session.ts.
+            await endSession(queryClient)
             await navigate({ to: '/login' })
           }}
         >

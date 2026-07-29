@@ -1,8 +1,9 @@
 import { registerSW } from 'virtual:pwa-register'
-import { QueryClientProvider } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { cacheBuster, dehydrateOptions, MAX_AGE, queryCachePersister } from '@/lib/persister'
 import { createQueryClient } from '@/lib/query-client'
 import { routeTree } from './routeTree.gen'
 import './styles.css'
@@ -24,11 +25,28 @@ declare module '@tanstack/react-router' {
 const rootElement = document.getElementById('root')
 if (rootElement === null) throw new Error('#root is missing from index.html')
 
+/**
+ * `PersistQueryClientProvider` rather than `QueryClientProvider`: it restores the IndexedDB cache
+ * BEFORE rendering children, which is the ordering the offline path depends on.
+ *
+ * `routes/_authed.tsx` guards the authed area with `ensureQueryData` for `/me`. If children mounted
+ * first and the cache arrived afterwards, that guard would run against an empty cache, fail on the
+ * network error while offline, and redirect to the error screen — the restore would land moments too
+ * late to matter. See `lib/persister.ts`.
+ */
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: queryCachePersister,
+        maxAge: MAX_AGE,
+        buster: cacheBuster,
+        dehydrateOptions,
+      }}
+    >
       <RouterProvider router={router} />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   </StrictMode>,
 )
 

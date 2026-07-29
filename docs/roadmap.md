@@ -102,11 +102,31 @@ browser pass at phone width.
 > The UI itself was driven in a browser locally against the identical bundle. M1's "done when" is
 > your phone anyway — step 5 covers it.
 
+### 4b. The offline read cache landed early — 2026-07-29
+
+**Out of order, by an explicit product decision.** M2's offline read cache was built before steps
+2–7 above, because the maintainer asked to be able to iterate on the app without first provisioning
+R2 and VAPID. Recording the reasoning because the order above otherwise looks violated:
+
+- It unblocks *product* iteration without touching the credential steps at all, which are the ones
+  that need a human at a dashboard.
+- It needed no new decision — [ADR-0013](decisions/0013-read-only-offline-v1.md) already specified
+  the design in detail, down to requiring a visible staleness marker.
+- It is web-only and additive; nothing in steps 2–7 changes because of it.
+
+Two things it deliberately did **not** do, both because ADR-0013 rules them out: no `runtimeCaching`
+for the API in the service worker (the Query cache is the one cache), and no offline caching of file
+bytes. Also shipped alongside: `docker-compose.dev.yml`, a local S3 mock so the upload path runs with
+no Cloudflare account — but it does not validate signatures, so it cannot verify the presign
+contract (debt D39).
+
+**Steps 2–7 are unchanged and still the priority.** This did not make M1 done.
+
 ### 5. Then M2
 
-Only after step 7. M2 (OCR, previews, offline read cache) is the *next milestone*, but starting it
-before M1 has a week of real use would repeat the mistake the working agreements name first: "one
-domain at a time — finish and actually use it before starting the next"
+Only after step 7. M2's remaining scope is OCR and previews — the offline read cache is done, see
+§4b. Starting the rest before M1 has a week of real use would repeat the mistake the working
+agreements name first: "one domain at a time — finish and actually use it before starting the next"
 ([product/brain.md](product/brain.md) §5).
 
 ---

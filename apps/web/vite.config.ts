@@ -57,9 +57,11 @@ export default defineConfig({
          *  - `navigateFallbackDenylist` keeps `/api/*` navigations away from index.html.
          *  - No `runtimeCaching` entry for the API at all, so responses are never stored.
          *
-         * Offline READ caching is ADR-0013 / M2 work. Adding it here would mean serving a
-         * stale `/me` — and therefore a stale space list — which is the one thing this app
-         * must not do (conventions/code.md §9).
+         * **Offline read caching now exists, and deliberately does not live here.** ADR-0013's
+         * mechanism is the TanStack Query cache persisted to IndexedDB — `src/lib/persister.ts`.
+         * Adding `runtimeCaching` for the API on top of that would create a SECOND copy of Tier 0
+         * data, in Cache Storage, outside the Query lifecycle that `signOut()` purges. One cache
+         * with one purge path is the whole design; do not "also" cache API responses here.
          */
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
@@ -126,5 +128,16 @@ export default defineConfig({
     // Sourcemaps: this is a private personal app, and a stack trace that names a real file is
     // worth far more here than the marginal obscurity of hiding one.
     sourcemap: true,
+  },
+  /**
+   * The persisted Query cache's `buster`. When this string changes, the stored cache is discarded
+   * rather than rehydrated — which is what stops a deploy that changes a response shape from
+   * feeding data to code that can no longer read it.
+   *
+   * `VITE_APP_VERSION` is set by the build when there is a commit to name; the fallback keeps local
+   * development on one stable value, so the cache is not thrown away on every `pnpm dev` restart.
+   */
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION ?? 'dev'),
   },
 })

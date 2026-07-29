@@ -142,10 +142,34 @@ itself, rather than half-working.
 | **Files** (ADR-0008) | `R2_ACCOUNT_ID` `R2_ACCESS_KEY_ID` `R2_SECRET_ACCESS_KEY` `R2_BUCKET` | Upload and download return `503` |
 | **Notifications** | `VAPID_PUBLIC_KEY` `VAPID_PRIVATE_KEY` `VAPID_SUBJECT` | Reminders are stored and visible in the app, but nothing is pushed |
 
-`R2_ENDPOINT` points the S3 client at any S3-compatible server instead of R2 — its purpose is
-verifying the upload path end to end against a local MinIO, which is the one part of ADR-0008's flow
-that unit tests structurally cannot reach (presigning is offline, so fake credentials never fail).
-Leave it unset in production.
+`R2_ENDPOINT` points the S3 client at any S3-compatible server instead of R2 — the one part of
+ADR-0008's flow that unit tests structurally cannot reach (presigning is offline, so fake
+credentials never fail). Leave it unset in production.
+
+#### Running the file path locally, with no Cloudflare account
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+```
+
+Then in `apps/api/.env` — these are throwaway values for a local mock, not credentials:
+
+```
+R2_ACCOUNT_ID=local
+R2_ACCESS_KEY_ID=local
+R2_SECRET_ACCESS_KEY=local
+R2_BUCKET=life-manager-dev
+R2_ENDPOINT=http://127.0.0.1:9090
+```
+
+Restart the API and upload works end to end: presign → PUT → confirm → download. Reset with
+`docker compose -f docker-compose.dev.yml down`, which discards the objects (ADR-0011).
+
+**The mock does not validate signatures**, so a working upload here does *not* mean the presign
+contract is right. Both storage bugs M1 actually hit were signature-content bugs — an unsigned
+`content-type`, and a CRC32 checksum signed over an empty body — and neither would fail against this
+container. Verify that part against real R2. The full reasoning is in `docker-compose.dev.yml`, which
+also records why the image is Adobe S3Mock (Apache-2.0) rather than MinIO (AGPL-3.0).
 
 **Background jobs are off by default.** `ENABLE_SCHEDULED_JOBS` is unset, so the reminder scan is
 registered but never fires on its own — a schedule means something must always be running, which is

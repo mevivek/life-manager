@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, Outlet, useRouterState } from '@tanstack/react-router'
+import { OfflineNotice } from '@/components/OfflineNotice'
 import { TabBar } from '@/components/TabBar'
 import { Alert } from '@/components/ui/alert'
 
@@ -59,6 +60,10 @@ function RootLayout() {
   return (
     <>
       <Shell withChrome={withChrome}>
+        {/* Above the outlet, so the staleness warning ADR-0013 requires is the first thing on the
+            screen rather than something to scroll to. Renders nothing while online, and only on
+            chrome routes — a sign-in form shows no cached data to be stale. */}
+        {withChrome && <OfflineNotice />}
         <Outlet />
       </Shell>
       {withChrome && <TabBar />}

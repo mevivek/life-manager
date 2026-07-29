@@ -1,0 +1,60 @@
+# Local S3-compatible storage, so the whole Documents flow — presign, PUT, confirm, download —
+# runs with no Cloudflare account and no cloud credentials.
+#
+#     docker compose -f docker-compose.dev.yml up -d
+#
+# Then point the API at it by setting the four R2_* variables plus R2_ENDPOINT in `apps/api/.env`.
+# The exact values are in README.md § Running the file path locally.
+#
+# ── Why this file is `.dev.yml` and not `docker-compose.yml` ──
+#
+# Nothing in CI or production reads it. `pnpm test` gets its Postgres from testcontainers
+# (ADR-0018), production storage is Cloudflare R2 (ADR-0008), and this container exists only so a
+# developer can exercise the upload path. The explicit `-f` is a reminder of that.
+#
+# ── ⚠️  This mock does NOT validate signatures ⚠️ ──
+#
+# S3Mock accepts presigned URLs without checking the signature, the expiry, or the HTTP verb. It is
+# therefore fine for building UI against, and **worthless for verifying the presign contract**. That
+# distinction is not academic here — both storage bugs M1 actually hit were signature-content bugs:
+#
+#   1. the AWS SDK did not sign `content-type`, which made the mime allowlist advisory rather than
+#      enforced (fixed with `signableHeaders` in `apps/api/src/lib/storage.ts`), and
+#   2. the SDK signed a CRC32 checksum of an empty body into the URL, which real R2 rejects
+#      (fixed with `requestChecksumCalculation: 'WHEN_REQUIRED'`).
+#
+# A green upload against this container would have told you nothing about either. So: iterate here,
+# but re-verify the presign contract against real R2 before believing it. The one prior end-to-end
+# verification was done against MinIO, which does validate signatures — MinIO is not used here
+# because its server is AGPL-3.0, which is on the prohibited-licence list.
+#
+# S3Mock is Apache-2.0 (verified at github.com/adobe/S3Mock).
+
+services:
+  storage:
+    # Pinned deliberately. `:latest` would let a mock upgrade change behaviour under a session that
+    # is trying to work out whether its own change broke something.
+    image: adobe/s3mock:5.1.0
+    container_name: life-manager-storage
+    ports:
+      # 9090 is S3Mock's HTTP port. The API talks to it over plain HTTP via R2_ENDPOINT; there is no
+      # TLS here and there should not be — a self-signed cert would mean disabling verification in
+      # the S3 client, which is a habit worth not forming.
+      - '9090:9090'
+    environment:
+      # Created at startup, so nothing has to run `mb` before the first upload. Must match R2_BUCKET.
+      initialBuckets: life-manager-dev
+      # Without this the mock logs every request body, which for a file upload means megabytes of
+      # base64 in the terminal.
+      debug: 'false'
+    # Objects live in the container's filesystem and are GONE when it is removed. That is deliberate:
+    # `docker compose -f docker-compose.dev.yml down` is the reset, matching ADR-0011's pre-v1
+    # position that local data may be wiped rather than migrated. Add a volume if you want otherwise.
+    healthcheck:
+      # S3Mock answers ListBuckets on `/` once it is up. `start_period` covers JVM boot, which is a
+      # second or two — without it the first compose run reports unhealthy before it has started.
+      test: ['CMD', 'curl', '-f', 'http://localhost:9090/']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

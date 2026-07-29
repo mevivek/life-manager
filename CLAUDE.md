@@ -54,11 +54,20 @@ What M1 added, so you do not go looking for it: `documents`, `document_files`, `
 `push_subscriptions`, `idempotency_keys`; full-text search; presigned R2 upload/download with
 versioning; Web Push; three pg-boss handlers; cursor pagination; `Idempotency-Key`.
 
-What still does **not** exist: OCR and previews (M2), offline read caching (M2), password reset,
-Playwright, and R2 object deletion. **`ENABLE_SCHEDULED_JOBS` is off**, so the reminder scan is
-registered and manually triggerable but has never run unattended. Several of these look like missing
-conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D36 with triggers, so check there
+**The offline read cache from [ADR-0013](docs/decisions/0013-read-only-offline-v1.md) is built** —
+pulled ahead of M1's "done when" by an explicit product call, so the app can be iterated on without
+provisioning R2 or VAPID. The Query cache persists to IndexedDB via `apps/web/src/lib/persister.ts`;
+there is still deliberately **no `runtimeCaching` for the API** in the service worker, because two
+caches of Tier 0 data would mean two purge paths. Three things about it are easy to undo by accident:
+`mutations.networkMode: 'always'` (without it TanStack Query *queues* offline writes, which ADR-0013
+rejects), `shouldDehydrateMutation: () => false`, and the sign-out/sign-in purge in
+`apps/web/src/lib/session.ts`.
+
+What still does **not** exist: OCR and previews (M2), offline *file* access (ruled out for v1 by
+ADR-0013), password reset, Playwright, and R2 object deletion. **`ENABLE_SCHEDULED_JOBS` is off**, so
+the reminder scan is registered and manually triggerable but has never run unattended. Several of
+these look like missing conventions rather than deferred work — they are in the
+[debt register](docs/product/review.md#3-debt-register) as D1–D40 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -91,6 +100,7 @@ Four things worth knowing before you touch anything:
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes. **Look at it at 390px before calling it done** (debt D37) |
+| **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0013`](docs/decisions/0013-read-only-offline-v1.md) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it, and a *mutation* must never be |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |

@@ -62,6 +62,32 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The request never reached the server — no connection, DNS failure, or a dead uplink.
+ *
+ * Distinct from `ApiError`, which means the server answered and said no. The distinction is what
+ * lets `query-client.ts` skip retrying this (retrying an offline request just delays the message by
+ * a few seconds) and lets the UI say something true about whether a write landed.
+ *
+ * [ADR-0013](../../../../docs/decisions/0013-read-only-offline-v1.md) is the reason the write
+ * wording is so definite: writes are never queued, so "not saved" is a fact and not a guess. The ADR
+ * rejects the alternative outright — "a queued write that appears to succeed and then loses data is
+ * worse than a write that plainly failed".
+ */
+export class OfflineError extends Error {
+  constructor(kind: 'read' | 'write', cause?: unknown) {
+    super(
+      kind === 'write'
+        ? 'No connection — your change was not saved. Reconnect and try again.'
+        : 'No connection — could not reach the server.',
+      // Preserved rather than discarded: security-model.md §6 forbids swallowing errors, and the
+      // underlying TypeError is the only thing that distinguishes DNS from TLS from a dropped uplink.
+      { cause },
+    )
+    this.name = 'OfflineError'
+  }
+}
+
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
@@ -80,20 +106,28 @@ async function request<T>(
 ): Promise<T> {
   const { method = 'GET', body, idempotencyKey } = options
 
-  const response = await fetch(`${API_ORIGIN}${path}`, {
-    method,
-    /**
-     * Non-negotiable. The session is an httpOnly cookie (security-model.md §2), so without
-     * this the browser sends no credentials and every authenticated call is a silent 401.
-     */
-    credentials: 'include',
-    headers: {
-      accept: 'application/json',
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(idempotencyKey === undefined ? {} : { 'idempotency-key': idempotencyKey }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_ORIGIN}${path}`, {
+      method,
+      /**
+       * Non-negotiable. The session is an httpOnly cookie (security-model.md §2), so without
+       * this the browser sends no credentials and every authenticated call is a silent 401.
+       */
+      credentials: 'include',
+      headers: {
+        accept: 'application/json',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(idempotencyKey === undefined ? {} : { 'idempotency-key': idempotencyKey }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+  } catch (cause) {
+    // `fetch` rejects — rather than resolving with a status — when the request never reached the
+    // server at all. Raw, that surfaces to the user as "Failed to fetch", which names the mechanism
+    // instead of the problem. ADR-0013 requires an offline write to fail *plainly*, so translate it.
+    throw new OfflineError(method === 'GET' ? 'read' : 'write', cause)
+  }
 
   if (!response.ok) throw await toApiError(response)
 
@@ -222,12 +256,19 @@ export const api = {
      * declared at presign time or storage rejects the upload.
      */
     upload: async (uploadUrl: string, file: File): Promise<void> => {
-      const response = await fetch(uploadUrl, {
-        method: 'PUT',
-        credentials: 'omit',
-        headers: { 'content-type': file.type },
-        body: file,
-      })
+      let response: Response
+      try {
+        response = await fetch(uploadUrl, {
+          method: 'PUT',
+          credentials: 'omit',
+          headers: { 'content-type': file.type },
+          body: file,
+        })
+      } catch (cause) {
+        // Needs its own translation: this `fetch` bypasses `request()` entirely, so without it an
+        // offline upload is the one write that still reports "Failed to fetch".
+        throw new OfflineError('write', cause)
+      }
 
       if (!response.ok) {
         // Storage errors are XML, not problem+json, so there is nothing useful to parse. Surface
