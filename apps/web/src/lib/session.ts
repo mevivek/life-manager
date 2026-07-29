@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { meQueryKey } from '@/features/spaces/useMe'
 import { signOut } from './auth-client'
+import * as outbox from './outbox'
 import { purgePersistedCache } from './persister'
 
 /**
@@ -30,7 +31,11 @@ export async function endSession(queryClient: QueryClient): Promise<void> {
     await signOut()
   } finally {
     queryClient.clear()
-    await purgePersistedCache()
+    // The outbox goes too. A pending write belongs to the session that made it, and replaying one
+    // user's queued edit under the next user's session would be both wrong and confusing — the
+    // server would either refuse it as cross-space (404, per invariant 4) or, worse, apply it if the
+    // two shared a space.
+    await Promise.all([purgePersistedCache(), outbox.clear()])
   }
 }
 
@@ -44,7 +49,7 @@ export async function endSession(queryClient: QueryClient): Promise<void> {
  * document lists would render from the restored cache while their refetch was still in flight.
  */
 export async function beginSession(queryClient: QueryClient): Promise<void> {
-  await purgePersistedCache()
+  await Promise.all([purgePersistedCache(), outbox.clear()])
   queryClient.clear()
   await queryClient.invalidateQueries({ queryKey: meQueryKey })
 }

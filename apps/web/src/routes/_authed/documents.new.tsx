@@ -30,6 +30,21 @@ function NewDocumentPage() {
             onCancel={() => void navigate({ to: '/documents' })}
             onSubmit={async (values) => {
               const created = await create.mutateAsync(values)
+
+              /**
+               * A document created offline has no server id yet — it is sitting in the outbox waiting
+               * for a connection (ADR-0024), and its id is assigned when the create is replayed. So
+               * there is no detail page to navigate to, and inventing a route from a temporary id
+               * would 404.
+               *
+               * Back to the list instead, where the outbox banner accounts for it. TypeScript forces
+               * this branch to exist rather than letting `created.id` be `undefined` at runtime.
+               */
+              if ('queued' in created) {
+                await navigate({ to: '/documents' })
+                return
+              }
+
               await navigate({
                 to: '/documents/$documentId',
                 params: { documentId: created.id },

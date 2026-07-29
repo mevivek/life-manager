@@ -199,8 +199,24 @@ export const api = {
         idempotencyKey,
       }),
 
-    update: (id: string, patch: DocumentUpdate): Promise<Document> =>
-      request(`/api/v1/documents/${id}`, documentSchema, { method: 'PATCH', body: patch }),
+    /**
+     * `idempotencyKey` is what makes an outbox replay safe (ADR-0024).
+     *
+     * Without it, a PATCH that SUCCEEDED on the server but whose response was lost — a dropped
+     * connection at exactly the wrong moment, which is the normal case for a phone — would be
+     * replayed with the version it originally read. The server has since bumped that version, so the
+     * replay gets a 409 and the user is shown a conflict against *their own* successful write.
+     *
+     * With the key, the second attempt replays the cached response instead. The API honours the
+     * header on every mutating method (`lib/idempotency.plugin.ts`), so this is purely a matter of
+     * the client bothering to send one.
+     */
+    update: (id: string, patch: DocumentUpdate, idempotencyKey?: string): Promise<Document> =>
+      request(`/api/v1/documents/${id}`, documentSchema, {
+        method: 'PATCH',
+        body: patch,
+        idempotencyKey,
+      }),
 
     remove: (id: string): Promise<null> =>
       request(`/api/v1/documents/${id}`, noContentSchema, { method: 'DELETE' }),
