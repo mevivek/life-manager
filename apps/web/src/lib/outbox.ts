@@ -46,7 +46,28 @@ type UpdateEntry = {
   patch: DocumentUpdate
 }
 
-export type OutboxEntry = (CreateEntry | UpdateEntry) & {
+/**
+ * A queued file upload — the offline photo capture from ADR-0024.
+ *
+ * The **bytes** are held here, not a presigned URL. That is what makes this work at all: a presigned
+ * URL expires, so one minted at capture time would be dead by the time the network returned. The
+ * presign happens at replay, which needs no change to ADR-0008's flow.
+ *
+ * `documentId` may be a CREATE ENTRY'S `tempId` — a photo taken of a document that was itself created
+ * offline and has no server id yet. `remapTempId` below rewrites it once the create is replayed.
+ */
+type FileUploadEntry = {
+  kind: 'file.upload'
+  documentId: string
+  blob: Blob
+  mime: string
+  sizeBytes: number
+}
+
+/** What a caller hands to `enqueue`; the queue adds the bookkeeping fields below. */
+export type NewOutboxEntry = CreateEntry | UpdateEntry | FileUploadEntry
+
+export type OutboxEntry = NewOutboxEntry & {
   id: string
   /** Generated once, at enqueue, and reused by every replay attempt. Rule 2. */
   idempotencyKey: string
@@ -54,6 +75,27 @@ export type OutboxEntry = (CreateEntry | UpdateEntry) & {
   status: 'pending' | 'conflict'
   /** Set when `status` is `'conflict'`, for the UI to explain what happened. */
   error?: string
+}
+
+/**
+ * Change notification, so the UI can show a queue it does not own.
+ *
+ * The queue lives in IndexedDB rather than in React state — deliberately, since it has to survive a
+ * reload — which means nothing re-renders when it changes. Listeners are how the pending count and
+ * the conflict banner stay honest without polling.
+ */
+type Listener = () => void
+const listeners = new Set<Listener>()
+
+export function subscribe(listener: Listener): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function notify(): void {
+  for (const listener of listeners) listener()
 }
 
 /** Entries are replayed in the order they were queued, so two edits to one document compose. */
@@ -64,9 +106,10 @@ async function read(): Promise<OutboxEntry[]> {
 async function write(entries: OutboxEntry[]): Promise<void> {
   if (entries.length === 0) {
     await del(OUTBOX_KEY)
-    return
+  } else {
+    await set(OUTBOX_KEY, entries)
   }
-  await set(OUTBOX_KEY, entries)
+  notify()
 }
 
 /**
@@ -78,7 +121,7 @@ function newId(): string {
   return crypto.randomUUID()
 }
 
-export async function enqueue(entry: CreateEntry | UpdateEntry): Promise<OutboxEntry> {
+export async function enqueue(entry: NewOutboxEntry): Promise<OutboxEntry> {
   const queued: OutboxEntry = {
     ...entry,
     id: newId(),
@@ -110,6 +153,34 @@ export async function remove(id: string): Promise<void> {
 /** Deleted wholesale on sign-out, alongside the query cache. */
 export async function clear(): Promise<void> {
   await del(OUTBOX_KEY)
+  notify()
+}
+
+/**
+ * Re-queues a conflicted entry against a newer version, for the user's "keep my version" choice.
+ *
+ * **This is a deliberate overwrite, and that is the point.** ADR-0024 forbids resolving a conflict
+ * *automatically*; it does not forbid the user deciding. They have been shown both values, so
+ * applying theirs on top is an informed choice rather than silent data loss — which is the entire
+ * difference between this and the last-write-wins design the ADR rejected.
+ *
+ * A fresh `idempotencyKey`, because this is a NEW logical operation. Reusing the old key would make
+ * the server replay the original 409 response instead of considering the retry.
+ */
+export async function retryWithVersion(id: string, version: number): Promise<void> {
+  const entries = await read()
+  await write(
+    entries.map((entry) => {
+      if (entry.id !== id || entry.kind !== 'document.update') return entry
+      return {
+        ...entry,
+        patch: { ...entry.patch, version },
+        idempotencyKey: newId(),
+        status: 'pending' as const,
+        error: undefined,
+      }
+    }),
+  )
 }
 
 async function markConflict(id: string, message: string): Promise<void> {
@@ -121,12 +192,57 @@ async function markConflict(id: string, message: string): Promise<void> {
   )
 }
 
+/**
+ * Rewrites queued entries that referred to a document by its temporary id.
+ *
+ * Without this, "photograph a document you also created offline" — the actual use case ADR-0024 was
+ * reopened for — could not work: the upload would be addressed to a `tempId` the server has never
+ * heard of and would 404 on presign, surfacing as a conflict the user cannot possibly resolve.
+ */
+async function remapTempId(tempId: string, realId: string): Promise<void> {
+  const entries = await read()
+  if (!entries.some((entry) => entry.kind !== 'document.create' && entry.documentId === tempId)) {
+    return
+  }
+  await write(
+    entries.map((entry) =>
+      entry.kind !== 'document.create' && entry.documentId === tempId
+        ? { ...entry, documentId: realId }
+        : entry,
+    ),
+  )
+}
+
 /** Sends one entry. Split out so `replay` reads as the policy and this as the mechanism. */
 async function send(entry: OutboxEntry): Promise<void> {
   if (entry.kind === 'document.create') {
-    await api.documents.create(entry.input, entry.idempotencyKey)
+    const created = await api.documents.create(entry.input, entry.idempotencyKey)
+    // Anything queued against the placeholder id now points at the real document.
+    await remapTempId(entry.tempId, created.id)
     return
   }
+
+  if (entry.kind === 'file.upload') {
+    /**
+     * The full ADR-0008 dance, at replay time: presign → PUT the bytes → confirm.
+     *
+     * `File` rather than the raw `Blob`, because `api.files.upload` sends `file.type` as the
+     * `content-type` header and the presigned URL signs that header — a mismatch is rejected by
+     * storage. A `Blob` read back out of IndexedDB has a `type` but no name, so it is rewrapped.
+     */
+    const presigned = await api.files.presignUpload(entry.documentId, {
+      mime: entry.mime as Parameters<typeof api.files.presignUpload>[1]['mime'],
+      size_bytes: entry.sizeBytes,
+      make_primary: true,
+    })
+    await api.files.upload(
+      presigned.upload_url,
+      new File([entry.blob], 'capture', { type: entry.mime }),
+    )
+    await api.files.confirm(entry.documentId, { file_id: presigned.file_id })
+    return
+  }
+
   await api.documents.update(entry.documentId, entry.patch, entry.idempotencyKey)
 }
 
@@ -156,8 +272,19 @@ export type ReplayResult = {
 export async function replay(): Promise<ReplayResult> {
   const result: ReplayResult = { sent: 0, conflicted: 0, interrupted: false }
 
-  for (const entry of await read()) {
-    if (entry.status !== 'pending') continue
+  /**
+   * Iterate over IDS and re-read each entry, rather than looping over one snapshot.
+   *
+   * A snapshot loop holds stale objects: `send()` can rewrite *later* entries — that is exactly what
+   * `remapTempId` does when a create resolves a `tempId` — and a queued photo would then be uploaded
+   * against the placeholder id it had before the create ran, 404 on presign, and surface as a conflict
+   * the user cannot resolve. Found by the test that queues a create and a photo together.
+   */
+  const ids = (await read()).map((entry) => entry.id)
+
+  for (const id of ids) {
+    const entry = (await read()).find((candidate) => candidate.id === id)
+    if (entry === undefined || entry.status !== 'pending') continue
 
     try {
       await send(entry)

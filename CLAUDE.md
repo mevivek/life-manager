@@ -12,7 +12,7 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-test build` are green and **137 tests pass with zero skipped** against a real Postgres. Deployed
+test build` are green and **168 tests pass with zero skipped** against a real Postgres. Deployed
 2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
 **R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
 deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
@@ -59,29 +59,41 @@ pulled ahead of M1's "done when" by an explicit product call, so the app can be 
 provisioning R2 or VAPID. The Query cache persists to IndexedDB via `apps/web/src/lib/persister.ts`;
 there is still deliberately **no `runtimeCaching` for the API** in the service worker, because two
 caches of Tier 0 data would mean two purge paths. Three things about it are easy to undo by accident:
-`mutations.networkMode: 'always'` (without it TanStack Query *queues* offline writes, which ADR-0013
-rejects), `shouldDehydrateMutation: () => false`, and the sign-out/sign-in purge in
-`apps/web/src/lib/session.ts`.
+`mutations.networkMode: 'always'` (without it TanStack Query pauses and silently replays offline
+writes, bypassing the outbox entirely), `shouldDehydrateMutation: () => false`, and the
+sign-out/sign-in purge in `apps/web/src/lib/session.ts`.
 
-What still does **not** exist: OCR and previews (M2), offline *file* access (ruled out for v1 by
-ADR-0013), password reset, Playwright, and R2 object deletion. **`ENABLE_SCHEDULED_JOBS` is off**, so
+**Offline WRITES exist too, via an outbox** ([ADR-0024](docs/decisions/0024-offline-writes-outbox.md),
+superseding 0013's read-only stance). Edits and captures queue in IndexedDB and replay on reconnect;
+a stale write is refused with **409** and surfaced at `/outbox` for the user to decide, never merged.
+**`DELETE` is deliberately not queued** — it has no version precondition (debt D41), so a queued
+delete could destroy a newer edit.
+
+What still does **not** exist: OCR and previews (M2), offline *download* of files, password reset,
+Playwright, and R2 object deletion. **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D40 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D41 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
 
-**Do not start M2, and do not write more features.** M1's code is finished; what is missing is
-deployment and two sets of credentials. Full list in [roadmap.md](docs/roadmap.md) § Next actions §4.
-In order: deploy · provision R2 · provision VAPID · **rotate the Neon credential (D18)** · put real
-documents in · switch `ENABLE_SCHEDULED_JOBS=true` (this fires D8) · redo lens 4 of the M1 review.
+**What is missing is credentials and use, not code.** Run `./scripts/provision.sh <r2|vapid|neon>` —
+it prompts, so no secret reaches a transcript. Full list in [roadmap.md](docs/roadmap.md) § Next
+actions §4. In order: provision R2 (**and its bucket CORS policy**, README § Provisioning R2 — the
+browser PUTs straight to R2, so without it every upload fails while the API looks healthy) · provision
+VAPID · **rotate the Neon credential (D18)** · put real documents in · switch
+`ENABLE_SCHEDULED_JOBS=true` (this fires D8) · redo lens 4 of the M1 review.
+
+**To iterate without any cloud account:** `docker compose -f docker-compose.dev.yml up -d` gives a
+local S3, so the whole upload path runs. It does **not** validate signatures (D39), so it cannot
+verify the presign contract.
 
 Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   136/0 is the current green.
+   168/0 is the current green.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
    [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.

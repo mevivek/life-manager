@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, Outlet, useRouterState } from '@tanstack/react-router'
 import { OfflineNotice } from '@/components/OfflineNotice'
+import { OutboxNotice } from '@/components/OutboxNotice'
 import { TabBar } from '@/components/TabBar'
 import { Alert } from '@/components/ui/alert'
 
@@ -64,6 +65,9 @@ function RootLayout() {
             screen rather than something to scroll to. Renders nothing while online, and only on
             chrome routes — a sign-in form shows no cached data to be stale. */}
         {withChrome && <OfflineNotice />}
+        {/* Separate from OfflineNotice: a queue can hold unsent writes, or a conflict needing a
+            decision, long after the connection came back. Being online says nothing about it. */}
+        {withChrome && <OutboxNotice />}
         <Outlet />
       </Shell>
       {withChrome && <TabBar />}

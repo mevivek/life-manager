@@ -7,6 +7,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, OfflineError } from '@/lib/api'
 import * as outbox from '@/lib/outbox'
+import { canQueueBytes, requestPersistentStorage } from '@/lib/storage-quota'
 
 /**
  * TanStack Query hooks for Documents. conventions/code.md §9: server state lives in Query and is
@@ -145,17 +146,49 @@ export function useUploadFile(documentId: string) {
 
   return useMutation({
     mutationFn: async (file: File) => {
-      const presigned = await api.files.presignUpload(documentId, {
-        // The mime is validated server-side against the allowlist; this cast is the browser's own
-        // reported type, and a value outside the allowlist comes back as a 400.
-        mime: file.type as PresignUploadMime,
-        size_bytes: file.size,
-        make_primary: true,
-      })
+      /**
+       * Offline capture (ADR-0024): the bytes are queued and uploaded on reconnect.
+       *
+       * The quota check happens BEFORE anything is stored, and a refusal is a thrown error rather
+       * than a silent fallback. ADR-0024 is unambiguous about the ordering of bad outcomes here —
+       * refusing a photo is a poor experience, accepting one and losing it to eviction is the worst
+       * bug available. See `lib/storage-quota.ts`.
+       */
+      const attemptUpload = async () => {
+        const presigned = await api.files.presignUpload(documentId, {
+          // The mime is validated server-side against the allowlist; this cast is the browser's own
+          // reported type, and a value outside the allowlist comes back as a 400.
+          mime: file.type as PresignUploadMime,
+          size_bytes: file.size,
+          make_primary: true,
+        })
 
-      await api.files.upload(presigned.upload_url, file)
+        await api.files.upload(presigned.upload_url, file)
 
-      return api.files.confirm(documentId, { file_id: presigned.file_id })
+        return api.files.confirm(documentId, { file_id: presigned.file_id })
+      }
+
+      try {
+        return await attemptUpload()
+      } catch (error) {
+        if (!(error instanceof OfflineError)) throw error
+
+        const room = await canQueueBytes(file.size)
+        if (!room.ok) throw new Error(room.reason)
+
+        // Asked for only once we know we are actually about to hold bytes — asking on every page
+        // load would be a permission prompt for a capability most sessions never use.
+        await requestPersistentStorage()
+
+        await outbox.enqueue({
+          kind: 'file.upload',
+          documentId,
+          blob: file,
+          mime: file.type,
+          sizeBytes: file.size,
+        })
+        return { queued: true } as const
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })
