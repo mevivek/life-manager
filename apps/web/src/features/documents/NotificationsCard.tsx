@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import { ExpiryGlyph, formatDate } from './ExpiryStatus'
 
 /**
- * The push ask, and the three ways push is not available. ADR-0024 §6.
+ * The push ask, and the three ways push is not available. ADR-0025 §6.
  *
  * This is the half of M1's "done when" that lives in the client: *"your phone notifies you before one
  * expires."* Without a subscription the scan job runs, finds the reminder, and has nowhere to send it

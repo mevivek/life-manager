@@ -266,7 +266,7 @@ export const api = {
      * reports real progress in every browser this app runs in.
      *
      * A percentage is worth this: a 6MB scan over a phone connection is the app's slowest operation by
-     * an order of magnitude, and a spinner with no number is indistinguishable from a hang. ADR-0024
+     * an order of magnitude, and a spinner with no number is indistinguishable from a hang. ADR-0025
      * §5 draws the bar; a faked animation would be a lie about the one thing the user is waiting on.
      */
     upload: (

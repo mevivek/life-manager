@@ -26,7 +26,7 @@ export default defineConfig({
         short_name: 'life',
         description: 'Documents, assets, money, people, notes — in one place.',
         /**
-         * The Ledger paper (ADR-0024), matching `:root` in `styles.css`.
+         * The Ledger paper (ADR-0025), matching `:root` in `styles.css`.
          *
          * A manifest carries exactly one of each, so it cannot follow the theme. `background_color`
          * is what paints the launch splash before any CSS exists, so it has to agree with the CSS

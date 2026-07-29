@@ -26,7 +26,7 @@
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
- *  The Ledger design system — ADR-0024. This file is the token layer.
+ *  The Ledger design system — ADR-0025. This file is the token layer.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════
  *
  * Tailwind v4: the theme lives here, in CSS, under `@theme`. There is no tailwind.config.js and no
@@ -37,7 +37,7 @@
  * There is no `--red-500` and no `--brand`. Every colour is named for the job it does, because the
  * point of view is that colour is spent ONLY on status: a document's relationship to its expiry
  * date. Introducing a decorative accent is the one change that would break the system rather than
- * extend it — see ADR-0024 §2.
+ * extend it — see ADR-0025 §2.
  *
  * ── Both themes carry every name ──
  *

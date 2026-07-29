@@ -1,4 +1,4 @@
-# ADR-0024: The Ledger design system
+# ADR-0025: The Ledger design system
 
 - **Status:** accepted
 - **Date:** 2026-07-29

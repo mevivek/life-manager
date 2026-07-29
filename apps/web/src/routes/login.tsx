@@ -7,7 +7,7 @@ import { beginSession } from '@/lib/session'
 export const Route = createFileRoute('/login')({ component: LoginPage })
 
 /**
- * The first screen a new person sees. ADR-0024 draws it, and the shape is the point.
+ * The first screen a new person sees. ADR-0025 draws it, and the shape is the point.
  *
  * **Not a card.** It used to be a bordered `Card` floating in the middle of the viewport, which is the
  * shape of a *dialog* — it says "one small task, then back to whatever you were doing". This is the

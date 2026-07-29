@@ -2,7 +2,7 @@
  * The app's mark: a 38px rounded square holding one short ink rule.
  *
  * A **ledger line in a box** — which is the whole product in two shapes, and the only piece of
- * ornament in the design system (ADR-0024). It is deliberately not a logotype, an icon from a set, or
+ * ornament in the design system (ADR-0025). It is deliberately not a logotype, an icon from a set, or
  * a document glyph: this app is a register of dates, and a line in a box says that where a page icon
  * would say "file cabinet".
  *

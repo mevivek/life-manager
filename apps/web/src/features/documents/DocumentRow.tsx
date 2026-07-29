@@ -10,7 +10,7 @@ import {
 } from './ExpiryStatus'
 
 /**
- * One document, as a row. ADR-0024 §7 — the component the whole archive is made of.
+ * One document, as a row. ADR-0025 §7 — the component the whole archive is made of.
  *
  * Geometry: a 14px glyph column · the title in sans 500/16 · status and meta **baseline-aligned**
  * beneath it · an optional dashed page glyph when there is no scan. `min-h-row` is 72px, and it is a

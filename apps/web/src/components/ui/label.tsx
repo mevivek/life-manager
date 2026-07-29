@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
  * A field label, in the system's eyebrow type: 11px mono, uppercase, `.09em` tracked, `--ink-3`.
  *
  * Mono for labels and sans for content is the split the whole design rests on — *the machine's
- * words in mono, the human's in serif, the interface's in sans* (ADR-0024 §3). A label is the
+ * words in mono, the human's in serif, the interface's in sans* (ADR-0025 §3). A label is the
  * machine naming a slot, so it is mono, and at 11px uppercase it reads as a caption rather than
  * competing with the value beneath it.
  *

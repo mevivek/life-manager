@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 
 /**
- * The expiry ladder — five states, readable in greyscale. ADR-0024 §2.
+ * The expiry ladder — five states, readable in greyscale. ADR-0025 §2.
  *
  * This is the one piece of UI that carries the domain's whole point: *is it still valid, and when do
  * I need to do something about it?* So it earns colour where the rest of the app does not.
@@ -278,7 +278,7 @@ export function ExpiryStatus({
 }
 
 /**
- * The accessible name for a row, per ADR-0024 §8: *"Passport — expires in 6 weeks, 12 September
+ * The accessible name for a row, per ADR-0025 §8: *"Passport — expires in 6 weeks, 12 September
  * 2026"*. Both the relative distance and the absolute date, because a screen-reader user gets no
  * `title` tooltip and no second glance at the glyph.
  */

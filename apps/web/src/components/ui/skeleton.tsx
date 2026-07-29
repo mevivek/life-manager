@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
  * and vanishing at different moments, each one changing the page height as its real content arrived.
  * A skeleton of roughly the right size means the layout is settled before the data lands.
  *
- * **First paint only.** ADR-0024 §7: a *refresh* keeps the stale list and dims nothing. Replacing
+ * **First paint only.** ADR-0025 §7: a *refresh* keeps the stale list and dims nothing. Replacing
  * real content with shimmer on every refetch is how an app that is working looks broken.
  *
  * The shimmer is a moving gradient rather than an opacity pulse, and the keyframe lives in

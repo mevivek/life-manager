@@ -1,5 +1,5 @@
 /**
- * Light/dark resolution for the Ledger design system (ADR-0024).
+ * Light/dark resolution for the Ledger design system (ADR-0025).
  *
  * ── Why the DOM always carries an explicit `data-theme` ──
  *

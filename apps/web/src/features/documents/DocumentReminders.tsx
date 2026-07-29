@@ -10,7 +10,7 @@ import { formatDateShort } from './ExpiryStatus'
 import { useCreateReminder, useDeleteReminder } from './useDocuments'
 
 /**
- * Reminders, as chips inside the status block. ADR-0024 §6.
+ * Reminders, as chips inside the status block. ADR-0025 §6.
  *
  * ── Read-mostly, and that is the design's point ──
  *

@@ -18,7 +18,7 @@ import { ApiError } from '@/lib/api'
 import { useIssuers } from './useDocuments'
 
 /**
- * Create / edit a document. domains/documents.md §7, ADR-0024 §5.
+ * Create / edit a document. domains/documents.md §7, ADR-0025 §5.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  ONE required field, and that is a product decision — not an oversight.
@@ -185,7 +185,7 @@ export function DocumentForm({
   /**
    * Save is enabled from the FIRST character and dims only at zero.
    *
-   * ADR-0024 §5 counts this into the capture budget: a Save that stays disabled until the whole form
+   * ADR-0025 §5 counts this into the capture budget: a Save that stays disabled until the whole form
    * validates makes the user look at the button to find out whether they are finished.
    */
   const title = watch('title')
@@ -256,7 +256,7 @@ export function DocumentForm({
         <div className="flex flex-col gap-3.5 pt-0.5">
           <div className="flex flex-col gap-1.5">
             {/*
-              A wrapping row of pills, NOT a `<select>` — ADR-0024 §7. Six options on a 390px screen
+              A wrapping row of pills, NOT a `<select>` — ADR-0025 §7. Six options on a 390px screen
               are better shown than hidden behind an OS wheel the user has to scroll past
               "Certificate" to reach the end. `Controller` rather than `register`, because a chip row
               is not a native input and there is nothing for `register` to bind to.

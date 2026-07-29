@@ -10,7 +10,7 @@ import { extendTailwindMerge } from 'tailwind-merge'
  *
  * `text-` is ambiguous in Tailwind: `text-red-500` is a colour and `text-lg` is a font size. Out of
  * the box, tailwind-merge resolves that by recognising t-shirt sizes (`sm`, `lg`, `2xl`) as sizes and
- * treating **everything else as a colour**. The Ledger theme (ADR-0024) names its scale semantically
+ * treating **everything else as a colour**. The Ledger theme (ADR-0025) names its scale semantically
  * — `text-row`, `text-body`, `text-meta` — so none of them look like a size, and all of them landed
  * in the colour group alongside `text-ink` and `text-onink`.
  *

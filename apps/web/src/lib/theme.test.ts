@@ -8,7 +8,7 @@ import {
 } from './theme'
 
 /**
- * Theme resolution. ADR-0024 §2.
+ * Theme resolution. ADR-0025 §2.
  *
  * Worth testing rather than eyeballing, because the failure modes are all silent: a preference that
  * does not round-trip means the app forgets the user's choice on every launch, and a resolution that

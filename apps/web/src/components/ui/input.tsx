@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * A text field. ADR-0024 §7.
+ * A text field. ADR-0025 §7.
  *
  * 52px tall (`--field-h`), 10px radius, 1px `--rule-2`, and **16px text as a hard floor** — below
  * 16px iOS Safari zooms the whole page when the field takes focus, which on a fixed layout looks

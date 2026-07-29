@@ -43,7 +43,7 @@ describe('Sheet', () => {
 
   it('focuses the first field on open, which is what the capture budget depends on', async () => {
     render(<Fixture />)
-    // ADR-0024 §5: "the field is focused before the user decides anything, and the keyboard is already
+    // ADR-0025 §5: "the field is focused before the user decides anything, and the keyboard is already
     // up." Without this the sheet costs an extra tap on every single capture.
     expect(screen.getByLabelText('Title')).toHaveFocus()
   })

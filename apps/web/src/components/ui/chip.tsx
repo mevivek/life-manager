@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
  *  This is the system's `<select>`, and that is a decision rather than an omission.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
- * ADR-0024 §7: **no dropdowns anywhere.** Seven document types is a wrapping row of pills, because a
+ * ADR-0025 §7: **no dropdowns anywhere.** Seven document types is a wrapping row of pills, because a
  * native `<select>` on a 390px screen opens an OS sheet that is *worse* than the seven options
  * already being visible — it costs a tap, hides the choices behind a label, and on iOS renders a
  * wheel the user has to scroll past "Certificate" to reach "Other".

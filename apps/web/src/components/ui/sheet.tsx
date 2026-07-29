@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * A bottom sheet — one of the two things in the app that lifts (ADR-0024 §3).
+ * A bottom sheet — one of the two things in the app that lifts (ADR-0025 §3).
  *
  * ── Hand-rolled rather than a dependency ──
  *

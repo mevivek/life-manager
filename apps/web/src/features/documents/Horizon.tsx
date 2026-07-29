@@ -4,7 +4,7 @@ import { expiryAccessibleName, formatDateShort } from './ExpiryStatus'
 import type { LedgerRow } from './useLedger'
 
 /**
- * The forward timeline. ADR-0024 §1 — and the single change that makes the Now screen work.
+ * The forward timeline. ADR-0025 §1 — and the single change that makes the Now screen work.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  Why "all clear" is not enough, and this exists
@@ -21,7 +21,7 @@ import type { LedgerRow } from './useLedger'
  *
  * ── Four entries, five at 430px ──
  *
- * From ADR-0024 §8. The count is here rather than in CSS because it is a data decision — slicing in
+ * From ADR-0025 §8. The count is here rather than in CSS because it is a data decision — slicing in
  * JS is honest about showing fewer rows, whereas hiding the fifth with `display: none` would still
  * put it in the accessibility tree and in the "N more further out" arithmetic below.
  *

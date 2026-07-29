@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_authed/documents/new')({ component: NewD
  * same `DocumentForm` against the same mutation, so there is one create path with two doors.
  *
  * No `Card` wrapper and no "What is it?" sub-heading. Both were framing the form as *a form inside a
- * panel on a page*; ADR-0024 makes the screen itself the container, so the serif title sits directly
+ * panel on a page*; ADR-0025 makes the screen itself the container, so the serif title sits directly
  * above the fields.
  *
  * On success it navigates to the **detail** page rather than back to the list, because the next thing a

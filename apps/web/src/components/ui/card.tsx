@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * A panel. ADR-0024 §3: **elevation is hairline, not shadow.**
+ * A panel. ADR-0025 §3: **elevation is hairline, not shadow.**
  *
  * `--e-0` is a 1px rule and that is the whole of it — only the add sheet and the toast cast a
  * shadow, because they are the only two things temporarily on top of your life. A card with a

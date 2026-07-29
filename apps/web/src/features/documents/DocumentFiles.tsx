@@ -8,7 +8,7 @@ import { formatDateShort } from './ExpiryStatus'
 import { useDeleteFile, useDownloadFile, useMakeFilePrimary, useUploadFile } from './useDocuments'
 
 /**
- * Scans — the file versions on a document. ADR-0024 §5.
+ * Scans — the file versions on a document. ADR-0025 §5.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  The design's "Take Photo / Photo Library / Choose File" sheet is NOT built, on purpose.

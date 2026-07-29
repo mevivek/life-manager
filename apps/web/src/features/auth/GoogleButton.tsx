@@ -44,7 +44,7 @@ export function GoogleButton({ path = '/home' }: { path?: string }) {
         No "or" divider any more, and no top position.
 
         This used to sit ABOVE the email fields with a horizontal rule and the word "or" beneath it.
-        ADR-0024 puts the ink primary under the fields and this as a secondary below it: two buttons in
+        ADR-0025 puts the ink primary under the fields and this as a secondary below it: two buttons in
         two different weights already say "either of these", whereas a rule between them implies two
         sections. See the note in `SignInForm`.
       */}

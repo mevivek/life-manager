@@ -3,7 +3,7 @@ import { toLedger, useLedger } from '@/features/documents/useLedger'
 import { cn } from '@/lib/utils'
 
 /**
- * The bottom tab bar — persistent app chrome. ADR-0024 §4.
+ * The bottom tab bar — persistent app chrome. ADR-0025 §4.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  Three tabs, permanently visible, always labelled: Now · Documents · Add.
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
  * ── This replaces a plan to grow the bar one tab per domain ──
  *
  * The previous version of this file committed to `Home · Documents · Assets · Money` — the bar
- * "the shape M4 needs". **ADR-0024 reverses that, and the reversal is the load-bearing decision
+ * "the shape M4 needs". **ADR-0025 reverses that, and the reversal is the load-bearing decision
  * here, not the styling.** Domains never become tabs. When assets, money, people and the vault
  * arrive, the *middle tab's title* becomes a domain switcher: one tap on "Documents ⌄" swaps the
  * collection under the same search, the same filters, the same row. Now stays a single cross-domain
@@ -97,7 +97,7 @@ export function TabBar({ onAdd }: { onAdd: () => void }) {
        * inset was removed from `body` in styles.css.
        *
        * A hairline top border and an opaque `--paper` ground rather than the previous translucent
-       * blur. ADR-0024 §3: elevation is hairline, not shadow — and a blur behind a serif list makes
+       * blur. ADR-0025 §3: elevation is hairline, not shadow — and a blur behind a serif list makes
        * the type under it look smeared as it scrolls past.
        */
       className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper pb-[max(env(safe-area-inset-bottom),1.625rem)]"

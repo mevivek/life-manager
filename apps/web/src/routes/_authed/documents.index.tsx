@@ -9,7 +9,7 @@ import { useDocuments } from '@/features/documents/useDocuments'
 import { useLedger } from '@/features/documents/useLedger'
 
 /**
- * The archive. domains/documents.md §7, ADR-0024 §7.
+ * The archive. domains/documents.md §7, ADR-0025 §7.
  *
  * ── Filters live in the URL, not in component state ──
  *
@@ -115,7 +115,7 @@ function DocumentsPage() {
       <div className="-mx-gutter sticky top-0 z-30 border-b border-rule bg-paper px-gutter pb-3">
         <div className="flex items-baseline gap-2">
           {/*
-            No chevron beside "Documents". ADR-0024 §4: the domain switcher appears the day the second
+            No chevron beside "Documents". ADR-0025 §4: the domain switcher appears the day the second
             domain does, and drawing it now would be a control that does nothing.
           */}
           <h1 className="font-serif text-title font-normal leading-tight">Documents</h1>

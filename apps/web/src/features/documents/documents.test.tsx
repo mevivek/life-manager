@@ -147,7 +147,7 @@ describe('ExpiryStatus', () => {
   it('hides the glyph from assistive tech, because the words carry the state', () => {
     const { container } = render(<ExpiryStatus expiresOn={iso(-5)} today={TODAY} />)
     // Every glyph is aria-hidden; a screen reader announcing "square" would describe the drawing
-    // rather than the fact. ADR-0024 §8.
+    // rather than the fact. ADR-0025 §8.
     const glyphs = container.querySelectorAll('[aria-hidden="true"]')
     expect(glyphs.length).toBeGreaterThan(0)
     // ...and nothing visible-to-AT duplicates it.
@@ -173,7 +173,7 @@ describe('ExpiryStatus', () => {
 describe('the accessible name for a row', () => {
   it('carries the distance AND the absolute date', () => {
     // A screen-reader user gets no `title` tooltip and no second glance at the glyph, so the name
-    // has to say both. ADR-0024 §8 specifies this string. `TODAY` is injected, because a test that
+    // has to say both. ADR-0025 §8 specifies this string. `TODAY` is injected, because a test that
     // read the wall clock would change its answer every week.
     expect(expiryAccessibleName('Passport', '2026-09-12', TODAY)).toBe(
       'Passport — expires in 6 weeks, 12 September 2026',
@@ -218,7 +218,7 @@ describe('DocumentForm', () => {
   })
 
   it('keeps Save disabled at zero characters and enables it from the first', async () => {
-    // The capture budget (ADR-0024 §5): Save is live from character one, so the user never has to
+    // The capture budget (ADR-0025 §5): Save is live from character one, so the user never has to
     // look at the button to find out whether they are finished. A form that validates before
     // enabling would fail this.
     renderWithQuery(<DocumentForm onSubmit={vi.fn()} />)
@@ -274,7 +274,7 @@ describe('DocumentForm', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add more now (all optional)' }))
 
     /**
-     * ADR-0024 §7: no dropdowns. A `<select>` here would open an OS wheel on a 390px screen, which
+     * ADR-0025 §7: no dropdowns. A `<select>` here would open an OS wheel on a 390px screen, which
      * is worse than seven visible options — so the absence of one is the assertion.
      *
      * Asserted on the `select` ELEMENT rather than on `role="combobox"`. The issuer field is an
@@ -386,7 +386,7 @@ describe('DocumentForm', () => {
     await userEvent.type(screen.getByLabelText('Title'), 'Dishwasher receipt')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // ADR-0024 §5: "the sheet comes back with the row still in it and the server's own sentence at
+    // ADR-0025 §5: "the sheet comes back with the row still in it and the server's own sentence at
     // the top. Nothing is ever retyped." A form that reset on failure would fail this.
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.getByLabelText('Title')).toHaveValue('Dishwasher receipt')

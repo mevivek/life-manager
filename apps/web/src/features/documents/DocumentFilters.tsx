@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 /**
- * The archive's search field and filter chip row. ADR-0024 §7.
+ * The archive's search field and filter chip row. ADR-0025 §7.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  Every chip maps to a real query parameter. None of them is a mock.

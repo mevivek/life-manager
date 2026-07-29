@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 /**
  * An inline alert: tinted ground, a hairline, and — where it helps — a status glyph beside it.
  *
- * **Never a modal.** ADR-0024 §7 is explicit: nothing in this app is urgent enough to block on, and
+ * **Never a modal.** ADR-0025 §7 is explicit: nothing in this app is urgent enough to block on, and
  * a modal removes the very context that explains the message. An expired passport is not an
  * interrupt; it is a fact about a row.
  *

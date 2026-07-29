@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 export const Route = createFileRoute('/_authed/home')({ component: NowPage })
 
 /**
- * **Now** — the screen the whole design turns on. ADR-0024 §1.
+ * **Now** — the screen the whole design turns on. ADR-0025 §1.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  This collapses "what needs doing" and "what's coming" into one screen, on purpose.
@@ -66,7 +66,7 @@ function NowPage() {
         Putting both here as quiet `--ink-3` text beside the eyebrow is the smallest deviation that
         keeps them reachable: they share a line with the date rather than competing with the serif
         headline, which is what the design's hierarchy requires. A settings screen is the right home
-        for them once there are more than two — noted in ADR-0024 §10.
+        for them once there are more than two — noted in ADR-0025 §10.
       */}
       <div className="flex items-baseline justify-between gap-3">
         <Eyebrow>
@@ -278,7 +278,7 @@ function NowBody({ ledger }: { ledger: Ledger }) {
 }
 
 /**
- * The zero state. ADR-0024 §7: never an illustration — a sentence in the serif, one instruction, one
+ * The zero state. ADR-0025 §7: never an illustration — a sentence in the serif, one instruction, one
  * control.
  *
  * The comp put a live input here, making this the only empty state in the app with a field inline.

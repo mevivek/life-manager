@@ -8,7 +8,7 @@ import { ExpiryGlyph } from './ExpiryStatus'
 import { useCreateDocument } from './useDocuments'
 
 /**
- * Capture, as a bottom sheet. ADR-0024 §5.
+ * Capture, as a bottom sheet. ADR-0025 §5.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  A sheet rather than a route, and the reason is the capture budget

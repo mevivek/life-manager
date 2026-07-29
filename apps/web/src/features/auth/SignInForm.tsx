@@ -10,7 +10,7 @@ import { signIn } from '@/lib/auth-client'
 import { GoogleButton } from './GoogleButton'
 
 /**
- * Sign in. ADR-0024 draws this screen, and two things about its ORDER are deliberate.
+ * Sign in. ADR-0025 draws this screen, and two things about its ORDER are deliberate.
  *
  * **Email and password come first, Google second.** The comp puts the ink primary immediately under
  * the fields and "Continue with Google" beneath it as a secondary. The previous version had Google at

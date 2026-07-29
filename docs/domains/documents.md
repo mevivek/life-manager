@@ -243,7 +243,7 @@ Registered with pg-boss ([ADR-0012](../decisions/0012-pg-boss-background-jobs.md
 ## 7. UI surface
 
 Restyled and partly restructured by
-[ADR-0024](../decisions/0024-ledger-design-system.md) (2026-07-29). Read that first for the tokens,
+[ADR-0025](../decisions/0025-ledger-design-system.md) (2026-07-29). Read that first for the tokens,
 the expiry ladder and the navigation rule; this section records what the screens *are*.
 
 - **Now** (`/home`) — the deadline feed. Eyebrow date → a serif headline counting what needs you →
@@ -263,7 +263,7 @@ the expiry ladder and the navigation rule; this section records what the screens
   > in 30 and 90 days, recently added, documents with no file". The two expiry cards **duplicated each
   > other** — `?expiring_before=` is a single upper bound, so anything inside 30 days is also inside 90
   > and appeared in both — and "recently added" repeated whatever the others showed, because the
-  > Documents tab is already the full list. Merging them left one list; ADR-0024 then made 45 days its
+  > Documents tab is already the full list. Merging them left one list; ADR-0025 then made 45 days its
   > only boundary. **It is a display threshold, not a business rule**: reminders still fire at 90/30/7
   > server-side per `DEFAULT_LEAD_DAYS`.
   >
@@ -288,7 +288,7 @@ the expiry ladder and the navigation rule; this section records what the screens
   deliberately **not** set: with it, a phone opens the camera and *only* the camera. Progress is real
   (`XMLHttpRequest`, because `fetch` cannot report it), and too-large / unsupported / dropped-connection
   are three separate inline states on the row they belong to.
-- **The type picker is a row of pills, never a `<select>`** — ADR-0024 §7. There is no dropdown anywhere
+- **The type picker is a row of pills, never a `<select>`** — ADR-0025 §7. There is no dropdown anywhere
   in the app.
 
 ## 8. Cross-domain links

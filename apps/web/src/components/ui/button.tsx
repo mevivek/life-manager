@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * Buttons. ADR-0024 §7.
+ * Buttons. ADR-0025 §7.
  *
  * Four kinds, and the boundaries between them are meaning rather than decoration:
  *

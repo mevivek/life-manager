@@ -7,7 +7,7 @@ import { DocumentRow } from './DocumentRow'
 import { useDocuments } from './useDocuments'
 
 /**
- * The archive list. domains/documents.md §7, ADR-0024 §7.
+ * The archive list. domains/documents.md §7, ADR-0025 §7.
  *
  * Pagination is cursor-based and **append-only** — "Load 20 more" rather than numbered pages. That
  * follows from the API (conventions/api.md §4: cursors, because offsets break when rows are inserted

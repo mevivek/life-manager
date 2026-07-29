@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * The ink toast — the second of the two things that lift (ADR-0024 §3).
+ * The ink toast — the second of the two things that lift (ADR-0025 §3).
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  The design comp drew an "Undo" button here. It is deliberately not implemented.
@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
  *    is a number no job enforces.
  *
  * Shipping either would be a UI that lies, so `action` exists as a prop for when a real undo does,
- * and the delete flow does not pass one. See ADR-0024 §10 for the open item.
+ * and the delete flow does not pass one. See ADR-0025 §10 for the open item.
  */
 export function Toast({
   message,

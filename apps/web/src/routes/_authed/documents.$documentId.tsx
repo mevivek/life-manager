@@ -28,7 +28,7 @@ export const Route = createFileRoute('/_authed/documents/$documentId')({
 })
 
 /**
- * Document detail. domains/documents.md §7, ADR-0024 §7.
+ * Document detail. domains/documents.md §7, ADR-0025 §7.
  *
  * The screen is ordered by what a person came here to find out:
  *
@@ -227,7 +227,7 @@ function DocumentDetailPage() {
                 things the system does not do: a route back, and a deadline. Recoverable by someone
                 with database access is not recoverable by the user.
 
-                Uploaded files are genuinely kept, so that half is safe to say. See ADR-0024 §10.
+                Uploaded files are genuinely kept, so that half is safe to say. See ADR-0025 §10.
               */}
               Deleting hides this document and stops its reminders. The uploaded scans are kept, so
               an accidental delete is not final — but there is no undo button yet.
