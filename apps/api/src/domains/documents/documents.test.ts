@@ -94,7 +94,7 @@ describeDb('documents', () => {
       method: 'PATCH',
       url: `/api/v1/documents/${document.id}`,
       ...authAs(user),
-      payload: { expires_on: '2019-01-01' },
+      payload: { version: document.version, expires_on: '2019-01-01' },
     })
     expect(patched.statusCode).toBe(422)
   })
@@ -185,7 +185,7 @@ describeDb('documents', () => {
       method: 'PATCH',
       url: `/api/v1/documents/${document.id}`,
       ...authAs(user),
-      payload: { expires_on: '2031-01-15' },
+      payload: { version: document.version, expires_on: '2031-01-15' },
     })
 
     const detail = await app.inject({
@@ -209,7 +209,7 @@ describeDb('documents', () => {
       method: 'PATCH',
       url: `/api/v1/documents/${document.id}`,
       ...authAs(user),
-      payload: { expires_on: null },
+      payload: { version: document.version, expires_on: null },
     })
 
     const detail = await app.inject({
@@ -247,6 +247,94 @@ describeDb('documents', () => {
 
   // ── Rule 12 / invariant 4: cross-space is 404, never 403 ─────────────────
 
+  // ── ADR-0024: the version precondition ───────────────────────────────────
+
+  it('ADR-0024: bumps the version on every successful patch', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+    expect(document.version).toBe(1)
+
+    const first = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, title: 'Renamed once' },
+    })
+    expect(first.statusCode).toBe(200)
+    expect(first.json().version).toBe(2)
+
+    // The new version is what the next write must present — chaining proves the counter advances
+    // rather than merely being non-zero once.
+    const second = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: 2, title: 'Renamed twice' },
+    })
+    expect(second.statusCode).toBe(200)
+    expect(second.json().version).toBe(3)
+  })
+
+  it('ADR-0024: refuses a stale patch with 409 and leaves the record untouched', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+
+    // Two edits built against the SAME version — the offline case exactly: one write left the
+    // outbox, the other was made on another device first.
+    const winner = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, title: 'Written on the laptop' },
+    })
+    expect(winner.statusCode).toBe(200)
+
+    const loser = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, title: 'Written on the phone' },
+    })
+
+    // 409, not 200 — conventions/api.md §91 reserves it for exactly "version mismatch".
+    expect(loser.statusCode).toBe(409)
+    expect(loser.headers['content-type']).toContain('application/problem+json')
+    // The current version is in the message so the client can re-read without guessing.
+    expect(loser.json().detail).toContain('version')
+
+    // The assertion that matters: the losing write left NOTHING behind. This is the whole point of
+    // ADR-0024 — the alternative design silently kept 'Written on the phone'.
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+    expect(detail.json().title).toBe('Written on the laptop')
+    expect(detail.json().version).toBe(2)
+  })
+
+  it('ADR-0024: a stale patch on a deleted document is 404, not 409', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, title: 'Too late' },
+    })
+
+    // Both branches of the repository's `null` return are reachable, and they must not be confused:
+    // "gone" is 404 and the client should stop, "moved on" is 409 and the client should re-read.
+    expect(patched.statusCode).toBe(404)
+  })
+
   it('rule 12: every document endpoint answers 404 across spaces, never 403', async () => {
     const { alice, bob } = await seedTwoUsers(app)
     const document = await createDocument(app, alice)
@@ -256,7 +344,7 @@ describeDb('documents', () => {
       {
         method: 'PATCH' as const,
         url: `/api/v1/documents/${document.id}`,
-        payload: { title: 'x' },
+        payload: { version: document.version, title: 'x' },
       },
       { method: 'DELETE' as const, url: `/api/v1/documents/${document.id}` },
       { method: 'GET' as const, url: `/api/v1/documents/${document.id}/reminders` },
@@ -469,7 +557,7 @@ describeDb('documents', () => {
       method: 'PATCH',
       url: `/api/v1/documents/${document.id}`,
       ...authAs(user),
-      payload: { doc_type: 'receipt' },
+      payload: { version: document.version, doc_type: 'receipt' },
     })
     expect(switched.statusCode).toBe(422)
   })

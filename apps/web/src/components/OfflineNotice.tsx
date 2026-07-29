@@ -64,7 +64,7 @@ export function OfflineNotice() {
             <time dateTime={new Date(oldest).toISOString()}>{formatAge(Date.now() - oldest)}</time>
           </>
         )}
-        . Changes cannot be saved until you reconnect.
+        . Edits are queued and sent when you reconnect; deleting needs a connection.
       </span>
     </div>
   )

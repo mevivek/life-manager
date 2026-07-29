@@ -12,11 +12,10 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 203 tests: web 85 · shared 27 · api 91.** The last run against a real
-Postgres was 2026-07-28 and recorded 137/0 — a figure now stale twice over, because the offline-cache
-commit and then ADR-0025 both added tests without a database to hand. The 2026-07-29 session measured
-**121 passed / 82 skipped** (all 82 are the API's, skipped for want of Docker) and could not confirm
-203/0. **Run it somewhere with a database before quoting a total.** Deployed
+build` are green. **The suite is 224 tests: web 101 · shared 29 · api 94.** The last run against a real
+Postgres recorded **168/0**, before ADR-0025 added 56 web tests in a container with no Docker — so the
+2026-07-29 session measured **139 passed / 85 skipped** (all 85 the API's) and could not confirm 224/0.
+**Run it somewhere with a database before quoting a total.** Deployed
 2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
 **R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
 deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
@@ -63,9 +62,21 @@ pulled ahead of M1's "done when" by an explicit product call, so the app can be 
 provisioning R2 or VAPID. The Query cache persists to IndexedDB via `apps/web/src/lib/persister.ts`;
 there is still deliberately **no `runtimeCaching` for the API** in the service worker, because two
 caches of Tier 0 data would mean two purge paths. Three things about it are easy to undo by accident:
-`mutations.networkMode: 'always'` (without it TanStack Query *queues* offline writes, which ADR-0013
-rejects), `shouldDehydrateMutation: () => false`, and the sign-out/sign-in purge in
-`apps/web/src/lib/session.ts`.
+`mutations.networkMode: 'always'` (without it TanStack Query pauses and silently replays offline
+writes, bypassing the outbox entirely), `shouldDehydrateMutation: () => false`, and the
+sign-out/sign-in purge in `apps/web/src/lib/session.ts`.
+
+**Offline WRITES exist too, via an outbox** ([ADR-0024](docs/decisions/0024-offline-writes-outbox.md),
+superseding 0013's read-only stance). Edits and captures queue in IndexedDB and replay on reconnect;
+a stale write is refused with **409** and surfaced at `/outbox` for the user to decide, never merged.
+**`DELETE` is deliberately not queued** — it has no version precondition (debt D41), so a queued
+delete could destroy a newer edit.
+
+That has two consequences in the UI, and both are easy to break by writing the obvious code:
+**`useCreateDocument` and `useUpdateDocument` can return `{ queued: true }` instead of a document**, so
+every caller has to branch (`documents.new.tsx` and `AddDocumentSheet.tsx` both do — there is no id to
+navigate to yet); and **an edit must send the `version` the form was populated from**, not a fresh read,
+or the precondition it exists to enforce is defeated.
 
 **The whole web client now wears the Ledger design system
 ([ADR-0025](docs/decisions/0025-ledger-design-system.md), 2026-07-29)** — warm paper light + dark at
@@ -83,28 +94,34 @@ before touching anything visual. Four things in it will bite a session that does
 4. **Three tabs, forever.** ADR-0025 §4 reverses the old one-tab-per-domain plan: domains become a
    switcher on the Documents title, and that switcher **must not be drawn until domain two exists**.
 
-What still does **not** exist: OCR and previews (M2), offline *file* access (ruled out for v1 by
-ADR-0013), password reset, Playwright, R2 object deletion, and **any way for a user to undo a delete**
-(soft-delete sets `deleted_at`, but there is no restore endpoint — so no "Undo" and no "recoverable for
-30 days" copy; ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
+What still does **not** exist: OCR and previews (M2), offline *download* of files, password reset,
+Playwright, R2 object deletion, and **any way for a user to undo a delete** (soft-delete sets
+`deleted_at`, but there is no restore endpoint — so no "Undo" and no "recoverable for 30 days" copy;
+ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D42 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D43 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
 
-**Do not start M2, and do not write more features.** M1's code is finished; what is missing is
-deployment and two sets of credentials. Full list in [roadmap.md](docs/roadmap.md) § Next actions §4.
-In order: deploy · provision R2 · provision VAPID · **rotate the Neon credential (D18)** · put real
-documents in · switch `ENABLE_SCHEDULED_JOBS=true` (this fires D8) · redo lens 4 of the M1 review.
+**What is missing is credentials and use, not code.** Run `./scripts/provision.sh <r2|vapid|neon>` —
+it prompts, so no secret reaches a transcript. Full list in [roadmap.md](docs/roadmap.md) § Next
+actions §4. In order: provision R2 (**and its bucket CORS policy**, README § Provisioning R2 — the
+browser PUTs straight to R2, so without it every upload fails while the API looks healthy) · provision
+VAPID · **rotate the Neon credential (D18)** · put real documents in · switch
+`ENABLE_SCHEDULED_JOBS=true` (this fires D8) · redo lens 4 of the M1 review.
+
+**To iterate without any cloud account:** `docker compose -f docker-compose.dev.yml up -d` gives a
+local S3, so the whole upload path runs. It does **not** validate signatures (D39), so it cannot
+verify the presign contract.
 
 Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   **203/0 is the target; 121/82 is what a container with no Docker shows you** — the 82 skipped are
-   all the API's, and 85 of the 121 that do run are web tests needing no database.
+   **224/0 is the target; 139/85 is what a container with no Docker shows you** — the 85 skipped are
+   all the API's, and 101 of the 139 that do run are web tests needing no database.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
    [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.
@@ -122,10 +139,12 @@ Four things worth knowing before you touch anything:
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
-| **Anything visual — a screen, a component, a colour, a size** | [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) **in full**, then the token block in `apps/web/src/styles.css` and `apps/web/src/lib/utils.ts`. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37) |
+| **Anything visual — a screen, a component, a colour, a size** | [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) **in full**, then the token block in `apps/web/src/styles.css` and `apps/web/src/lib/utils.ts`. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0025 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
-| **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0013`](docs/decisions/0013-read-only-offline-v1.md) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it, and a *mutation* must never be |
+| **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it |
+| **Calling a document mutation from a new place** | `useDocuments.ts` — `useCreateDocument` and `useUpdateDocument` may return `{ queued: true }` rather than a document (ADR-0024), so every call site branches; an edit must send the version the form was **read** at |
+| **Adding a mutable column or a new writable domain** | `versioned()` in `apps/api/src/db/columns.ts` — an editable table needs the ADR-0024 version column, and its `PATCH` must take the version as a **required** field so a forgotten precondition is a type error rather than silent last-write-wins |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |

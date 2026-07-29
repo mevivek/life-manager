@@ -54,16 +54,28 @@ describe('documentCreateSchema', () => {
 
 describe('documentUpdateSchema', () => {
   it('distinguishes an absent key from an explicit null — conventions/api.md §8', () => {
-    const cleared = documentUpdateSchema.parse({ issuer: null })
+    const cleared = documentUpdateSchema.parse({ version: 1, issuer: null })
     expect('issuer' in cleared).toBe(true)
     expect(cleared.issuer).toBeNull()
 
-    const untouched = documentUpdateSchema.parse({ title: 'Renamed' })
+    const untouched = documentUpdateSchema.parse({ version: 1, title: 'Renamed' })
     expect('issuer' in untouched).toBe(false)
   })
 
   it('rejects an empty patch', () => {
     expect(documentUpdateSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('requires the version precondition — ADR-0024', () => {
+    // A patch without it would silently be last-write-wins, which ADR-0024 declined. Required in the
+    // schema means a call site that forgets is a type error, not a data-loss path.
+    expect(documentUpdateSchema.safeParse({ title: 'Renamed' }).success).toBe(false)
+  })
+
+  it('rejects a patch that is only a version, since that changes nothing', () => {
+    // `version` is a precondition rather than a field, so it must not satisfy "changes at least one
+    // field" on its own — otherwise `{ version: 3 }` is an accepted no-op write.
+    expect(documentUpdateSchema.safeParse({ version: 3 }).success).toBe(false)
   })
 })
 

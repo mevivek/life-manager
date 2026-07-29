@@ -3,6 +3,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { startOutboxReplay } from '@/lib/outbox-replay'
 import { cacheBuster, dehydrateOptions, MAX_AGE, queryCachePersister } from '@/lib/persister'
 import { createQueryClient } from '@/lib/query-client'
 import { routeTree } from './routeTree.gen'
@@ -53,3 +54,13 @@ createRoot(rootElement).render(
 // `autoUpdate`: a new deploy takes effect on the next navigation rather than prompting. For a
 // single-user app an update prompt is pure friction.
 registerSW({ immediate: true })
+
+/**
+ * Drains the offline write queue when the network returns (ADR-0024).
+ *
+ * Started here rather than in a component effect so it survives every navigation and is not tied to
+ * a mounted tree — a queued write must replay even if the user is sitting on a screen that knows
+ * nothing about documents. The returned unsubscribe is dropped on purpose: this lives as long as the
+ * page does.
+ */
+startOutboxReplay(queryClient)

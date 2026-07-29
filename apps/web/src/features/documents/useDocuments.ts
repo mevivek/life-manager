@@ -6,7 +6,9 @@ import type {
 } from '@life-manager/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api } from '@/lib/api'
+import { api, OfflineError } from '@/lib/api'
+import * as outbox from '@/lib/outbox'
+import { canQueueBytes, requestPersistentStorage } from '@/lib/storage-quota'
 
 /**
  * TanStack Query hooks for Documents. conventions/code.md §9: server state lives in Query and is
@@ -46,6 +48,33 @@ export function useIssuers() {
   })
 }
 
+/**
+ * Runs a write, and queues it in the outbox if there is no connectivity (ADR-0024).
+ *
+ * The attempt comes FIRST, and the queue is the fallback — not the other way round. Checking
+ * `navigator.onLine` up front and queueing on `false` would be wrong in both directions: it reports
+ * `true` behind a captive portal (so the write would be attempted and lost anyway) and it can report
+ * `false` on a working connection. An `OfflineError` is proof the request did not reach the server;
+ * a status code is proof that it did.
+ *
+ * Anything else — a 409, a 422 — is rethrown untouched. A request the server has *judged* must not be
+ * queued for a retry that would get the same answer.
+ */
+async function writeOrQueue<T>(
+  attempt: () => Promise<T>,
+  queued: () => Parameters<typeof outbox.enqueue>[0],
+): Promise<T | { queued: true }> {
+  try {
+    return await attempt()
+  } catch (error) {
+    if (error instanceof OfflineError) {
+      await outbox.enqueue(queued())
+      return { queued: true }
+    }
+    throw error
+  }
+}
+
 export function useCreateDocument() {
   const queryClient = useQueryClient()
 
@@ -59,7 +88,10 @@ export function useCreateDocument() {
        * response instead of creating a second document. A key generated inside the fetch would
        * defeat it entirely.
        */
-      api.documents.create(input, crypto.randomUUID()),
+      writeOrQueue(
+        () => api.documents.create(input, crypto.randomUUID()),
+        () => ({ kind: 'document.create', tempId: crypto.randomUUID(), input }),
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })
     },
@@ -70,7 +102,13 @@ export function useUpdateDocument(id: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (patch: DocumentUpdate) => api.documents.update(id, patch),
+    mutationFn: (patch: DocumentUpdate) =>
+      writeOrQueue(
+        () => api.documents.update(id, patch, crypto.randomUUID()),
+        // The patch carries the version the form was populated from, so the queued edit keeps its
+        // precondition. Replayed later, it is refused with 409 if the document moved on meanwhile.
+        () => ({ kind: 'document.update', documentId: id, patch }),
+      ),
     onSuccess: () => {
       // Both the detail and every list: a title or expiry change reorders the default sort.
       void queryClient.invalidateQueries({ queryKey: documentsKey })
@@ -82,6 +120,14 @@ export function useDeleteDocument() {
   const queryClient = useQueryClient()
 
   return useMutation({
+    /**
+     * **Not queued offline, deliberately** — the one write that still fails hard with no network.
+     *
+     * `DELETE` carries no version precondition (debt D41), so a queued delete replayed after the
+     * document was edited on another device would destroy that edit with nothing shown. That is the
+     * exact failure ADR-0024 exists to prevent, so until D41 is closed the honest behaviour is to
+     * refuse: `OfflineError` propagates and the UI says the deletion did not happen.
+     */
     mutationFn: (id: string) => api.documents.remove(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })
@@ -112,25 +158,66 @@ export function useUploadFile(documentId: string) {
   const mutation = useMutation({
     mutationFn: async (file: File) => {
       setProgress(0)
-      const presigned = await api.files.presignUpload(documentId, {
-        // The mime is validated server-side against the allowlist; this cast is the browser's own
-        // reported type, and a value outside the allowlist comes back as a 400.
-        mime: file.type as PresignUploadMime,
-        size_bytes: file.size,
-        make_primary: true,
-      })
-
-      await api.files.upload(presigned.upload_url, file, setProgress)
 
       /**
-       * Progress is pinned at 1 for the confirm round-trip rather than reset to null.
+       * Offline capture (ADR-0024): the bytes are queued and uploaded on reconnect.
        *
-       * The bytes really are all uploaded at this point, and `:confirm` is a fast call to our own API
-       * — but clearing the bar first makes the row flick back to "no progress" for a beat, which reads
-       * as the upload restarting.
+       * The quota check happens BEFORE anything is stored, and a refusal is a thrown error rather
+       * than a silent fallback. ADR-0024 is unambiguous about the ordering of bad outcomes here —
+       * refusing a photo is a poor experience, accepting one and losing it to eviction is the worst
+       * bug available. See `lib/storage-quota.ts`.
        */
-      setProgress(1)
-      return api.files.confirm(documentId, { file_id: presigned.file_id })
+      const attemptUpload = async () => {
+        const presigned = await api.files.presignUpload(documentId, {
+          // The mime is validated server-side against the allowlist; this cast is the browser's own
+          // reported type, and a value outside the allowlist comes back as a 400.
+          mime: file.type as PresignUploadMime,
+          size_bytes: file.size,
+          make_primary: true,
+        })
+
+        await api.files.upload(presigned.upload_url, file, setProgress)
+
+        /**
+         * Progress is pinned at 1 for the confirm round-trip rather than reset to null.
+         *
+         * The bytes really are all uploaded at this point, and `:confirm` is a fast call to our own
+         * API — but clearing the bar first makes the row flick back to "no progress" for a beat,
+         * which reads as the upload restarting.
+         */
+        setProgress(1)
+        return api.files.confirm(documentId, { file_id: presigned.file_id })
+      }
+
+      try {
+        return await attemptUpload()
+      } catch (error) {
+        if (!(error instanceof OfflineError)) throw error
+
+        const room = await canQueueBytes(file.size)
+        if (!room.ok) throw new Error(room.reason)
+
+        // Asked for only once we know we are actually about to hold bytes — asking on every page
+        // load would be a permission prompt for a capability most sessions never use.
+        await requestPersistentStorage()
+
+        await outbox.enqueue({
+          kind: 'file.upload',
+          documentId,
+          blob: file,
+          mime: file.type,
+          sizeBytes: file.size,
+        })
+        /**
+         * `onSettled` clears `progress`, so a queued upload does not leave a stalled bar behind.
+         *
+         * That matters more here than on the success path: the row would otherwise sit at whatever
+         * fraction the failed attempt reached, which reads as an upload still in flight when in fact
+         * it is waiting for a network that is not there. `DocumentFiles` shows the queued state
+         * instead.
+         */
+        return { queued: true } as const
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })

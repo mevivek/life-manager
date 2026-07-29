@@ -203,6 +203,13 @@ export function validateCustomAttrs(
 
 // ── The entity ───────────────────────────────────────────────────────────────
 
+/**
+ * Server-assigned optimistic-concurrency counter — ADR-0024.
+ *
+ * Starts at 1, never 0, so a value that failed to arrive cannot pass for a valid one.
+ */
+export const versionSchema = z.number().int().min(1)
+
 export const documentSchema = z.object({
   id: uuidSchema,
   space_id: uuidSchema,
@@ -220,6 +227,14 @@ export const documentSchema = z.object({
   file_count: z.number().int().min(0),
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
+  /**
+   * Optimistic-concurrency counter — [ADR-0024](../../../docs/decisions/0024-offline-writes-outbox.md).
+   *
+   * Server-assigned and incremented on every update. A client must send back the version it read
+   * when it updates; the server refuses a stale write with `409` rather than applying it. This is
+   * what makes an offline edit safe to replay on reconnect.
+   */
+  version: versionSchema,
 })
 export type Document = z.infer<typeof documentSchema>
 
@@ -309,6 +324,16 @@ export type DocumentCreate = z.infer<typeof documentCreateSchema>
  */
 export const documentUpdateSchema = z
   .strictObject({
+    /**
+     * **Required, deliberately.** The version the client last read; the server refuses the write with
+     * `409` if the record has moved on (ADR-0024).
+     *
+     * Optional would have been the non-breaking choice, and it is the wrong one: a call site that
+     * forgot to send it would silently get last-write-wins, which is the exact behaviour ADR-0013
+     * called "actively dangerous" and ADR-0024 declined for a second time. Making it required means a
+     * forgotten precondition is a type error rather than a data-loss path.
+     */
+    version: versionSchema,
     title: z.string().trim().min(1).max(MAX_TITLE_LENGTH).optional(),
     doc_type: documentTypeSchema.optional(),
     issuer: z.string().trim().max(200).nullish(),
@@ -320,7 +345,9 @@ export const documentUpdateSchema = z
     tags: z.array(tagSchema).max(MAX_TAGS).optional(),
     custom_attrs: customAttrsWireSchema.optional(),
   })
-  .refine((patch) => Object.keys(patch).length > 0, {
+  // `version` is a precondition, not a change, so it does not count towards "changes something".
+  // Without excluding it, `{ version: 3 }` alone would be accepted as a no-op update.
+  .refine((patch) => Object.keys(patch).some((key) => key !== 'version'), {
     message: 'A patch must change at least one field',
   })
 export type DocumentUpdate = z.infer<typeof documentUpdateSchema>

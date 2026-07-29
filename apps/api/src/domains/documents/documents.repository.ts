@@ -229,19 +229,40 @@ export async function insert(
  * yours" (0) from a real update (1) — `scoped()` makes those two indistinguishable on purpose,
  * which is what turns a cross-space write into a 404 rather than a 403.
  */
+/**
+ * Applies `patch` only if the row is still at `expectedVersion`, bumping the version on success.
+ *
+ * **The precondition is in the `WHERE`, not in a preceding `SELECT`.** Reading the version and then
+ * updating would leave a window in which another writer lands between the two statements — which is
+ * the very race this is supposed to close, reintroduced in application code. Postgres evaluates both
+ * conditions atomically, so the number of rows returned IS the answer.
+ *
+ * Returns the new version, or `null` when nothing matched. `null` is deliberately ambiguous between
+ * "no such document" and "version moved on": the caller cannot distinguish them from here without a
+ * second read, and only the service knows that the distinction is 404 versus 409 (ADR-0024).
+ */
 export async function update(
   actor: ActorContext,
   id: string,
   patch: Partial<DocumentInsert>,
+  expectedVersion: number,
   executor: Executor = db,
-): Promise<number> {
+): Promise<number | null> {
   const changed = await executor
     .update(documents)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(and(scoped(actor, documents), eq(documents.id, id)))
-    .returning({ id: documents.id })
+    .set({
+      ...patch,
+      updatedAt: new Date(),
+      // `sql` rather than `expectedVersion + 1` so the increment is relative to the row the database
+      // actually matched, not to a number this process is holding.
+      version: sql`${documents.version} + 1`,
+    })
+    .where(
+      and(scoped(actor, documents), eq(documents.id, id), eq(documents.version, expectedVersion)),
+    )
+    .returning({ version: documents.version })
 
-  return changed.length
+  return changed[0]?.version ?? null
 }
 
 /**

@@ -34,6 +34,9 @@ function doc(overrides: Partial<Document> & { id: string }): Document {
     tags: [],
     custom_attrs: {},
     file_count: 1,
+    // ADR-0024's precondition column. The ledger never reads it, but `Document` requires it — and
+    // `version: 1` is what a freshly created document actually carries, so the fixture stays honest.
+    version: 1,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,

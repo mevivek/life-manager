@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { primaryId, timestamps, timestamptz } from '../../db/columns.js'
+import { primaryId, timestamps, timestamptz, versioned } from '../../db/columns.js'
 import { spaceScoped, spaceScopedIndex } from '../../db/schema/scoped-columns.js'
 import { tsvector } from '../../db/schema/tsvector.js'
 
@@ -47,6 +47,8 @@ export const documents = pgTable(
     ...spaceScoped(),
     ...timestamps(),
     deletedAt: timestamptz('deleted_at'),
+    /** Optimistic concurrency — ADR-0024. A stale `PATCH` is refused with 409, not applied. */
+    ...versioned(),
 
     /** The only field required at capture — Q2, business rule 1. */
     title: text('title').notNull(),

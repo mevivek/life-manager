@@ -151,7 +151,11 @@ function DocumentDetailPage() {
             submitLabel="Save changes"
             onCancel={() => setEditing(false)}
             onSubmit={async (values) => {
-              await update.mutateAsync(values)
+              // The version this form was populated FROM, not a fresh read — that is the whole
+              // point of the precondition (ADR-0024). If the document changed while the form was
+              // open, or while the edit sat in the outbox offline, the server refuses with 409
+              // rather than overwriting the other change.
+              await update.mutateAsync({ ...values, version: detail.version })
               setEditing(false)
             }}
           />

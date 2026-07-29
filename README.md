@@ -171,6 +171,43 @@ contract is right. Both storage bugs M1 actually hit were signature-content bugs
 container. Verify that part against real R2. The full reasoning is in `docker-compose.dev.yml`, which
 also records why the image is Adobe S3Mock (Apache-2.0) rather than MinIO (AGPL-3.0).
 
+#### Provisioning R2 and VAPID in production
+
+```bash
+./scripts/provision.sh r2       # the four R2_* values
+./scripts/provision.sh vapid    # the three VAPID_* values (generate the pair first)
+./scripts/provision.sh neon     # rotate the database credential — debt D18
+./scripts/provision.sh status   # what is bound right now, names only
+```
+
+The script prompts for each value with echo off and pipes it to `gcloud --data-file=-`, so nothing
+lands in shell history or `ps` output. It exists because three things here fail *late* rather than
+loudly, and its header comment records each one: every credential group is **all-or-none** and
+rejected at boot by `env.ts`, `--set-secrets` would silently unbind the four existing secrets (only
+the `--update-` forms are used), and the runtime account holds `secretAccessor` **per secret** so a
+new one is unreadable until granted.
+
+##### The R2 bucket needs a CORS policy, and nothing else will tell you
+
+The browser PUTs bytes **straight to R2** (ADR-0008), so the bucket must allow the app's origin.
+Without this, every upload fails in the browser while the API, the manifest and all 25 deployment
+checks stay green — the request never reaches our code. In the bucket's **Settings → CORS policy**:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://app.mevivek.dev"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+`content-type` must be allowed specifically because the presigned URL **signs** it (`signableHeaders`
+in `lib/storage.ts`), so the browser is obliged to send it and R2 is obliged to accept it. Downloads
+need no CORS entry — they go through `window.open`, a top-level navigation rather than a fetch.
+
 **Background jobs are off by default.** `ENABLE_SCHEDULED_JOBS` is unset, so the reminder scan is
 registered but never fires on its own — a schedule means something must always be running, which is
 what keeps Neon's compute awake (ADR-0012, debt D8). Trigger one by hand instead:
