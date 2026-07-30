@@ -34,16 +34,35 @@ const repoRoot = path.resolve(import.meta.dirname, '..')
 const require = createRequire(path.join(repoRoot, 'apps/api/package.json'))
 const { Client } = require('pg')
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(path.join(repoRoot, 'apps/api/.env'), 'utf8')
-    .split('\n')
-    .filter((line) => /^[A-Z_]+=/.test(line))
-    .map((line) => {
-      const i = line.indexOf('=')
-      return [line.slice(0, i), line.slice(i + 1).trim()]
-    }),
-)
+/**
+ * `apps/api/.env`, if it exists.
+ *
+ * **Optional, deliberately.** It is read for exactly one thing — the database credential used by the
+ * cleanup step at the end — and requiring it would mean a machine that has never run the API locally
+ * cannot run any of these checks at all. That is the wrong trade: the 25 checks are the point, and
+ * the cleanup is a tidy-up.
+ *
+ * `DATABASE_URL_UNPOOLED` in the real environment takes precedence, so CI or a one-off run can
+ * supply it without a file existing anywhere.
+ */
+function readEnvFile() {
+  const envPath = path.join(repoRoot, 'apps/api/.env')
+  if (!fs.existsSync(envPath)) return {}
+
+  return Object.fromEntries(
+    fs
+      .readFileSync(envPath, 'utf8')
+      .split('\n')
+      .filter((line) => /^[A-Z_]+=/.test(line))
+      .map((line) => {
+        const i = line.indexOf('=')
+        return [line.slice(0, i), line.slice(i + 1).trim()]
+      }),
+  )
+}
+
+const env = readEnvFile()
+const cleanupDatabaseUrl = process.env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL_UNPOOLED
 
 let pass = 0
 let fail = 0
@@ -328,8 +347,20 @@ console.log('\n[8] optional features report their configuration honestly')
 }
 
 console.log('\n[cleanup]')
-{
-  const db = new Client({ connectionString: env.DATABASE_URL_UNPOOLED })
+if (cleanupDatabaseUrl === undefined) {
+  /**
+   * Skipped, loudly, rather than failing the run.
+   *
+   * Every check above has already passed or failed on its own merits; not having a database
+   * credential to hand says nothing about the deployment. But it is NOT silent: the throwaway
+   * account is real and it stays until something removes it, so the message has to name the account
+   * and how to clear it rather than printing a tidy nothing.
+   */
+  console.log('  SKIP  throwaway user NOT removed — no database credential available')
+  console.log(`        left behind: ${email}`)
+  console.log('        to clear it, set DATABASE_URL_UNPOOLED and re-run, or add it to apps/api/.env')
+} else {
+  const db = new Client({ connectionString: cleanupDatabaseUrl })
   await db.connect()
   // The document is soft-deleted above and its space is the throwaway user's, so deleting the
   // user cascades it away. Deleting the user is enough.
