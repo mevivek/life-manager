@@ -38,22 +38,44 @@ function groupDigits(value: string): string {
 }
 
 export function IdentifierCard({
-  /** The full value. Null when the document has no number — the card does not render. */
+  /**
+   * The full value. Absent when the document has no number — the card does not render.
+   *
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  `undefined` is in this type because the OFFLINE CACHE can produce it. Do not remove it.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * `documentDetailResponseSchema` types this `string | null`, so on paper `undefined` is
+   * impossible — and typing it that way **crashed the whole app on a real phone**:
+   * *"undefined is not an object (evaluating 'e.length')"*, at the root error boundary, with no way
+   * past it but Reload.
+   *
+   * The route is the persisted Query cache. A document detail fetched by an **older build** is stored
+   * in IndexedDB without an `identifier` key, and TanStack Query **rehydrates it without re-running
+   * Zod** — validation happens at the fetch boundary, not the restore boundary. So the first render
+   * after a deploy hands this component an object the current schema says cannot exist.
+   *
+   * `CACHE_BUSTER` in `lib/persister.ts` is supposed to prevent that and did not (see the note there).
+   * Both are fixed, and this type stays widened anyway: a component that renders a document must
+   * survive being handed last week's shape, because the cache is the one input in the app that is
+   * older than the code reading it.
+   */
   identifier,
   /** The mask, derived server-side. Shown until the user reveals. */
   last4,
   /** What this number is called on the document itself, e.g. "Aadhaar number". */
   label = 'Number',
 }: {
-  identifier: string | null
-  last4: string | null
+  identifier: string | null | undefined
+  last4: string | null | undefined
   label?: string
 }) {
   const [revealed, setRevealed] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // No number, no card. An empty bordered box under "Details" reads as a field that failed to load.
-  if (identifier === null || identifier.length === 0) return null
+  // `== null` catches BOTH null and undefined — see the note on the prop. No number, no card: an
+  // empty bordered box under "Details" reads as a field that failed to load.
+  if (identifier == null || identifier.length === 0) return null
 
   return (
     <Card tone="sunken" className="mt-3.5 border-rule px-4 py-3.5">

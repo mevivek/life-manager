@@ -155,13 +155,24 @@ export default defineConfig({
   },
   /**
    * The persisted Query cache's `buster`. When this string changes, the stored cache is discarded
-   * rather than rehydrated — which is what stops a deploy that changes a response shape from
-   * feeding data to code that can no longer read it.
+   * rather than rehydrated — which is what stops a deploy that changes a response shape from feeding
+   * data to code that can no longer read it.
    *
-   * `VITE_APP_VERSION` is set by the build when there is a commit to name; the fallback keeps local
-   * development on one stable value, so the cache is not thrown away on every `pnpm dev` restart.
+   * ── `VITE_APP_VERSION` alone was never set, so this was always `'dev'` ──
+   *
+   * It is not set in `cloudbuild.deploy.yaml` (which builds the API, not the web app) and not in the
+   * Pages build, so every deploy shipped the same buster and the cache was never discarded. ADR-0026
+   * added a field to the detail response, a weeks-old cached document rehydrated without it, and the
+   * app crashed at its root error boundary on a real phone. See the long note in `lib/persister.ts`.
+   *
+   * **`CF_PAGES_COMMIT_SHA` is the fix**: Cloudflare Pages sets it on every build, so it changes
+   * exactly when the code does. `VITE_APP_VERSION` stays first so another host, or a local
+   * reproduction, can override. `'dev'` remains the local fallback — a dev server rebuilding
+   * constantly does not want its cache dropped on every reload.
    */
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION ?? 'dev'),
+    __APP_VERSION__: JSON.stringify(
+      process.env.VITE_APP_VERSION ?? process.env.CF_PAGES_COMMIT_SHA ?? 'dev',
+    ),
   },
 })
