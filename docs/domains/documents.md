@@ -242,25 +242,54 @@ Registered with pg-boss ([ADR-0012](../decisions/0012-pg-boss-background-jobs.md
 
 ## 7. UI surface
 
-- **Dashboard / home** — **two** sections: *Needs attention* (expiring within 90 days) and
-  *Missing a file*. Plus a notifications card that hides itself when push is unconfigured.
+Restyled and partly restructured by
+[ADR-0025](../decisions/0025-ledger-design-system.md) (2026-07-29). Read that first for the tokens,
+the expiry ladder and the navigation rule; this section records what the screens *are*.
 
-  > **This deviates from what §7 originally said** — "expiring in 30 and 90 days, recently added,
-  > documents with no file" — and the reason is worth keeping. The two expiry cards **duplicated each
-  > other**: `?expiring_before=` is a single upper bound, so anything inside 30 days is also inside
-  > 90 and appeared in both. The expiry badge already encodes urgency by colour, so one list ordered
-  > soonest-first says the same thing without repeating a row. And "recently added" repeated whatever
-  > the other sections showed, because the Documents tab is already the full list and on a small
-  > archive everything is recent. What is left answers the one question the
+- **Now** (`/home`) — the deadline feed. Eyebrow date → a serif headline counting what needs you →
+  *Needs you* (a grouped card of everything expired, expiring today, or inside **45 days**) → the push
+  ask → **The horizon** (the next four dated documents beyond 45 days, five at 430px) → a no-scan
+  nudge that deep-links into a filtered archive → a ledger footer.
+
+  > **Two changes from what this section said before, both deliberate.**
+  >
+  > **1. The horizon is new, and it is the point.** The previous version had *Needs attention* (90
+  > days) and *Missing a file*, and its hardest state was the **good** one: with nothing expiring it
+  > said "Nothing expiring in the next 90 days. That is the point." To someone who opens this app
+  > twice a month that is worthless — it answers a question they did not ask. Now always shows the
+  > forward timeline, so the answer is never *nothing*; it is "nothing until 4 March".
+  >
+  > **2. One threshold at 45 days, replacing tiers at 30 and 90.** The older text asked for "expiring
+  > in 30 and 90 days, recently added, documents with no file". The two expiry cards **duplicated each
+  > other** — `?expiring_before=` is a single upper bound, so anything inside 30 days is also inside 90
+  > and appeared in both — and "recently added" repeated whatever the others showed, because the
+  > Documents tab is already the full list. Merging them left one list; ADR-0025 then made 45 days its
+  > only boundary. **It is a display threshold, not a business rule**: reminders still fire at 90/30/7
+  > server-side per `DEFAULT_LEAD_DAYS`.
+  >
+  > Both changes answer the one question the
   > [backlog entry](../product/idea-backlog.md) that proposed this screen actually posed: *what needs
-  > doing.*
-- **Document list** — search, filter by type and tag, sorted by expiry. Expiry badges.
-- **Document detail** — metadata, file versions, reminders, inline preview (M2).
-- **Create / edit** — title-first, everything else progressively disclosed. Capture friction
-  is the main risk ([product/brain.md](../product/brain.md) principle 2).
+  > doing* — and, now, *when is the next thing*.
+
+- **Documents** (`/documents`) — the archive. A sticky header carrying search plus four filter chips
+  (**type · tag · expires before · scan**), then the full list sorted soonest-first, then
+  `Load 20 more`. Every chip maps to a real query parameter and filters **server-side**; filter state
+  lives in the **URL**, so the Now screen's nudge can link into a filtered view and a back-navigation
+  returns to the list the user was reading.
+- **Document detail** — back link → eyebrow type → serif title → a status block tinted by expiry state,
+  carrying the reminder chips → *Details* (including the per-type `custom_attrs`, read-only) → the
+  `•••• last4` block and its explanation → *Scans* → a quiet text-only delete. Inline preview is M2.
+- **Create / edit** — title-first, everything else progressively disclosed; **title is the only required
+  field** and is drawn by border weight rather than an asterisk. Capture friction is the main risk
+  ([product/brain.md](../product/brain.md) principle 2). Add opens a **bottom sheet** from the tab bar
+  and stays open after saving to offer optional next steps; `/documents/new` remains a real route for
+  deep links.
 - **Upload** — the OS picker, which offers camera, photo library and files. `capture` is
-  deliberately **not** set: with it, a phone opens the camera and *only* the camera.
-- **Expiring soon** — a focused actionable list.
+  deliberately **not** set: with it, a phone opens the camera and *only* the camera. Progress is real
+  (`XMLHttpRequest`, because `fetch` cannot report it), and too-large / unsupported / dropped-connection
+  are three separate inline states on the row they belong to.
+- **The type picker is a row of pills, never a `<select>`** — ADR-0025 §7. There is no dropdown anywhere
+  in the app.
 
 ## 8. Cross-domain links
 

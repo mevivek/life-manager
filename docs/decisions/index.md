@@ -48,6 +48,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0022](0022-web-push-library.md) | Web Push library | accepted | `webpush-webcrypto` (MIT), because `web-push` is MPL-2.0 and hand-rolling RFC 8291 is forbidden |
 | [0023](0023-migrate-on-boot.md) | Migrations applied on API boot | accepted | Nothing else applied them once ADR-0021 dropped Fly's release_command; the fix has to ship in the image because of D25 |
 | [0024](0024-offline-writes-outbox.md) | Offline writes via an outbox | accepted | Supersedes 0013's no-writes half. Server `version` precondition, stale write → **409**, IndexedDB outbox replayed on reconnect, conflicts SURFACED never merged |
+| [0025](0025-ledger-design-system.md) | The Ledger design system | accepted | Warm paper, serif + grotesk, colour spent only on status; five-state expiry ladder readable in greyscale; **three tabs forever**, domains become a switcher not tabs |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -87,6 +88,10 @@ first
 
 **Notifications and background work**
 0022 Web Push library · 0012 pg-boss
+
+**Adding a screen, or touching how anything looks**
+0025 the Ledger design system — tokens, the expiry ladder, the three-tab rule · 0003 SPA shell ·
+0024 what a write does with no network, and what the cache holds
 
 ---
 

@@ -1,93 +1,72 @@
-import type { Document, DocumentListQuery } from '@life-manager/shared'
-import { documentTypeSchema } from '@life-manager/shared'
-import { Link } from '@tanstack/react-router'
+import type { DocumentListQuery } from '@life-manager/shared'
 import { useState } from 'react'
-import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Card } from '@/components/ui/card'
 import { DocumentListSkeleton } from '@/components/ui/skeleton'
-import { ExpiryBadge } from './ExpiryBadge'
+import { DocumentRow } from './DocumentRow'
 import { useDocuments } from './useDocuments'
 
 /**
- * The document list. domains/documents.md §7: "search, filter by type and tag, sorted by expiry.
- * Expiry badges."
+ * The archive list. domains/documents.md §7, ADR-0025 §7.
  *
- * Pagination is cursor-based and **append-only** — "Load more" rather than numbered pages. That
- * follows from the API (conventions/api.md §4: cursors, because offsets break when rows are
- * inserted mid-scroll) and from the main consumer being a phone.
+ * Pagination is cursor-based and **append-only** — "Load 20 more" rather than numbered pages. That
+ * follows from the API (conventions/api.md §4: cursors, because offsets break when rows are inserted
+ * mid-scroll) and from the main consumer being a phone.
+ *
+ * ── The filters moved out ──
+ *
+ * This component used to own a search box and a `<select>`, both in local `useState`. They are gone:
+ * the archive route owns filter state now, because the Now screen's no-scan nudge deep-links into a
+ * pre-filtered archive, and a filter living in this component's state could not be addressed from
+ * outside it. What is left here is paging and rendering, which is all a list should be.
  */
 
 export type DocumentListProps = {
-  /** Extra filters merged into every query — used by the "expiring soon" view. */
-  baseQuery?: Partial<DocumentListQuery>
-  /** Hidden on a pre-filtered view, where a type filter would be confusing. */
-  showFilters?: boolean
-  emptyMessage?: string
+  /** The full query, filters included. Owned by the caller. */
+  query: Partial<DocumentListQuery>
+  emptyState?: React.ReactNode
+  /** `divided` runs rows full-bleed with a rule between; `card` groups them in one bordered panel. */
+  variant?: 'divided' | 'card'
 }
 
-export function DocumentList({
-  baseQuery = {},
-  showFilters = true,
-  emptyMessage = 'Nothing here yet.',
-}: DocumentListProps) {
-  const [search, setSearch] = useState('')
-  const [type, setType] = useState<string>('')
+export function DocumentList({ query, emptyState, variant = 'divided' }: DocumentListProps) {
+  /**
+   * One `useQuery` per page, keyed by its cursor, rather than `useInfiniteQuery`.
+   *
+   * Kept from the previous implementation because the reason still holds: changing a filter resets the
+   * list anyway, and one query per page keeps every page independently cached for a back-navigation.
+   */
   const [cursors, setCursors] = useState<string[]>([])
 
-  const query: Partial<DocumentListQuery> = {
-    ...baseQuery,
-    ...(search.trim() === '' ? {} : { q: search.trim() }),
-    ...(type === '' ? {} : { type: [type as Document['doc_type']] }),
+  /**
+   * The cursor list is keyed to the filters that produced it.
+   *
+   * Without this, changing a filter while on page 3 would keep paging with cursors minted against the
+   * *old* filter set, and the API would answer with rows that do not match what the chips say. It is
+   * compared during render rather than in an effect, so there is no frame in which the two disagree —
+   * the pattern React documents as "adjusting state when props change".
+   */
+  const queryKey = JSON.stringify(query)
+  const [seenQueryKey, setSeenQueryKey] = useState(queryKey)
+  if (seenQueryKey !== queryKey) {
+    setSeenQueryKey(queryKey)
+    setCursors([])
   }
 
-  // One query per page, keyed by its cursor. Simpler than `useInfiniteQuery` here because the
-  // filters reset the list anyway, and it keeps every page in the cache for a back-navigation.
-  const pages = [undefined, ...cursors].map((cursor) => ({ cursor }))
+  const pages = [undefined, ...cursors]
 
   return (
-    <div className="flex flex-col gap-4">
-      {showFilters && (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            type="search"
-            placeholder="Search titles, issuers, notes and tags"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value)
-              // A new search is a new list. Keeping the old cursors would page into results that
-              // no longer exist.
-              setCursors([])
-            }}
-            className="sm:flex-1"
-          />
-          <select
-            className="h-11 rounded-md border border-input bg-transparent px-3 text-sm"
-            value={type}
-            onChange={(event) => {
-              setType(event.target.value)
-              setCursors([])
-            }}
-            aria-label="Filter by type"
-          >
-            <option value="">All types</option>
-            {documentTypeSchema.options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {pages.map((page, index) => (
+    <div>
+      {pages.map((cursor, index) => (
         <DocumentPage
-          // The cursor identifies the page; index is the fallback for the first one.
-          key={page.cursor ?? 'first'}
-          query={{ ...query, ...(page.cursor === undefined ? {} : { cursor: page.cursor }) }}
+          // The cursor identifies the page; 'first' is the fallback for the one with no cursor.
+          key={cursor ?? 'first'}
+          query={{ ...query, ...(cursor === undefined ? {} : { cursor }) }}
+          isFirst={index === 0}
           isLast={index === pages.length - 1}
-          emptyMessage={index === 0 ? emptyMessage : undefined}
-          onLoadMore={(cursor) => setCursors((previous) => [...previous, cursor])}
+          emptyState={emptyState}
+          variant={variant}
+          onLoadMore={(next) => setCursors((previous) => [...previous, next])}
         />
       ))}
     </div>
@@ -96,74 +75,80 @@ export function DocumentList({
 
 function DocumentPage({
   query,
+  isFirst,
   isLast,
-  emptyMessage,
+  emptyState,
+  variant,
   onLoadMore,
 }: {
   query: Partial<DocumentListQuery>
+  isFirst: boolean
   isLast: boolean
-  emptyMessage?: string
+  emptyState?: React.ReactNode
+  variant: 'divided' | 'card'
   onLoadMore: (cursor: string) => void
 }) {
   const documents = useDocuments(query)
 
   if (documents.isPending) {
-    // A skeleton the size of the rows that are coming, so the page height is settled before the
-    // data lands. `query.limit` is the honest count to show.
-    return <DocumentListSkeleton count={Math.min(query.limit ?? 3, 3)} />
+    // A skeleton the size of the rows that are coming, so the height is settled before the data lands.
+    // First page only — a "load more" that replaces the list with shimmer loses the reader's place.
+    return isFirst ? <DocumentListSkeleton count={Math.min(query.limit ?? 3, 3)} /> : null
   }
 
   if (documents.isError) {
-    return <Alert variant="destructive">{documents.error.message}</Alert>
+    return (
+      <Card tone="late" className="p-4">
+        <p className="text-row font-medium">Couldn’t load your documents</p>
+        <p className="mt-1 text-body leading-relaxed text-ink-2">{documents.error.message}</p>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="mt-3"
+          onClick={() => void documents.refetch()}
+        >
+          Try again
+        </Button>
+      </Card>
+    )
   }
 
   const { data, next_cursor } = documents.data
 
-  if (data.length === 0 && emptyMessage !== undefined) {
-    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-  }
+  if (data.length === 0 && isFirst) return <>{emptyState}</>
+
+  const rows = data.map((document, index) => (
+    <DocumentRow
+      key={document.id}
+      document={document}
+      divided={variant === 'card' && index > 0}
+      chevron={variant === 'card'}
+      // The archive's rows run full-bleed to the screen edges with a rule below each, so the list
+      // reads as a ledger page rather than as a stack of cards. The negative margin undoes the
+      // shell's gutter for the rule only; the content keeps it.
+      className={variant === 'divided' ? '-mx-gutter border-b border-rule px-gutter' : undefined}
+    />
+  ))
 
   return (
     <>
-      <ul className="flex flex-col gap-2">
-        {data.map((document) => (
-          <li key={document.id}>
-            <DocumentRow document={document} />
-          </li>
-        ))}
-      </ul>
+      {variant === 'card' ? <Card className="overflow-hidden p-0">{rows}</Card> : rows}
 
       {isLast && next_cursor !== null && (
-        <Button variant="outline" size="sm" onClick={() => onLoadMore(next_cursor)}>
-          Load more
-        </Button>
+        <div className="flex flex-col items-center gap-2 pt-4 pb-8">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="rounded-pill px-[18px]"
+            onClick={() => onLoadMore(next_cursor)}
+          >
+            Load {query.limit ?? 20} more
+          </Button>
+          <span className="text-meta text-ink-3">
+            Showing {data.length} of what’s loaded · newest cursor
+          </span>
+        </div>
       )}
     </>
-  )
-}
-
-function DocumentRow({ document }: { document: Document }) {
-  return (
-    <Link
-      to="/documents/$documentId"
-      params={{ documentId: document.id }}
-      className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-3 hover:bg-secondary"
-    >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{document.title}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {[
-            document.doc_type,
-            document.issuer,
-            // Surfaced because "documents with no file" is a real dashboard view (§7) and the
-            // single most common thing to have left half-done.
-            document.file_count === 0 ? 'no file' : `${document.file_count} file(s)`,
-          ]
-            .filter((part) => part !== null && part !== '')
-            .join(' · ')}
-        </p>
-      </div>
-      <ExpiryBadge expiresOn={document.expires_on} />
-    </Link>
   )
 }

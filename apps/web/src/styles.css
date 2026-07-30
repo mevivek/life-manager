@@ -1,55 +1,280 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4: the theme lives here, in CSS, under `@theme`. There is no tailwind.config.js
- * and no postcss.config.js — do not add one.
+ * The three families the design system names, self-hosted.
  *
- * The variables under `:root` are the shadcn/ui token contract. Keeping them means a future
- * `shadcn add <component>` drops in without a rewrite.
+ * **Deliberately NOT `fonts.googleapis.com`, which is what the design comp linked.** Two reasons,
+ * both load-bearing rather than stylistic:
+ *
+ *  - A CDN `<link>` is a network request on every cold launch, so the type would fall back to
+ *    Georgia/system-ui exactly when the app is offline — which is the case ADR-0013 exists to
+ *    serve. Self-hosted `woff2` is precached by the service worker alongside the shell.
+ *  - It removes a third-party origin from a private, single-user app that otherwise talks only to
+ *    its own API.
+ *
+ * Only the LATIN subsets and only the weights the design uses (sans 400/400i/500/600, mono
+ * 400/500). Newsreader is the variable `wght` axis — one file covers 300–600, and it is the only
+ * family used at more than three weights. All three are SIL OFL 1.1.
+ */
+@import "@fontsource-variable/newsreader/wght.css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-400-italic.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════
+ *  The Ledger design system — ADR-0025. This file is the token layer.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Tailwind v4: the theme lives here, in CSS, under `@theme`. There is no tailwind.config.js and no
+ * postcss.config.js — do not add one.
+ *
+ * ── Semantic names only ──
+ *
+ * There is no `--red-500` and no `--brand`. Every colour is named for the job it does, because the
+ * point of view is that colour is spent ONLY on status: a document's relationship to its expiry
+ * date. Introducing a decorative accent is the one change that would break the system rather than
+ * extend it — see ADR-0025 §2.
+ *
+ * ── Both themes carry every name ──
+ *
+ * Light and dark are at full parity, and dark is not an afterthought: a PWA opened at 11pm in bed
+ * is a real case. Light is paper (#F7F5F0) rather than white, because white plus a serif reads as
+ * a document *viewer*; dark is warm near-black rather than #000, so the hairlines survive.
+ *
+ * ── Why `[data-theme]` is always present, and never absent ──
+ *
+ * `lib/theme.ts` resolves the effective theme and stamps `data-theme="light" | "dark"` on <html>,
+ * mirrored by the inline bootstrap in index.html so it happens before first paint. That means the
+ * CSS needs exactly TWO token blocks rather than three — a `prefers-color-scheme` media query
+ * would have to repeat the entire dark block a second time to cover "system prefers dark and the
+ * user has not chosen", and a duplicated palette is a palette that drifts.
  */
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* ── Light — paper ─────────────────────────────────────────────────────────── */
 :root {
-  --radius: 0.625rem;
+  --paper: #f7f5f0;
+  --raised: #ffffff;
+  --sunken: #efebe3;
 
-  --background: oklch(21% 0.03 264);
-  --foreground: oklch(97% 0.01 264);
-  --card: oklch(25% 0.03 264);
-  --card-foreground: oklch(97% 0.01 264);
-  --muted: oklch(30% 0.02 264);
-  --muted-foreground: oklch(72% 0.02 264);
-  --primary: oklch(72% 0.15 195);
-  --primary-foreground: oklch(20% 0.03 264);
-  --secondary: oklch(30% 0.02 264);
-  --secondary-foreground: oklch(97% 0.01 264);
-  --destructive: oklch(62% 0.21 25);
-  --destructive-foreground: oklch(98% 0.01 25);
-  --border: oklch(35% 0.02 264);
-  --input: oklch(35% 0.02 264);
-  --ring: oklch(72% 0.15 195);
+  --ink: #15140f;
+  --ink-2: #4a4740;
+  --ink-3: #7c776c;
+
+  --rule: #dfdad0;
+  --rule-2: #c6bfb2;
+
+  /**
+   * Three status hues, each pulling double duty as a background tint. There is no fourth.
+   * `--status-none` is `--ink-3` by design: the absence of a countdown is drawn as absence, in the
+   * same grey as any other unfilled value, NOT as a warning.
+   */
+  --status-ok: #2c5b4a;
+  --status-soon: #8a5a12;
+  --status-late: #96331f;
+  --status-none: var(--ink-3);
+
+  --status-ok-bg: #e3ede7;
+  --status-soon-bg: #f3ead7;
+  --status-late-bg: #f3e1db;
+
+  --onink: #f7f5f0;
+  --focus: #2e5aa8;
+}
+
+/* ── Dark — near-black ─────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --paper: #131311;
+  --raised: #1c1c19;
+  --sunken: #0d0d0c;
+
+  --ink: #f2efe8;
+  --ink-2: #b4afa4;
+  --ink-3: #8a857a;
+
+  --rule: #2e2e2a;
+  --rule-2: #46453f;
+
+  --status-ok: #7fbfa4;
+  --status-soon: #e0b063;
+  --status-late: #e88b72;
+  --status-none: var(--ink-3);
+
+  --status-ok-bg: #17251f;
+  --status-soon-bg: #2a2114;
+  --status-late-bg: #2b1a16;
+
+  --onink: #131311;
+  --focus: #8fb4f2;
+}
+
+/*
+ * ── Type, space, radius, elevation, motion ────────────────────────────────────
+ *
+ * Theme-independent, so declared once rather than in both blocks above.
+ *
+ * **Sizes are in `rem`, not `px`.** The design's accessibility note requires it: rows are
+ * `min-height` rather than `height`, so at 200% text the row grows instead of clipping. A `px`
+ * type scale would ignore the system text size and clip instead.
+ */
+:root {
+  --font-serif: "Newsreader Variable", Newsreader, Georgia, serif;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Newsreader for what a human wrote; Plex Sans for what the machine says; Plex Mono for
+     eyebrow labels and the last-four mask, where mono makes the mask read as a deliberate
+     format rather than a truncation. */
+  --t-display: 1.875rem; /* 30px */
+  --t-title: 1.5rem; /*    24px */
+  --t-serif-row: 1.0625rem; /* 17px */
+  --t-head: 1.1875rem; /*  19px */
+  --t-row: 1rem; /*         16px */
+  --t-body: 0.9375rem; /*   15px — body never goes below this */
+  --t-meta: 0.8125rem; /*   13px */
+  --t-label: 0.6875rem; /*  11px */
+  --t-mask: 1.125rem; /*    18px */
+
+  --track-tight: -0.01em;
+  --track-label: 0.09em;
+  --track-mask: 0.14em;
+
+  /* 4px base. */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.375rem; /* 22px */
+  --s-6: 1.875rem; /* 30px */
+  --s-7: 2.75rem; /*  44px */
+  --s-8: 4rem; /*     64px */
+
+  /* The screen gutter is a hair wider than iOS's 16pt so the serif has room to breathe. */
+  --gutter: var(--s-5);
+  --tap-min: 2.75rem; /* 44px — the floor for anything tappable */
+  --row-min: 4.5rem; /*  72px */
+  --field-h: 3.25rem; /* 52px */
+
+  --r-1: 3px;
+  --r-2: 10px;
+  --r-3: 12px;
+  --r-4: 22px;
+  --r-pill: 999px;
+
+  /**
+   * Elevation is almost entirely HAIRLINE, not shadow. Only two things lift, and they are the two
+   * things temporarily on top of your life: the add sheet and the toast. Everything else is
+   * `--e-0`, a 1px rule.
+   */
+  --e-0: 0 0 0 1px var(--rule);
+  --e-sheet: 0 -8px 32px rgb(10 10 9 / 0.18);
+  --e-toast: 0 8px 24px rgb(10 10 9 / 0.24);
+
+  --m-fast: 120ms;
+  --m-base: 220ms;
+  --m-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/*
+ * 430px — Pro Max and large Android. **Nothing reflows.** The gutter opens up, the serif display
+ * steps up, and `Horizon` shows five entries instead of four (that count is in the component, not
+ * here). Row heights are deliberately unchanged: a taller row on a bigger phone would just mean
+ * more scrolling.
+ */
+@media (min-width: 430px) {
+  :root {
+    --gutter: 1.625rem; /* 26px */
+    --t-display: 1.9375rem; /* 31px */
+  }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-paper: var(--paper);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+
+  --color-status-ok: var(--status-ok);
+  --color-status-soon: var(--status-soon);
+  --color-status-late: var(--status-late);
+  --color-status-none: var(--status-none);
+
+  --color-status-ok-bg: var(--status-ok-bg);
+  --color-status-soon-bg: var(--status-soon-bg);
+  --color-status-late-bg: var(--status-late-bg);
+
+  --color-onink: var(--onink);
+  --color-focus: var(--focus);
+
+  /**
+   * ── The shadcn/ui token contract, kept as ALIASES onto the semantics above ──
+   *
+   * These names are not decoration and are not dead: they are what lets a future
+   * `shadcn add <component>` drop in without being rewritten. Mapping them onto the ledger
+   * palette means a generated component arrives already wearing the right clothes.
+   *
+   * `--color-destructive` maps to `--status-late` rather than to a separate red. The design is
+   * explicit that a destructive action is text in the late tone and **never a red block**, so a
+   * second red would be a colour spent on something other than status.
+   */
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-card: var(--raised);
+  --color-card-foreground: var(--ink);
+  --color-muted: var(--sunken);
+  --color-muted-foreground: var(--ink-3);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--onink);
+  --color-secondary: var(--sunken);
+  --color-secondary-foreground: var(--ink);
+  --color-destructive: var(--status-late);
+  --color-destructive-foreground: var(--onink);
+  --color-border: var(--rule);
+  --color-input: var(--rule-2);
+  --color-ring: var(--focus);
+
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-display: var(--t-display);
+  --text-title: var(--t-title);
+  --text-serif-row: var(--t-serif-row);
+  --text-head: var(--t-head);
+  --text-row: var(--t-row);
+  --text-body: var(--t-body);
+  --text-meta: var(--t-meta);
+  --text-label: var(--t-label);
+  --text-mask: var(--t-mask);
+
+  --spacing-gutter: var(--gutter);
+  --spacing-tap: var(--tap-min);
+  --spacing-row: var(--row-min);
+  --spacing-field: var(--field-h);
+
+  --radius-1: var(--r-1);
+  --radius-2: var(--r-2);
+  --radius-3: var(--r-3);
+  --radius-4: var(--r-4);
+  --radius-pill: var(--r-pill);
+
+  --shadow-sheet: var(--e-sheet);
+  --shadow-toast: var(--e-toast);
+
+  --tracking-tight-display: var(--track-tight);
+  --tracking-label: var(--track-label);
+  --tracking-mask: var(--track-mask);
 }
 
 @layer base {
@@ -80,9 +305,11 @@
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--t-body);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
 
     /**
@@ -142,12 +369,25 @@
   }
 
   /**
+   * A 2px `--focus` ring at 2px offset, on EVERY interactive element — including list rows, which
+   * are tabbable and not merely tappable. Declared globally rather than per component because the
+   * one place a focus ring must not be forgotten is the one nobody thought to style.
+   */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /**
    * Respect a system reduced-motion preference; every animation here is decoration.
    *
    * **`!important` is deliberate and Biome's `noImportantStyles` is suppressed for it.** An
    * accessibility override has to beat utility classes and inline styles it cannot know about —
    * that is the whole point of the rule, and specificity alone cannot guarantee it. This is the
    * canonical form of the reset.
+   *
+   * Two specific consequences the design calls out by name: the add sheet appears without
+   * translating, and the "expires today" ring stops pulsing.
    */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -156,21 +396,59 @@
       /* biome-ignore-start lint/complexity/noImportantStyles: an a11y override must win */
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
+      transform: none !important;
       /* biome-ignore-end lint/complexity/noImportantStyles: an a11y override must win */
     }
   }
 }
 
 /**
- * The skeleton shimmer. Defined here rather than in a component because `@theme`'s tokens are
- * CSS-first in Tailwind v4 and a keyframe belongs alongside them.
+ * ── Motion, all of it ─────────────────────────────────────────────────────────
+ *
+ * Defined here rather than in components because `@theme`'s tokens are CSS-first in Tailwind v4
+ * and a keyframe belongs alongside them. There are four, and that is the whole inventory.
  */
-@keyframes skeleton-pulse {
+
+/* The "expires today" ring — the ONE thing in the app that moves on its own, because it is the
+   one state where a day's delay is the difference. */
+@keyframes ledger-pulse {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.45;
+    opacity: 0.35;
+  }
+}
+
+/* First-paint placeholders only. A refresh keeps the stale list and dims nothing. */
+@keyframes ledger-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
+
+/* The sheet and the toast: 14px of rise, once. */
+@keyframes ledger-rise {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* The backdrop behind a sheet fades rather than rising with it. */
+@keyframes ledger-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

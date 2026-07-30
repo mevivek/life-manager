@@ -25,8 +25,17 @@ export default defineConfig({
         name: 'life-manager',
         short_name: 'life',
         description: 'Documents, assets, money, people, notes — in one place.',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        /**
+         * The Ledger paper (ADR-0025), matching `:root` in `styles.css`.
+         *
+         * A manifest carries exactly one of each, so it cannot follow the theme. `background_color`
+         * is what paints the launch splash before any CSS exists, so it has to agree with the CSS
+         * *default* — which is light. `theme_color` here is only the fallback: the
+         * `<meta name="theme-color">` that `applyTheme()` rewrites wins at runtime, so the status
+         * bar does follow the theme even though this value cannot.
+         */
+        theme_color: '#f7f5f0',
+        background_color: '#f7f5f0',
         display: 'standalone',
         start_url: '/',
         scope: '/',
@@ -66,6 +75,21 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+
+        /**
+         * Keep the non-latin Newsreader subsets out of the precache.
+         *
+         * `@fontsource-variable/newsreader` has no per-subset stylesheet, so importing its `wght`
+         * axis declares latin, latin-ext and vietnamese `@font-face` rules and Vite bundles all
+         * three files. The browser only *downloads* the subset a character needs — `unicode-range`
+         * takes care of that — but the service worker precaches by filename and would fetch every
+         * one on install, adding ~120KB to first launch for glyphs a UK paperwork app will not
+         * render. They stay reachable over the network if a document title ever needs them.
+         *
+         * The IBM Plex families need no such exclusion: `styles.css` imports their `latin-*.css`
+         * entry points, so only latin is ever bundled.
+         */
+        globIgnores: ['**/newsreader-vietnamese-*.woff2', '**/newsreader-latin-ext-*.woff2'],
 
         /**
          * Adds the `push` and `notificationclick` listeners to the generated worker.

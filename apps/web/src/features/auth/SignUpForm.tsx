@@ -35,12 +35,10 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
   })
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-      <GoogleButton />
+    <form onSubmit={submit} className="flex flex-col gap-2.5" noValidate>
+      {serverError !== null && <Alert>{serverError}</Alert>}
 
-      {serverError !== null && <Alert variant="destructive">{serverError}</Alert>}
-
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="name">Name</Label>
         <Input
           id="name"
@@ -48,10 +46,10 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           aria-invalid={errors.name !== undefined}
           {...register('name')}
         />
-        {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+        {errors.name && <p className="text-body text-status-late">{errors.name.message}</p>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -60,10 +58,10 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           aria-invalid={errors.email !== undefined}
           {...register('email')}
         />
-        {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+        {errors.email && <p className="text-body text-status-late">{errors.email.message}</p>}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
@@ -72,12 +70,16 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           aria-invalid={errors.password !== undefined}
           {...register('password')}
         />
-        {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+        {errors.password && <p className="text-body text-status-late">{errors.password.message}</p>}
       </div>
 
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" size="lg" className="mt-1.5 w-full" disabled={isSubmitting}>
         {isSubmitting ? 'Creating account…' : 'Create account'}
       </Button>
+
+      {/* Below the primary, matching `SignInForm` — see the note there for why, and for why there is
+          no "or" divider between them. */}
+      <GoogleButton />
     </form>
   )
 }

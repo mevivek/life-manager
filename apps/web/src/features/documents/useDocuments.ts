@@ -5,6 +5,7 @@ import type {
   ReminderCreate,
 } from '@life-manager/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { api, OfflineError } from '@/lib/api'
 import * as outbox from '@/lib/outbox'
 import { canQueueBytes, requestPersistentStorage } from '@/lib/storage-quota'
@@ -144,8 +145,20 @@ export function useDeleteDocument() {
 export function useUploadFile(documentId: string) {
   const queryClient = useQueryClient()
 
-  return useMutation({
+  /**
+   * Upload progress, 0–1.
+   *
+   * Deliberately **not** in the mutation's own state and deliberately not in the Query cache. It
+   * changes many times a second, so putting it in the cache would mean a cache write per progress
+   * event — and `persister.ts` would then throttle-write the whole cache to IndexedDB while a file is
+   * uploading. It is transient view state and belongs in `useState`.
+   */
+  const [progress, setProgress] = useState<number | null>(null)
+
+  const mutation = useMutation({
     mutationFn: async (file: File) => {
+      setProgress(0)
+
       /**
        * Offline capture (ADR-0024): the bytes are queued and uploaded on reconnect.
        *
@@ -163,8 +176,16 @@ export function useUploadFile(documentId: string) {
           make_primary: true,
         })
 
-        await api.files.upload(presigned.upload_url, file)
+        await api.files.upload(presigned.upload_url, file, setProgress)
 
+        /**
+         * Progress is pinned at 1 for the confirm round-trip rather than reset to null.
+         *
+         * The bytes really are all uploaded at this point, and `:confirm` is a fast call to our own
+         * API — but clearing the bar first makes the row flick back to "no progress" for a beat,
+         * which reads as the upload restarting.
+         */
+        setProgress(1)
         return api.files.confirm(documentId, { file_id: presigned.file_id })
       }
 
@@ -187,13 +208,24 @@ export function useUploadFile(documentId: string) {
           mime: file.type,
           sizeBytes: file.size,
         })
+        /**
+         * `onSettled` clears `progress`, so a queued upload does not leave a stalled bar behind.
+         *
+         * That matters more here than on the success path: the row would otherwise sit at whatever
+         * fraction the failed attempt reached, which reads as an upload still in flight when in fact
+         * it is waiting for a network that is not there. `DocumentFiles` shows the queued state
+         * instead.
+         */
         return { queued: true } as const
       }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })
     },
+    onSettled: () => setProgress(null),
   })
+
+  return Object.assign(mutation, { progress })
 }
 
 /** Narrowed at the API boundary; the browser hands us an arbitrary string. */

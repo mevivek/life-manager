@@ -1,9 +1,11 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f172a" />
+    <!-- Rewritten at runtime by `applyTheme()` so the OS status-bar tint matches the active theme.
+         The value here is the light paper, which is also what the bootstrap below defaults to. -->
+    <meta name="theme-color" content="#f7f5f0" />
     <!-- Required for "Add to Home Screen" to launch without browser chrome on iOS. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -11,6 +13,43 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>life-manager</title>
+    <script>
+      /**
+       * Resolves the theme BEFORE first paint. Blocking and inline, on purpose.
+       *
+       * `styles.css` reads `[data-theme]` and has no `prefers-color-scheme` fallback, so without
+       * this the page paints light, the bundle loads, `useTheme` runs, and the whole app flips to
+       * dark a beat later. That flash is the loudest "this is a web page" tell in the app, and it
+       * cannot be fixed from inside the bundle — by the time any module executes, the first frame
+       * is already on screen.
+       *
+       * It duplicates a few lines of `lib/theme.ts` because it must run before any import can
+       * happen. Keep the storage key and the two hex values in step with that module.
+       */
+      ;(() => {
+        // `let` at the function root rather than `var` inside the `try`: a `var` there is hoisted out
+        // of the block anyway, which reads as a scope it does not have.
+        let resolved = 'light'
+        try {
+          const stored = localStorage.getItem('life-manager-theme')
+          resolved =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+        } catch {
+          // Private-mode Safari throws on localStorage. Light is a fine floor, and `useTheme` puts it
+          // right on mount.
+        }
+        document.documentElement.dataset.theme = resolved
+        if (resolved === 'dark') {
+          // Optional-chained: if the meta tag is ever removed from the head, a theme preference must
+          // not take the whole page down before the bundle has even loaded.
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#131311')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
