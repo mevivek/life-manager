@@ -12,9 +12,9 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 356 tests: web 206 · api 121 · shared 29 — 356/0 measured on
+build` are green. **The suite is 360 tests: web 206 · api 125 · shared 29 — 360/0 measured on
 2026-07-30 against a real Postgres**, not inferred from a green pipeline. A container with no Docker
-measures **248 passed / 108 skipped**; all 108 skipped are the API's — the maintenance
+measures **248 passed / 112 skipped**; all 112 skipped are the API's — the maintenance
 endpoint's four constant-time-comparison tests are deliberately NOT database-backed, so they run
 everywhere.
 

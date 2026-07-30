@@ -30,6 +30,37 @@ import * as service from './maintenance.service.js'
  * Brute-forcing 32 bytes is not the realistic threat; making the endpoint cheap to hammer is.
  */
 export async function maintenanceRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * **Accept a bodyless POST whatever content type the caller declares.**
+   *
+   * Fastify answers **415** for a content type it has no parser for, and it decides that in the
+   * content-type parser — before any schema, hook or handler runs, so neither the Zod schema nor the
+   * auth check can affect it. Out of the box only `application/json` and `text/plain` are parsed.
+   *
+   * That broke the one caller this endpoint exists for. Measured, not guessed
+   * (`maintenance.test.ts` § "the trigger accepts a POST with no body"):
+   *
+   *   · no content-type at all            → fine
+   *   · `application/json`                → fine
+   *   · `application/x-www-form-urlencoded` → **415** — what PowerShell's `Invoke-RestMethod -Method
+   *                                          Post` sends when given no body
+   *   · `application/octet-stream`        → **415** — what Cloud Scheduler sends
+   *
+   * So a POST from the scheduler was rejected before it reached the handler, and the failure looked
+   * like a client problem rather than a contract one.
+   *
+   * The parser is registered HERE rather than on the root instance on purpose: `maintenanceRoutes` is
+   * registered with a plain `app.register` and is therefore encapsulated, so this catch-all applies to
+   * this route only. Doing it globally would make every other endpoint silently accept a body it has
+   * no parser for, which is a real loosening — `POST /documents` should keep rejecting a form encoding.
+   *
+   * Discarding the payload is correct, not lazy: the endpoint declares no body schema and reads
+   * nothing from it. The trigger carries its entire meaning in the URL and one header.
+   */
+  app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, _payload, done) => {
+    done(null, undefined)
+  })
+
   const route = app.withTypeProvider<ZodTypeProvider>()
 
   route.post(

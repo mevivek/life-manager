@@ -1,5 +1,6 @@
 import { maintenanceRunResponseSchema } from '@life-manager/shared'
 import type { FastifyInstance } from 'fastify'
+import { Client } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../../app.js'
 import { env } from '../../env.js'
@@ -205,8 +206,8 @@ describeDb('the daily maintenance run', () => {
     expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true)
   })
 
-  it('declines a concurrent run rather than double-sending', async () => {
-    const { runDailyMaintenance } = await import('./maintenance.service.js')
+  it('declines a run while another holds the lock, rather than double-sending', async () => {
+    const { runDailyMaintenance, MAINTENANCE_LOCK_KEY } = await import('./maintenance.service.js')
     const user = await seedUserWithSpace(app)
     const document = await createDocument(app, user)
     await app.inject({
@@ -217,17 +218,85 @@ describeDb('the daily maintenance run', () => {
     })
 
     /**
-     * Both at once, which is the situation Cloud Scheduler creates when a run outlives its attempt
-     * deadline and gets retried. Exactly one may do the work — otherwise every due reminder produces
-     * two notifications.
+     * The lock is taken HERE, on its own connection, rather than by racing two runs against each
+     * other.
+     *
+     * An earlier version did `Promise.all([runDailyMaintenance(), runDailyMaintenance()])` and
+     * asserted one of each status. That passes most of the time and fails perhaps one run in ten:
+     * whichever call connects first can finish its whole scan — which is fast, on one reminder with
+     * no subscriptions — and release the lock before the second one asks for it, at which point both
+     * legitimately return 'ran'. conventions/testing.md §5 requires tests that pass in any order and
+     * in parallel, and a race is neither.
+     *
+     * `pg_advisory_lock` blocks rather than trying, so by the time it returns the lock is definitely
+     * held and the assertion below is about behaviour rather than timing.
      */
-    const [first, second] = await Promise.all([runDailyMaintenance(), runDailyMaintenance()])
+    const holder = new Client({ connectionString: env.DATABASE_URL_UNPOOLED })
+    await holder.connect()
+    try {
+      await holder.query('select pg_advisory_lock($1)', [MAINTENANCE_LOCK_KEY])
 
-    const statuses = [first.status, second.status].sort()
-    expect(statuses).toEqual(['ran', 'skipped_locked'])
-    // The declined one reports zero work, so a caller summing the counts cannot double-count.
-    const skipped = first.status === 'skipped_locked' ? first : second
-    expect(skipped.found).toBe(0)
-    expect(skipped.swept).toBe(0)
+      const result = await runDailyMaintenance()
+
+      expect(result.status).toBe('skipped_locked')
+      // The declined run reports no work, so a caller summing counts cannot double-count.
+      expect(result.found).toBe(0)
+      expect(result.swept).toBe(0)
+    } finally {
+      await holder.query('select pg_advisory_unlock($1)', [MAINTENANCE_LOCK_KEY])
+      await holder.end()
+    }
+
+    // And with the lock free again, the same run does the work — proving the skip was the lock's doing
+    // and not a scan that had nothing to find.
+    const afterRelease = await runDailyMaintenance()
+    expect(afterRelease.status).toBe('ran')
+    expect(afterRelease.found).toBe(1)
+  })
+})
+
+describeDb('the trigger accepts a POST with no body', () => {
+  let app: FastifyInstance
+  withCleanDatabase()
+
+  beforeAll(async () => {
+    app = await buildApp({ startJobs: false })
+    await app.ready()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  /**
+   * **Cloud Scheduler sends a POST with no body**, and so does any hand-rolled `curl -X POST` or
+   * PowerShell `Invoke-RestMethod -Method Post`. Fastify answers 415 for a content type it has no
+   * parser for, and it does that in the content-type parser — BEFORE any schema or handler runs, so
+   * neither the Zod schema nor the auth check can influence it.
+   *
+   * The assertion is "not 415" rather than a specific code, because `CRON_SECRET` is unset in tests so
+   * the correct answer here is 503. What matters is that the request reaches the handler at all.
+   */
+  const bodylessPost = (headers: Record<string, string>) =>
+    app.inject({ method: 'POST', url: URL, headers })
+
+  it('with no content-type at all', async () => {
+    const res = await bodylessPost({})
+    expect(res.statusCode).not.toBe(415)
+  })
+
+  it('with application/x-www-form-urlencoded — what PowerShell sends by default', async () => {
+    const res = await bodylessPost({ 'content-type': 'application/x-www-form-urlencoded' })
+    expect(res.statusCode).not.toBe(415)
+  })
+
+  it('with application/octet-stream — what Cloud Scheduler sends', async () => {
+    const res = await bodylessPost({ 'content-type': 'application/octet-stream' })
+    expect(res.statusCode).not.toBe(415)
+  })
+
+  it('with application/json and no body', async () => {
+    const res = await bodylessPost({ 'content-type': 'application/json' })
+    expect(res.statusCode).not.toBe(415)
   })
 })
