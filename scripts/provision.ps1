@@ -62,17 +62,17 @@ function Resolve-Gcloud {
   success.
 #>
 function Invoke-Gcloud {
-  param([string[]]$Args, [switch]$Quiet)
+  param([string[]]$GcArgs, [switch]$Quiet)
   $exe = Resolve-Gcloud
-  if ($Quiet) { & $exe @Args 2>&1 | Out-Null }
-  else { & $exe @Args 2>&1 | ForEach-Object { Write-Host $_ } }
+  if ($Quiet) { & $exe @GcArgs 2>&1 | Out-Null }
+  else { & $exe @GcArgs 2>&1 | ForEach-Object { Write-Host $_ } }
   return $LASTEXITCODE -eq 0
 }
 
 function Get-GcloudValue {
-  param([string[]]$Args)
+  param([string[]]$GcArgs)
   $exe = Resolve-Gcloud
-  $out = & $exe @Args 2>$null
+  $out = & $exe @GcArgs 2>$null
   if ($LASTEXITCODE -ne 0) { return $null }
   return ($out | Out-String).Trim()
 }
@@ -86,11 +86,20 @@ function Get-GcloudValue {
   only "SignatureDoesNotMatch".
 #>
 function Write-SecretToStdin {
-  param([string[]]$Args, [string]$Value)
+  param([string[]]$GcArgs, [string]$Value)
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = Resolve-Gcloud
-  foreach ($a in $Args) { $psi.ArgumentList.Add($a) }
+
+  # `.Arguments` (one string), NOT `.ArgumentList`. The latter does not exist in Windows PowerShell
+  # 5.1's .NET Framework — it arrived with .NET Core — and this script has to run on the stock
+  # PowerShell that ships with Windows. Quoting only where needed keeps the command line readable in
+  # any error message.
+  $quoted = $GcArgs | ForEach-Object {
+    if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ }
+  }
+  $psi.Arguments = ($quoted -join ' ')
+
   $psi.RedirectStandardInput = $true
   $psi.RedirectStandardError = $true
   $psi.UseShellExecute = $false
@@ -130,19 +139,19 @@ function Read-Plain {
 function Set-Secret {
   param([string]$Name, [string]$Value)
 
-  $exists = Invoke-Gcloud -Quiet -Args @('secrets', 'describe', $Name, "--project=$Project")
+  $exists = Invoke-Gcloud -Quiet -GcArgs @('secrets', 'describe', $Name, "--project=$Project")
   if ($exists) {
-    Write-SecretToStdin -Value $Value -Args @('secrets', 'versions', 'add', $Name, '--data-file=-', "--project=$Project")
+    Write-SecretToStdin -Value $Value -GcArgs @('secrets', 'versions', 'add', $Name, '--data-file=-', "--project=$Project")
     Write-Host "  $Name - new version added"
   }
   else {
-    Write-SecretToStdin -Value $Value -Args @('secrets', 'create', $Name, '--data-file=-', "--project=$Project")
+    Write-SecretToStdin -Value $Value -GcArgs @('secrets', 'create', $Name, '--data-file=-', "--project=$Project")
     Write-Host "  $Name - created"
   }
 
   # The runtime account holds secretAccessor per-secret and has no project-level roles, so a new
   # secret is unreadable until granted. That failure presents as a boot crash, not a permission error.
-  Invoke-Gcloud -Quiet -Args @(
+  Invoke-Gcloud -Quiet -GcArgs @(
     'secrets', 'add-iam-policy-binding', $Name,
     "--member=serviceAccount:$RuntimeSA",
     '--role=roles/secretmanager.secretAccessor',
@@ -163,7 +172,7 @@ function Confirm-Target {
 }
 
 function Get-BoundEnvNames {
-  $raw = Get-GcloudValue -Args @(
+  $raw = Get-GcloudValue -GcArgs @(
     'run', 'services', 'describe', $Service, "--region=$Region", "--project=$Project",
     '--format=value(spec.template.spec.containers[0].env[].name)'
   )
@@ -193,26 +202,26 @@ function Invoke-Preflight {
   Write-Host ''
   $failures = 0
 
-  $account = Get-GcloudValue -Args @('config', 'get-value', 'account')
+  $account = Get-GcloudValue -GcArgs @('config', 'get-value', 'account')
   if ($account -and $account -ne '(unset)') { Write-Host "  ok    authenticated as $account" -ForegroundColor Green }
   else { Write-Host '  FAIL  not authenticated - run: gcloud auth login' -ForegroundColor Red; $failures++ }
 
-  if (Invoke-Gcloud -Quiet -Args @('projects', 'describe', $Project)) {
+  if (Invoke-Gcloud -Quiet -GcArgs @('projects', 'describe', $Project)) {
     Write-Host "  ok    project $Project reachable" -ForegroundColor Green
   }
   else { Write-Host "  FAIL  cannot reach project $Project" -ForegroundColor Red; $failures++ }
 
-  if (Invoke-Gcloud -Quiet -Args @('run', 'services', 'describe', $Service, "--region=$Region", "--project=$Project")) {
+  if (Invoke-Gcloud -Quiet -GcArgs @('run', 'services', 'describe', $Service, "--region=$Region", "--project=$Project")) {
     Write-Host "  ok    Cloud Run service $Service exists in $Region" -ForegroundColor Green
   }
   else { Write-Host "  FAIL  no Cloud Run service $Service in $Region" -ForegroundColor Red; $failures++ }
 
-  if (Invoke-Gcloud -Quiet -Args @('iam', 'service-accounts', 'describe', $RuntimeSA, "--project=$Project")) {
+  if (Invoke-Gcloud -Quiet -GcArgs @('iam', 'service-accounts', 'describe', $RuntimeSA, "--project=$Project")) {
     Write-Host '  ok    runtime account exists' -ForegroundColor Green
   }
   else { Write-Host "  FAIL  runtime account $RuntimeSA not found" -ForegroundColor Red; $failures++ }
 
-  if (Invoke-Gcloud -Quiet -Args @('secrets', 'list', "--project=$Project", '--limit=1')) {
+  if (Invoke-Gcloud -Quiet -GcArgs @('secrets', 'list', "--project=$Project", '--limit=1')) {
     Write-Host '  ok    Secret Manager readable' -ForegroundColor Green
   }
   else { Write-Host '  FAIL  cannot list secrets - API disabled, or no secretmanager role' -ForegroundColor Red; $failures++ }
@@ -258,7 +267,7 @@ Create the bucket and an "Object Read & Write" API token scoped to it, in the Cl
   # ONE call: env.ts requires all four together, so a two-step bind leaves a revision that cannot boot.
   Write-Host ''
   Write-Host "Binding to $Service"
-  $ok = Invoke-Gcloud -Args @(
+  $ok = Invoke-Gcloud -GcArgs @(
     'run', 'services', 'update', $Service, "--region=$Region", "--project=$Project",
     '--update-secrets=R2_ACCESS_KEY_ID=R2_ACCESS_KEY_ID:latest,R2_SECRET_ACCESS_KEY=R2_SECRET_ACCESS_KEY:latest',
     "--update-env-vars=R2_ACCOUNT_ID=$accountId,R2_BUCKET=$bucket",
@@ -298,7 +307,7 @@ its own format, and a pair from elsewhere will not load.
 
   Write-Host ''
   Write-Host "Binding to $Service"
-  $ok = Invoke-Gcloud -Args @(
+  $ok = Invoke-Gcloud -GcArgs @(
     'run', 'services', 'update', $Service, "--region=$Region", "--project=$Project",
     '--update-secrets=VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest',
     "--update-env-vars=VAPID_PUBLIC_KEY=$publicKey,VAPID_SUBJECT=$subject",
@@ -336,7 +345,7 @@ Remember to update apps/api/.env too; verify-deployment.mjs reads DATABASE_URL_U
 
   Write-Host ''
   Write-Host "Binding to $Service"
-  $ok = Invoke-Gcloud -Args @(
+  $ok = Invoke-Gcloud -GcArgs @(
     'run', 'services', 'update', $Service, "--region=$Region", "--project=$Project",
     '--update-secrets=DATABASE_URL=DATABASE_URL:latest,DATABASE_URL_UNPOOLED=DATABASE_URL_UNPOOLED:latest',
     '--quiet'
@@ -354,7 +363,7 @@ function Show-Status {
   Write-Host ''
   Write-Host "Secrets in $Project"
   # Get-GcloudValue, not Invoke-Gcloud: the latter returns a boolean, which would print as "True".
-  $secrets = Get-GcloudValue -Args @('secrets', 'list', "--project=$Project", '--format=value(name)')
+  $secrets = Get-GcloudValue -GcArgs @('secrets', 'list', "--project=$Project", '--format=value(name)')
   if ($secrets) { $secrets -split '\r?\n' | ForEach-Object { Write-Host "  $_" } }
   else { Write-Host '  (none readable)' }
 
