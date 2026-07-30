@@ -462,17 +462,39 @@ header (so the caller sends it). This script does both, so you paste it once.
   # `jobs describe`, `jobs list --format=yaml` - prints the header too. Use
   # `--format='value(schedule,state)'` when inspecting it, or expect to rotate.
   $uri = "$ApiOrigin/api/v1/maintenance:run-daily"
+  <#
+    ── Recreate rather than update, because of a gcloud asymmetry that cost a rotation ──
+
+    `jobs create http` accepts `--headers`. `jobs update http` does NOT: map-valued flags there are
+    `--update-headers` / `--remove-headers` / `--clear-headers`. Passing `--headers` to the UPDATE verb
+    makes gcloud print its help text and exit non-zero — which is what happened on the first rotation,
+    AFTER the new secret had already been bound to Cloud Run. The API expected the new value while the
+    job still sent the old one, so the daily run would have 401'd.
+
+    So: delete if present, then always create. One flag set — the one verified against the real API,
+    rather than a second one nobody has run. A scheduler job holds nothing worth preserving here: its
+    schedule and uri are constants in this script, and the only casualty is `lastAttemptTime`, which is
+    informational. A good trade for a command that has to work first time on someone else's machine.
+  #>
   $exists = Invoke-Gcloud -Quiet -GcArgs @(
     'scheduler', 'jobs', 'describe', $SchedulerJob, "--location=$Region", "--project=$Project"
   )
 
+  if ($exists) {
+    Write-Host ''
+    Write-Host 'Removing the existing job, so it is recreated with the new header'
+    $ok = Invoke-Gcloud -GcArgs @(
+      'scheduler', 'jobs', 'delete', $SchedulerJob,
+      "--location=$Region", "--project=$Project", '--quiet'
+    )
+    if (-not $ok) { throw 'could not delete the existing scheduler job - nothing else was changed' }
+  }
+
   Write-Host ''
   Write-Host 'Creating the Scheduler job'
-  $verb = if ($exists) { 'update' } else { 'create' }
-  if ($exists) { Write-Host '  job exists - updating it' }
 
   $jobArgs = @(
-    'scheduler', 'jobs', $verb, 'http', $SchedulerJob,
+    'scheduler', 'jobs', 'create', 'http', $SchedulerJob,
     "--location=$Region", "--project=$Project",
     '--schedule=0 8 * * *', '--time-zone=Etc/UTC',
     "--uri=$uri",
@@ -487,11 +509,23 @@ header (so the caller sends it). This script does both, so you paste it once.
     # value and it had to be rotated. `--quiet` does not suppress it; it only stops prompts.
     '--format=none'
   )
-  if (-not $exists) { $jobArgs += '--description=Daily reminder scan and sweep (ADR-0028)' }
+  $jobArgs += '--description=Daily reminder scan and sweep (ADR-0028)'
   $jobArgs += '--quiet'
 
   $ok = Invoke-Gcloud -GcArgs $jobArgs
-  if (-not $ok) { throw 'the scheduler job was not created - CRON_SECRET IS bound, so re-run this command' }
+  if (-not $ok) {
+    # Spells out the half-state rather than saying "failed". The secret is ALREADY bound by this point,
+    # so the deployment is inconsistent until this succeeds — and that is not evident from a stack trace.
+    throw @"
+the scheduler job was not created.
+
+CRON_SECRET is already stored and bound to $Service, so the API now expects the value you just typed -
+but no job carries it. The daily run would answer 401. This is a HALF-DONE rotation.
+
+Re-run this command to finish it; repeating it is safe. Until then nothing scans, which costs a missed
+reminder rather than an outage.
+"@
+  }
 
   Write-Host ''
   Write-Host 'Done. Verify now - do not wait until 08:00 UTC:' -ForegroundColor Green
