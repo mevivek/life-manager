@@ -285,30 +285,40 @@ EOF
   #
   # The same applies to anything that READS the job: `jobs describe` and `jobs list --format=yaml`
   # print the header. Inspect it with `--format='value(schedule,state)'` instead.
-  printf '\nCreating the Scheduler job\n'
+  # ── Recreate rather than update, because of a gcloud asymmetry that cost a rotation ──
+  #
+  # `jobs create http` accepts `--headers`. `jobs update http` does NOT: map-valued flags there are
+  # `--update-headers` / `--remove-headers` / `--clear-headers`. Passing `--headers` to the UPDATE verb
+  # makes gcloud print its help text and exit non-zero — which is what happened on the first rotation,
+  # AFTER the new secret had already been bound to Cloud Run, so the API expected the new value while
+  # the job still sent the old one.
+  #
+  # So: delete if present, then always create. One flag set, the one verified against the real API. A
+  # scheduler job holds nothing worth preserving here — schedule and uri are constants in this script,
+  # and the only casualty is `lastAttemptTime`.
   if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
-    note 'job exists — updating it'
-    gcloud scheduler jobs update http "$SCHEDULER_JOB" \
-      --location="$REGION" --project="$PROJECT" \
-      --schedule='0 8 * * *' --time-zone=Etc/UTC \
-      --uri="${API_ORIGIN}/api/v1/maintenance:run-daily" \
-      --http-method=POST \
-      --headers="X-Cron-Key=${secret}" \
-      --attempt-deadline=180s \
-      --format=none \
-      --quiet
-  else
-    gcloud scheduler jobs create http "$SCHEDULER_JOB" \
-      --location="$REGION" --project="$PROJECT" \
-      --schedule='0 8 * * *' --time-zone=Etc/UTC \
-      --uri="${API_ORIGIN}/api/v1/maintenance:run-daily" \
-      --http-method=POST \
-      --headers="X-Cron-Key=${secret}" \
-      --attempt-deadline=180s \
-      --description='Daily reminder scan and sweep (ADR-0028)' \
-      --format=none \
-      --quiet
+    printf '\nRemoving the existing job, so it is recreated with the new header\n'
+    gcloud scheduler jobs delete "$SCHEDULER_JOB" \
+      --location="$REGION" --project="$PROJECT" --quiet ||
+      die 'could not delete the existing scheduler job - nothing else was changed'
+    note 'done'
   fi
+
+  printf '\nCreating the Scheduler job\n'
+  # `--format=none` is load-bearing — see the note above. Do not remove it while debugging.
+  gcloud scheduler jobs create http "$SCHEDULER_JOB" \
+    --location="$REGION" --project="$PROJECT" \
+    --schedule='0 8 * * *' --time-zone=Etc/UTC \
+    --uri="${API_ORIGIN}/api/v1/maintenance:run-daily" \
+    --http-method=POST \
+    --headers="X-Cron-Key=${secret}" \
+    --attempt-deadline=180s \
+    --description='Daily reminder scan and sweep (ADR-0028)' \
+    --format=none \
+    --quiet ||
+    die 'the scheduler job was not created. CRON_SECRET IS already bound, so the API expects the new
+value while no job carries it — a HALF-DONE rotation. Re-run this command to finish it; repeating it
+is safe.'
   note 'done'
 
   cat <<EOF
