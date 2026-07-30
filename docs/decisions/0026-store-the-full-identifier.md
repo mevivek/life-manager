@@ -1,6 +1,13 @@
 # ADR-0026: Store the full document identifier, unencrypted
 
-- **Status:** accepted
+- **Status:** accepted — **the detail-only rule superseded by
+  [ADR-0027](0027-identifier-in-the-list-response.md)**
+- **Superseded by:** [ADR-0027](0027-identifier-in-the-list-response.md), **scoped: the "returned on the
+  detail response only" rule.** `identifier` is now on `documentSchema`, so it comes back on **every**
+  document response including the list. Everything else here stands — the full value is stored, in
+  plaintext, `identifier_last4` is derived server-side and never sent by a client, and Reveal is a
+  display state rather than an authorization boundary. The cost 0027 accepted is that the persisted
+  cache now holds every number on the device (debt **D47**).
 - **Date:** 2026-07-30
 - **Amends:** [ADR-0009](0009-sensitivity-tiers.md) — the data-minimisation half of it, not the
   encryption half

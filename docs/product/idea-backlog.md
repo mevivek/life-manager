@@ -22,21 +22,43 @@ backlog is a complete picture.
 | Idea | Milestone | Domains | Status |
 |---|---|---|---|
 | Documents CRUD + file upload/versioning | M1 | Documents | **built** 2026-07-28 |
-| **Expiry reminders with push delivery** | M1 | Documents | **built** 2026-07-28 — delivery unproven until VAPID keys exist and a real phone subscribes |
+| **Expiry reminders with push delivery** | M1 | Documents | **built** 2026-07-28 — VAPID is provisioned now, and what is left is a phone subscribing and one notification being *seen*; status in [roadmap.md § Current position](../roadmap.md#current-position) |
 | Full-text search over metadata | M1 | Documents | **built** 2026-07-28 — title/issuer/notes/tags, weighted |
 | Expiring-soon dashboard as the home screen | M1 | Documents | **built** 2026-07-28 (shaped below; brought forward into M1 as §7 predicted) |
 | OCR / search inside documents | M2 | Documents | roadmap |
-| Offline read cache | M2 | — |
-| Family sharing (invites, roles, space switcher) | M3 | All |
-| Assets domain | M4 | Assets |
-| Money domain | M4 | Money |
-| Secrets vault (E2EE) | M5 | Vault |
+| Offline read cache | M2 | — | **built** 2026-07-29 — pulled ahead of M1's "done when" by an explicit product call ([roadmap.md](../roadmap.md) §4b). The read half is [ADR-0013](../decisions/0013-read-only-offline-v1.md); offline **writes** followed as an outbox, [ADR-0024](../decisions/0024-offline-writes-outbox.md) |
+| Family sharing (invites, roles, space switcher) | M3 | All | roadmap |
+| **Things domain** (was "Assets") | M4, pulled into M1's window | Things | **built** 2026-07-30, both halves — [ADR-0029](../decisions/0029-the-things-domain.md), [domains/things.md](../domains/things.md). **It skipped this backlog entirely; see the note under § Ready** |
+| Money domain | M4 | Money | roadmap |
+| Secrets vault (E2EE) | M5 | Vault | roadmap |
 
 ---
 
 ## Ready — awaiting a human yes
 
 *(none yet — nothing has been shaped and validated far enough)*
+
+> ### The Things domain never passed through here, and that is worth recording rather than tidying away
+>
+> A whole second domain went from *nothing* to *built, both halves* between 2026-07-29 and 2026-07-30
+> with **no entry in this file at any point**. Its real path was:
+>
+> 1. A **design handoff** arrived specifying the domain in full — screens, the cover ladder, the
+>    ownership triple, the capture track. It therefore entered at **`shaped`**, skipping `raw`, because
+>    somebody else had already done the shaping.
+> 2. [ADR-0029](../decisions/0029-the-things-domain.md) was written and the **client half was built the
+>    same day**, from the comp.
+> 3. The **server half** followed as M4 step 1 on 2026-07-30.
+>
+> So `shaped → built` directly. It never sat in **Ready**, and the human's explicit *yes* that
+> [ADR-0017](../decisions/0017-product-brain.md) §3 puts between `ready` and `roadmap` was never asked
+> for as a scope question — the handoff was treated as the decision. **The funnel gate was bypassed.**
+>
+> This is not retroactive permission and the entry above is not a claim it went well procedurally. It
+> is here because [CLAUDE.md](../../CLAUDE.md) invariant 12 says the human decides product scope, and a
+> bypass that leaves no trace is one nobody can weigh later. Two things follow: a design handoff is an
+> *input* to shaping, not a substitute for the gate; and the next domain gets a `ready` entry and an
+> explicit yes before a line of it is written, however finished the comp looks.
 
 ---
 

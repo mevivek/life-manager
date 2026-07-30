@@ -197,14 +197,19 @@ Universal column rules are in [conventions/data.md](conventions/data.md).
 
 All free or near-free at single-user traffic
 ([ADR-0021](decisions/0021-cloud-run-for-the-api.md), superseding
-[ADR-0014](decisions/0014-hosting-topology.md)). **Live since 2026-07-27**, except R2.
+[ADR-0014](decisions/0014-hosting-topology.md)).
+
+**This section describes the shape, not the state.** What is deployed and provisioned right now is
+asserted in exactly one place — [roadmap.md § Current position](roadmap.md#current-position) — because
+restating it in five files is what drifted at M0 and again at M1 (debt **D28**). Do not add a status
+claim here.
 
 | Component | Host | Notes |
 |---|---|---|
 | Web PWA | Cloudflare Pages | Static build, global CDN, no server. Builds on push from `main` |
 | API | **Cloud Run** | Node container, `--min-instances=0`. Not Fly — [ADR-0021](decisions/0021-cloud-run-for-the-api.md) |
 | Database | Neon | Serverless Postgres, branching, scale-to-zero |
-| Files | Cloudflare R2 | Private bucket, zero egress fees. **Not provisioned yet — M1** |
+| Files | Cloudflare R2 | Private bucket, zero egress fees. Presigned PUT straight from the browser, so the bucket needs a CORS policy ([README](../README.md) § Provisioning) |
 
 The web build is static and the API is a stateless container, so nothing about this
 topology is load-bearing — every component can be moved to another provider without a
@@ -216,8 +221,12 @@ Recorded so a future session doesn't treat an intentional absence as an oversigh
 
 - **No SSR / server-rendered HTML.** The web client is a static SPA
   ([ADR-0003](decisions/0003-vite-spa-pwa-over-nextjs.md)).
-- **No offline writes.** v1 caches reads only
-  ([ADR-0013](decisions/0013-read-only-offline-v1.md)).
+- **No background sync.** Offline writes *do* exist, through an explicit outbox: a write made
+  offline queues in IndexedDB and replays on reconnect, and a stale write is refused with **409** and
+  surfaced for the user to decide, never merged
+  ([ADR-0024](decisions/0024-offline-writes-outbox.md), superseding
+  [ADR-0013](decisions/0013-read-only-offline-v1.md)'s no-writes half — its read cache stands). What
+  is deliberately absent is the *implicit* half: no Background Sync API, no CRDTs, no automatic merge.
 - **No GraphQL.** REST with a generated OpenAPI contract
   ([ADR-0004](decisions/0004-zod-single-contract-source.md)).
 - **No application-level encryption of ordinary data**

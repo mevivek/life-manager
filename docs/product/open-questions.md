@@ -97,6 +97,42 @@ so changing it is a human decision, not a refactor.
 **Blocks:** M3's role enforcement. Nothing before that, because there is no second space and no
 role check yet. Answer during M3 planning, not sooner.
 
+### Q7 — Should a warranty or a service date create reminders automatically?
+
+**Why it matters:** Documents auto-remind only for `identity` and `certificate` types (**Q1**, answered
+(a): expiry-only). Things now has two due dates of its own — `warranty_ends_on` and `service_due_on` —
+and the equivalent call has never been made, so **nothing creates a thing reminder at all.** The
+capability was built and the switch deliberately left off: `reminders` is generic on `entity_type`, M4
+step 1 added `THING_ENTITY_TYPE` and a `reminders[]` on the thing detail response, and there is a test
+asserting that array comes back **empty**. An empty `reminders[]` on a thing is therefore correct
+today, not a bug.
+
+**This was live in [domains/things.md](../domains/things.md) §9(2) and never filed here**, which
+[ADR-0017](../decisions/0017-product-brain.md) rule 4 requires — recorded so the omission is visible
+rather than tidied away.
+
+**Why it is not a `AUTO_REMINDER_TYPES`-shaped edit.** The daily scan is document-shaped: it left-joins
+`documents` for a title and renders `"{title} expires {due_on}"`. Pointed at a thing that becomes *"A
+document expires …"*, and if the join were naively widened, *"Dishwasher expires 20 Jan"* — the exact
+sentence [ADR-0029](../decisions/0029-the-things-domain.md) and things.md §4 rule 2 exist to prevent,
+because **a lapsed warranty is not an expiry and the dishwasher keeps washing dishes.** So answering
+this also decides the *copy*: a second title source and a second register of words ("Warranty ends",
+"Service due"). Debt **D58**.
+
+**Options:** (a) neither — a warranty ending is information, not an action, and only expiries nag;
+(b) **service due only**, since an overdue service is a thing you must actually do, while an ended
+warranty is not; (c) both, at their own lead times (things.md §6 proposes 30/7 for a service and
+60/14 for cover, against documents' 90/30/7); (d) per-thing opt-in.
+
+**Leaning:** (b). It is the one of the two where a notification asks for an action, it keeps Q1's
+"reminders are for deadlines you can miss" logic intact, and it needs only one new copy register rather
+than two. (c) is the tempting answer and it doubles the wording decision for the half that is merely
+informative.
+
+**Blocks: M4 step 2.** Directly — that step *is* this question, and things.md §9(2) says so. Do not
+build it on a leaning; the wording is the hard half and it is a human's call.
+`things.test.ts`'s "§6: returns an empty reminders array" is the test whichever answer wins changes.
+
 ---
 
 ## 2. Answered

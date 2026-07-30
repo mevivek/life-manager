@@ -244,9 +244,9 @@ GET    /api/v1/things/holders                distinct holders + most recent rela
 POST   /api/v1/things/:id/services           log a service; recomputes service_due_on
 DELETE /api/v1/things/:id/services/:serviceId
 
-POST   /api/v1/things/:id/photos::presign-upload   → { photo_id, upload_url, storage_key, expires_at }
-POST   /api/v1/things/:id/photos::confirm          { photo_id, sha256? }
-POST   /api/v1/things/:id/photos::presign-download { photo_id }
+POST   /api/v1/things/:id/photos:presign-upload    → { photo_id, upload_url, storage_key, expires_at }
+POST   /api/v1/things/:id/photos:confirm           { photo_id, sha256? }
+POST   /api/v1/things/:id/photos:presign-download  { photo_id }
 PATCH  /api/v1/things/:id/photos/:photoId          is_hero only
 DELETE /api/v1/things/:id/photos/:photoId
 ```
@@ -254,10 +254,13 @@ DELETE /api/v1/things/:id/photos/:photoId
 The link is written from the **document** side, because that is where the column is:
 `PATCH /api/v1/documents/:id { thing_id }`. Both screens draw it, one endpoint sets it.
 
-Note the `::` on the photo verbs. A `:verb` in a route pattern needs the double colon and **may only
-follow a static segment** — `/photos/:photoId:presign-download` generates a broken OpenAPI path even
-though Fastify routes it correctly. That is why the photo is named in the **body**, exactly as
-`documents.md` §5 does it. [conventions/api.md](../conventions/api.md) §2.
+**One colon on the wire, always.** The URLs above are what a client calls. `things.routes.ts`
+*registers* them as `photos::presign-upload`, because Fastify reads a single `:` as the start of a path
+parameter and `::` is its registration-time escape for one literal colon — it never reaches a URL. This
+list used to be written with `::`, and a client copied it faithfully and 404'd on every photo verb. A
+`:verb` may also **only follow a static segment** — `/photos/:photoId:presign-download` generates a
+broken OpenAPI path even though Fastify routes it correctly, which is why the photo is named in the
+**body**, exactly as `documents.md` §5 does it. [conventions/api.md](../conventions/api.md) §2.
 
 ## 6. Reminders
 
@@ -300,9 +303,18 @@ rather than a preparatory refactor. Debt **D58**.
 
 Two, plus changes to three that already existed.
 
-**Things (list).** The domain switcher under the title (`Documents` / `Things` segmented pills —
-[ADR-0029](../decisions/0029-the-things-domain.md), never a fourth tab), a **sum insured** card, kind
-filter chips, and the rows.
+**Things (list).** Its own tab in the bottom bar — **Now · Documents · Things · You**
+([ADR-0031](../decisions/0031-things-is-a-fourth-tab.md)) — then a **sum insured** card, kind filter
+chips, and the rows.
+
+> **There is no domain switcher, and re-adding one is the mistake this note exists to prevent.**
+> ADR-0029 shipped Things as segmented `Documents` / `Things` pills under the collection title, on the
+> strength of ADR-0025 §4's *three tabs, forever*. **ADR-0031 reverses both**, on the evidence that
+> the maintainer opened the shipped app and did not find the domain — the exact reopening condition
+> ADR-0029 wrote for itself. `DomainSwitcher.tsx` is **deleted**, not left unreferenced, and both
+> collection routes carry a comment saying the pills are gone. Do not put a domain control back on a
+> collection screen. The switcher *pattern* returns only when the bar is measurably full, inside a
+> tab and never as a dropdown — [design.md §8](../conventions/design.md) holds the 390px procedure.
 
 - A row is a 52×40 thumbnail, the name plus an optional holder pill, then a **cover bar** with its tag
   and words, then the meta line and a document count. A `lent` or `gone` state adds a fourth line.
@@ -353,7 +365,10 @@ delete.
    the comp), and a suggestion list is not a foreign key. Revisit when a user has enough things that
    two spellings of "Volkswagen" become a real annoyance — the same trigger `documents.md` §9 sets for
    `issuer`.
-2. **Should a warranty create reminders automatically?** §6. Unanswered.
+2. **Should a warranty create reminders automatically?** §6. **Unanswered, and now filed as
+   [Q7](../product/open-questions.md) where it belongs** — it blocks M4 step 2, and answering it
+   decides the *copy* as well as the switch (debt **D58**). Until it is answered nothing creates a
+   thing reminder and an empty `reminders[]` is correct.
 3. **Does the 2×2 papers checklist generalise?** §7. Deliberately vehicle-only for now.
 4. **`other` as a tenth kind.** Present in the contract so nothing is unfileable, absent from the
    capture chips so it is never *chosen* — the same shape as `doc_type: 'other'`.

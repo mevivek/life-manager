@@ -1,6 +1,12 @@
 # ADR-0013: Read-only offline in v1; no offline writes
 
-- **Status:** accepted
+- **Status:** accepted — **the no-writes half superseded by
+  [ADR-0024](0024-offline-writes-outbox.md)**
+- **Superseded by:** [ADR-0024](0024-offline-writes-outbox.md), **scoped: the "mutations while offline
+  fail and are not queued" decision only.** Everything else here still stands and is still the
+  design in force — the precached app shell, the Query cache persisted to IndexedDB, the visible
+  staleness marker, files deliberately not cached, and the server as the single source of truth. The
+  *Upgrade path* section below is what ADR-0024 went on to implement, step for step.
 - **Date:** 2026-07-26
 
 ## Context
@@ -65,31 +71,13 @@ logic, no outbox, no conflict UI, no client-generated IDs. Users still get insta
 startup and offline reads, which covers the common case. Sessions cannot introduce sync
 bugs in code that does not exist.
 
-> ### "Instant app startup and offline reads" was false for the whole first life of this feature
->
-> Fixed 2026-07-30, debt **D49**. Recorded here rather than only in the register, because this
-> sentence is the ADR's headline promise and it was untrue while the implementation looked complete.
->
-> The cache was written correctly and restored correctly. What was wrong was *when*.
-> `PersistQueryClientProvider` renders its children immediately and restores in a `useEffect`, so the
-> router — its child, whose effects run first — began loading before any of it was on hand.
-> `routes/_authed.tsx` then asked `ensureQueryData(['me'])` a question the cache could not yet answer,
-> **on every launch**. Startup was therefore never instant (it waited on the API, measured at 8825ms
-> cold) and offline reads never happened at all: the default `networkMode: 'online'` *pauses* a fetch
-> instead of failing it, so a guard that `await`s one hangs forever and the app renders nothing.
->
-> Two implementation rules keep the promise true, and both are load-bearing rather than stylistic:
->
-> 1. **The persisted cache must be restored before the router mounts** — `RestoreGate` in
->    `apps/web/src/App.tsx`.
-> 2. **A query that a route guard awaits must be `networkMode: 'offlineFirst'`**, not the global
->    default — `apps/web/src/features/spaces/useMe.ts`.
->
-> The lesson worth carrying past this ADR is about the test that did not catch it. `offline.test.ts`
-> asserted that `me` was on the persist allowlist, which was true throughout. *Being in the cache
-> file* and *reaching the guard in time* are different claims, and a test for the first reads exactly
-> like a test for the second. `apps/web/src/lib/startup.test.tsx` now asserts the second, by mounting
-> the real provider tree and counting network requests.
+> **This promise was not kept for the whole first life of the feature** — the cache was written and
+> restored correctly, but *after* the router had already asked it a question, so startup was never
+> instant and offline reads never happened at all. Fixed 2026-07-30; the mechanism, the two
+> implementation rules that keep it true, and the lesson about the test that passed throughout are in
+> the debt register — [review.md](../product/review.md#3-debt-register) **D49**. Recorded as a pointer
+> rather than rewritten in place: an ADR is superseded, never edited
+> ([ADR-0015](0015-docs-as-orientation.md) §2).
 
 **Bad:** Cannot add or edit a document without connectivity, which is a real limitation for
 capturing a receipt somewhere with no signal. Cached data can be stale, so the UI must be

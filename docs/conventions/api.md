@@ -137,8 +137,26 @@ rather than written per endpoint — because the two parts everyone gets wrong b
   or the page silently starts in the wrong place. That is why `afterCursor()` does not take a
   nulls-position option.
 
-A malformed cursor is a **422**, not a silent page one: a cursor the client did not get from us is a
+A malformed cursor is a **400**, not a silent page one: a cursor the client did not get from us is a
 bug worth surfacing, and resetting to the first page looks like the list randomly jumping.
+
+> **This said 422 until 2026-07-30, and the change came with a fix.** §3's table splits the two codes
+> by *what* failed — 400 is a malformed request, 422 is a well-formed one that violates a business
+> rule — and a cursor that does not parse has no rule to violate. 422 was written here when a
+> base64/JSON parse failure was the only case in mind.
+>
+> What forced the revisit: `decodeCursor` validated only the version and that the id was *a string*, so
+> a **well-formed cursor carrying garbage** — `{"v":1,"s":null,"i":"not-a-uuid"}`, or a sort value of
+> the wrong type for the column it is compared against — was bound straight into the `WHERE` clause.
+> Postgres raised `22P02 invalid input syntax for type uuid` and it reached the caller as a **500 on
+> every paginated endpoint**. No cross-space read was possible (the tenant filter is a separate `AND`
+> a cursor cannot reach), so it was availability and error noise, not a leak.
+>
+> **Validate the whole payload against the column, not the cursor's own say-so.** `apps/api/src/lib/cursor.ts`
+> parses it with a Zod `strictObject` (id must be a uuid) and then checks the sort value against the
+> *kind* of the sort column — `text`, `date`, or `timestamp` — derived from the Drizzle column itself
+> rather than from a hand-maintained list beside it. `decodeCursor` takes that kind as a **required**
+> argument, so a caller who forgets is a compile error rather than a 500.
 
 ## 5. Idempotency
 
