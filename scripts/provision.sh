@@ -222,6 +222,95 @@ EOF
   printf '\nThen mark D18 closed in docs/product/review.md and security-model.md §7 — BOTH lists.\n'
 }
 
+# Read-only checks, run BEFORE any credential is typed.
+#
+# Every failure below otherwise shows up halfway through a provisioning run — after the secret has
+# been pasted, and usually wearing a misleading error. A wrong active project is the worst of them:
+# `secrets create` would happily succeed somewhere else entirely.
+preflight() {
+  require_gcloud
+  local failures=0
+  local check_ok='  ok   '
+  local check_no='  FAIL '
+
+  printf '\nPreflight — nothing is written, nothing is prompted for\n\n'
+
+  local account
+  account=$(gcloud config get-value account 2>/dev/null)
+  if [ -n "$account" ] && [ "$account" != '(unset)' ]; then
+    printf '%s authenticated as %s\n' "$check_ok" "$account"
+  else
+    printf '%s not authenticated — run: gcloud auth login\n' "$check_no"
+    failures=$((failures + 1))
+  fi
+
+  if gcloud projects describe "$PROJECT" >/dev/null 2>&1; then
+    printf '%s project %s reachable\n' "$check_ok" "$PROJECT"
+  else
+    printf '%s cannot reach project %s\n' "$check_no" "$PROJECT"
+    failures=$((failures + 1))
+  fi
+
+  if gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
+    printf '%s Cloud Run service %s exists in %s\n' "$check_ok" "$SERVICE" "$REGION"
+  else
+    printf '%s no Cloud Run service %s in %s\n' "$check_no" "$SERVICE" "$REGION"
+    failures=$((failures + 1))
+  fi
+
+  if gcloud iam service-accounts describe "$RUNTIME_SA" --project="$PROJECT" >/dev/null 2>&1; then
+    printf '%s runtime account exists\n' "$check_ok"
+  else
+    printf '%s runtime account %s not found\n' "$check_no" "$RUNTIME_SA"
+    failures=$((failures + 1))
+  fi
+
+  # A read test for Secret Manager access. Not proof of write permission, but it catches the common
+  # case of the API being disabled or the caller having no role on it at all.
+  if gcloud secrets list --project="$PROJECT" --limit=1 >/dev/null 2>&1; then
+    printf '%s Secret Manager readable\n' "$check_ok"
+  else
+    printf '%s cannot list secrets — API disabled, or no secretmanager role\n' "$check_no"
+    failures=$((failures + 1))
+  fi
+
+  printf '\nCurrently bound (names only)\n'
+  local bound
+  bound=$(gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT" \
+    --format='value(spec.template.spec.containers[0].env[].name)' 2>/dev/null | tr ';' '\n')
+
+  # Reports each group as complete / partial / absent, because "partial" is the state that makes the
+  # service fail to boot and it is invisible from a list of names alone.
+  group_state 'R2' "$bound" R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
+  group_state 'VAPID' "$bound" VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT
+
+  if [ "$failures" -gt 0 ]; then
+    printf '\n%d check(s) failed. Fix those before provisioning anything.\n' "$failures"
+    exit 1
+  fi
+  printf '\nAll clear. Next: ./scripts/provision.sh r2\n'
+}
+
+# Prints whether a named credential group is fully bound, partly bound, or absent.
+group_state() {
+  local label="$1" bound="$2"
+  shift 2
+  local present=0 total=0 name
+  for name in "$@"; do
+    total=$((total + 1))
+    printf '%s\n' "$bound" | grep -qx "$name" && present=$((present + 1))
+  done
+
+  if [ "$present" -eq 0 ]; then
+    printf '  %-6s not set — the feature is off, which is a valid state\n' "$label"
+  elif [ "$present" -eq "$total" ]; then
+    printf '  %-6s all %d set\n' "$label" "$total"
+  else
+    printf '  %-6s ** PARTIAL (%d of %d) — the API will not boot; env.ts rejects this **\n' \
+      "$label" "$present" "$total"
+  fi
+}
+
 show_status() {
   require_gcloud
   printf '\nSecrets in %s\n' "$PROJECT"
@@ -233,14 +322,16 @@ show_status() {
 }
 
 case "${1:-}" in
+  preflight) preflight ;;
   r2) provision_r2 ;;
   vapid) provision_vapid ;;
   neon) provision_neon ;;
   status) show_status ;;
   *)
     cat <<'EOF'
-usage: ./scripts/provision.sh <r2|vapid|neon|status>
+usage: ./scripts/provision.sh <preflight|r2|vapid|neon|status>
 
+  preflight  check auth, project, service and permissions — writes nothing. START HERE.
   r2      bind the four R2_* values      (file storage; also set bucket CORS — see README)
   vapid   bind the three VAPID_* values  (run scripts/generate-vapid-keys.mjs first)
   neon    rotate the database credential (debt D18 — before the first real document)
