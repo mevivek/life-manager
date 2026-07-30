@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img"
+     aria-label="life-manager">
+  <!--
+    PROPOSAL, not shipped. The same mark cut to two bars for 16–24px, where three bars plus two
+    gaps are ~1.1 device pixels each and merge into a smudge.
+
+    Everything here is a multiple of 64 = one device pixel at 16px, so the raster is exact:
+      bar height 128 = 2px · gap 128 = 2px · group 320..704 (centred) · inset 192 = 3px
+      bar 1 = 640 (10px) paper · bar 2 = 384 (6px) amber, full opacity — length and hue carry it,
+      the 72% recession of the middle bar is what disappears first, so there is no middle bar.
+  -->
+  <rect width="1024" height="1024" rx="227" fill="#15140f"/>
+  <rect x="192" y="320" width="640" height="128" rx="64" fill="#f7f5f0"/>
+  <rect x="192" y="576" width="384" height="128" rx="64" fill="#e0b063"/>
+</svg>
