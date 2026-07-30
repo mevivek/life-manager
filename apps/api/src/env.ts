@@ -148,6 +148,29 @@ const envSchema = z
       .transform((value) => value === 'true'),
 
     /**
+     * Shared secret for `POST /api/v1/maintenance::run-daily`, sent as `X-Cron-Key` (ADR-0028).
+     *
+     * **Optional, and unset means the endpoint is CLOSED, not open.** With no value the route answers
+     * 503 — the same "configured feature, absent credential" posture as R2 and VAPID, and the reason
+     * `pnpm test` and a fresh clone need no secret. Fail-closed is the only acceptable default here:
+     * this endpoint sends notifications and writes `sent_at`, so an unauthenticated caller could burn
+     * a user's real reminders.
+     *
+     * 32 characters minimum, generated with `openssl rand -base64 32`. It is compared against the
+     * header in constant time (see `maintenance.service.ts`) — a `===` on a secret leaks its prefix
+     * through timing, and the fix is cheaper than the argument about whether it is exploitable.
+     *
+     * **Why a shared secret rather than a Google OIDC token**, which is Cloud Scheduler's more
+     * idiomatic option: the Cloud Run service must stay publicly invocable because the browser calls
+     * it, so platform-level IAM cannot protect one path. Verifying the OIDC JWT in-process would mean
+     * a JWKS fetch, a cache, and a JWT verifier this project does not have — and CLAUDE.md invariant 8
+     * forbids hand-rolling that. A 32-byte secret in Secret Manager, compared in constant time, is a
+     * mechanism whose failure modes fit in a paragraph. Revisit if the API ever stops needing to be
+     * public.
+     */
+    CRON_SECRET: z.string().min(32, 'must be at least 32 characters').optional(),
+
+    /**
      * Escape hatch for the migrate-on-boot in `server.ts` (ADR-0023).
      *
      * **Defaults to applying them**, and that default is the entire point: nothing else applies

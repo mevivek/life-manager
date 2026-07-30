@@ -30,13 +30,15 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('preflight', 'r2', 'vapid', 'neon', 'status')]
+  [ValidateSet('preflight', 'r2', 'vapid', 'neon', 'cron', 'status')]
   [string]$Command,
 
   [string]$Project = 'life-manager-01',
   [string]$Region = 'us-central1',
   [string]$Service = 'life-manager-api',
-  [string]$RuntimeSA = 'life-manager-api@life-manager-01.iam.gserviceaccount.com'
+  [string]$RuntimeSA = 'life-manager-api@life-manager-01.iam.gserviceaccount.com',
+  [string]$SchedulerJob = 'life-manager-daily-scan',
+  [string]$ApiOrigin = 'https://api.mevivek.dev'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -374,6 +376,95 @@ Remember to update apps/api/.env too; verify-deployment.mjs reads DATABASE_URL_U
   Write-Host 'Then mark D18 closed in docs/product/review.md AND security-model.md section 7 - both lists.'
 }
 
+function Invoke-Cron {
+  Write-Host @'
+
+CRON_SECRET + Cloud Scheduler - the daily reminder scan (ADR-0028)
+------------------------------------------------------------------
+This is the last thing standing between M1 and its "done when": a notification that actually arrives.
+
+Generate a secret FIRST, in another window, and keep it out of any transcript. On Windows:
+
+    $b = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+    [Convert]::ToBase64String($b)
+
+  ! Not `Get-Random` - it is not a cryptographic RNG and is seedable. Use the lines above, which
+    work on both PowerShell 5.1 and 7.
+
+The SAME value goes in two places - Secret Manager (so the API knows it) and the Scheduler job's
+header (so the caller sends it). This script does both, so you paste it once.
+
+  ! Until CRON_SECRET is bound the endpoint answers 503, not 200. That is deliberate: an
+    unconfigured trigger is CLOSED. A 503 means "not provisioned", never "wrong key".
+
+'@
+  $secret = Read-Secret 'CRON_SECRET (32+ chars)'
+  if ($secret.Length -lt 32) {
+    throw "that is $($secret.Length) characters; env.ts requires at least 32 and the API would fail to boot"
+  }
+
+  Confirm-Target
+
+  Write-Host ''
+  Write-Host 'Storing credential'
+  Set-Secret -Name 'CRON_SECRET' -Value $secret
+
+  Write-Host ''
+  Write-Host "Binding to $Service"
+  $ok = Invoke-Gcloud -GcArgs @(
+    'run', 'services', 'update', $Service, "--region=$Region", "--project=$Project",
+    '--update-secrets=CRON_SECRET=CRON_SECRET:latest',
+    '--quiet'
+  )
+  if (-not $ok) { throw 'the services update failed - nothing was bound' }
+
+  # Enabled before the job is created: otherwise the create fails with a permission-shaped error that
+  # sends you looking at IAM rather than at service enablement.
+  Write-Host ''
+  Write-Host 'Enabling cloudscheduler.googleapis.com'
+  $null = Invoke-Gcloud -GcArgs @('services', 'enable', 'cloudscheduler.googleapis.com', "--project=$Project", '--quiet')
+
+  # 08:00 UTC, matching the time domains/documents.md section 6 specifies for the scan.
+  #
+  # --headers passes the secret as a command-line ARGUMENT, the one place in this script a value does.
+  # Unavoidable - Cloud Scheduler has no file-based header input - so run this on your own machine and
+  # not a shared host. It is not written to disk and not echoed.
+  $uri = "$ApiOrigin/api/v1/maintenance:run-daily"
+  $exists = Invoke-Gcloud -Quiet -GcArgs @(
+    'scheduler', 'jobs', 'describe', $SchedulerJob, "--location=$Region", "--project=$Project"
+  )
+
+  Write-Host ''
+  Write-Host 'Creating the Scheduler job'
+  $verb = if ($exists) { 'update' } else { 'create' }
+  if ($exists) { Write-Host '  job exists - updating it' }
+
+  $jobArgs = @(
+    'scheduler', 'jobs', $verb, 'http', $SchedulerJob,
+    "--location=$Region", "--project=$Project",
+    '--schedule=0 8 * * *', '--time-zone=Etc/UTC',
+    "--uri=$uri",
+    '--http-method=POST',
+    "--headers=X-Cron-Key=$secret",
+    '--attempt-deadline=180s'
+  )
+  if (-not $exists) { $jobArgs += '--description=Daily reminder scan and sweep (ADR-0028)' }
+  $jobArgs += '--quiet'
+
+  $ok = Invoke-Gcloud -GcArgs $jobArgs
+  if (-not $ok) { throw 'the scheduler job was not created - CRON_SECRET IS bound, so re-run this command' }
+
+  Write-Host ''
+  Write-Host 'Done. Verify now - do not wait until 08:00 UTC:' -ForegroundColor Green
+  Write-Host "  gcloud scheduler jobs run $SchedulerJob --location=$Region --project=$Project"
+  Write-Host "  gcloud run services logs read $Service --region=$Region --project=$Project --limit=20"
+  Write-Host ''
+  Write-Host 'Read the COUNTS, not just the status code. "found 0" means nothing was due, which is'
+  Write-Host 'not the same as working. For a notification you can see, you need a reminder inside its'
+  Write-Host 'lead window AND reminders turned on from the You screen on your phone.'
+}
+
 function Show-Status {
   Write-Host ''
   Write-Host "Secrets in $Project"
@@ -392,15 +483,17 @@ switch ($Command) {
   'r2' { Invoke-R2 }
   'vapid' { Invoke-Vapid }
   'neon' { Invoke-Neon }
+  'cron' { Invoke-Cron }
   'status' { Show-Status }
   default {
     Write-Host @'
-usage: .\scripts\provision.ps1 <preflight|r2|vapid|neon|status>
+usage: .\scripts\provision.ps1 <preflight|r2|vapid|neon|cron|status>
 
   preflight  check auth, project, service and permissions - writes nothing. START HERE.
   r2         bind the four R2_* values      (also set bucket CORS - see README)
   vapid      bind the three VAPID_* values  (run scripts/generate-vapid-keys.mjs first)
   neon       rotate the database credential (debt D18 - before the first real document)
+  cron       bind CRON_SECRET and create the Cloud Scheduler job (ADR-0028 - makes reminders fire)
   status     show what is bound, names only
 
 Override the target with -Project, -Region, -Service, -RuntimeSA if it ever moves.

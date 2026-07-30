@@ -5,6 +5,7 @@
 #     ./scripts/provision.sh r2       # the four R2_* values
 #     ./scripts/provision.sh vapid    # the three VAPID_* values
 #     ./scripts/provision.sh neon     # rotate DATABASE_URL + DATABASE_URL_UNPOOLED (debt D18)
+#     ./scripts/provision.sh cron     # CRON_SECRET + the Cloud Scheduler job (ADR-0028)
 #     ./scripts/provision.sh status   # what is bound right now, names only
 #
 # ── Why a script rather than a list of commands in the README ──
@@ -36,6 +37,8 @@ PROJECT="${PROJECT:-life-manager-01}"
 REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-life-manager-api}"
 RUNTIME_SA="${RUNTIME_SA:-life-manager-api@life-manager-01.iam.gserviceaccount.com}"
+SCHEDULER_JOB="${SCHEDULER_JOB:-life-manager-daily-scan}"
+API_ORIGIN="${API_ORIGIN:-https://api.mevivek.dev}"
 
 die() {
   printf '\nerror: %s\n' "$1" >&2
@@ -222,6 +225,101 @@ EOF
   printf '\nThen mark D18 closed in docs/product/review.md and security-model.md §7 — BOTH lists.\n'
 }
 
+# The one group that provisions something OUTSIDE Cloud Run as well: the Cloud Scheduler job that
+# calls the endpoint. ADR-0028.
+provision_cron() {
+  require_gcloud
+  cat <<'EOF'
+
+CRON_SECRET + Cloud Scheduler — the daily reminder scan (ADR-0028)
+──────────────────────────────────────────────────────────────────
+This is the last thing standing between M1 and its "done when": a notification that actually arrives.
+
+Generate a secret first, in another terminal, and keep it out of any transcript:
+
+    openssl rand -base64 32
+
+The SAME value goes in two places — Secret Manager (so the API knows it) and the Scheduler job's
+header (so the caller sends it). This script does both, so you paste it once.
+
+  ⚠ Until CRON_SECRET is bound, the endpoint answers 503, not 200. That is deliberate: an
+    unconfigured trigger is CLOSED. A 503 here means "not provisioned", never "wrong key".
+
+EOF
+  local secret
+  secret=$(read_secret 'CRON_SECRET (32+ chars)')
+
+  if [ "${#secret}" -lt 32 ]; then
+    die "that is ${#secret} characters; env.ts requires at least 32 and the API would fail to boot"
+  fi
+
+  confirm_target
+
+  printf '\nStoring credential\n'
+  store_secret CRON_SECRET "$secret"
+
+  printf '\nBinding to %s\n' "$SERVICE"
+  gcloud run services update "$SERVICE" \
+    --region="$REGION" --project="$PROJECT" \
+    --update-secrets=CRON_SECRET=CRON_SECRET:latest \
+    --quiet
+  note 'done'
+
+  # Enable the API before creating the job: otherwise the create fails with a permission-shaped
+  # error that sends you looking at IAM instead of at service enablement.
+  printf '\nEnabling cloudscheduler.googleapis.com\n'
+  gcloud services enable cloudscheduler.googleapis.com --project="$PROJECT" --quiet
+  note 'done'
+
+  # 08:00 UTC, matching the time domains/documents.md §6 specifies for the scan.
+  #
+  # --headers passes the secret to `gcloud` as an ARGUMENT, which is the one place in this script a
+  # value reaches a command line. Unavoidable: Cloud Scheduler has no file-based header input. It is
+  # visible in this shell's `ps` for the duration of the call, so run this on your own machine and not
+  # on a shared host. The value is not written to disk and not echoed.
+  printf '\nCreating the Scheduler job\n'
+  if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
+    note 'job exists — updating it'
+    gcloud scheduler jobs update http "$SCHEDULER_JOB" \
+      --location="$REGION" --project="$PROJECT" \
+      --schedule='0 8 * * *' --time-zone=Etc/UTC \
+      --uri="${API_ORIGIN}/api/v1/maintenance:run-daily" \
+      --http-method=POST \
+      --headers="X-Cron-Key=${secret}" \
+      --attempt-deadline=180s \
+      --quiet
+  else
+    gcloud scheduler jobs create http "$SCHEDULER_JOB" \
+      --location="$REGION" --project="$PROJECT" \
+      --schedule='0 8 * * *' --time-zone=Etc/UTC \
+      --uri="${API_ORIGIN}/api/v1/maintenance:run-daily" \
+      --http-method=POST \
+      --headers="X-Cron-Key=${secret}" \
+      --attempt-deadline=180s \
+      --description='Daily reminder scan and sweep (ADR-0028)' \
+      --quiet
+  fi
+  note 'done'
+
+  cat <<EOF
+
+Verify — do not wait until 08:00 UTC to find out:
+
+  1. Run it now, and read the counts rather than just the status code:
+       gcloud scheduler jobs run ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT}
+       gcloud scheduler jobs describe ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT} \\
+         --format='value(status,lastAttemptTime)'
+
+  2. Read what the API reported. "found 0" means nothing was due, which is NOT the same as working:
+       gcloud run services logs read ${SERVICE} --region=${REGION} --project=${PROJECT} --limit=20
+
+  3. For a notification you can actually see, you need a reminder inside its lead window AND a push
+     subscription on your phone (turn reminders on from the You screen). With no subscription the run
+     reports 'undelivered', which is honest, not broken.
+
+EOF
+}
+
 # Read-only checks, run BEFORE any credential is typed.
 #
 # Every failure below otherwise shows up halfway through a provisioning run — after the secret has
@@ -283,6 +381,7 @@ preflight() {
   # service fail to boot and it is invisible from a list of names alone.
   group_state 'R2' "$bound" R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
   group_state 'VAPID' "$bound" VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT
+  group_state 'CRON' "$bound" CRON_SECRET
 
   if [ "$failures" -gt 0 ]; then
     printf '\n%d check(s) failed. Fix those before provisioning anything.\n' "$failures"
@@ -326,15 +425,17 @@ case "${1:-}" in
   r2) provision_r2 ;;
   vapid) provision_vapid ;;
   neon) provision_neon ;;
+  cron) provision_cron ;;
   status) show_status ;;
   *)
     cat <<'EOF'
-usage: ./scripts/provision.sh <preflight|r2|vapid|neon|status>
+usage: ./scripts/provision.sh <preflight|r2|vapid|neon|cron|status>
 
   preflight  check auth, project, service and permissions — writes nothing. START HERE.
   r2      bind the four R2_* values      (file storage; also set bucket CORS — see README)
   vapid   bind the three VAPID_* values  (run scripts/generate-vapid-keys.mjs first)
   neon    rotate the database credential (debt D18 — before the first real document)
+  cron    bind CRON_SECRET and create the Cloud Scheduler job (ADR-0028 — makes reminders fire)
   status  show what is bound, names only
 
 Override the target with PROJECT=, REGION=, SERVICE=, RUNTIME_SA= if it ever moves.

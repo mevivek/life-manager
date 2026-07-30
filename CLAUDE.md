@@ -12,9 +12,11 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 342 tests: web 206 · api 107 · shared 29 — 342/0 measured on
+build` are green. **The suite is 356 tests: web 206 · api 121 · shared 29 — 356/0 measured on
 2026-07-30 against a real Postgres**, not inferred from a green pipeline. A container with no Docker
-measures **244 passed / 98 skipped**; all 98 skipped are the API's.
+measures **248 passed / 108 skipped**; all 108 skipped are the API's — the maintenance
+endpoint's four constant-time-comparison tests are deliberately NOT database-backed, so they run
+everywhere.
 
 **You can run the database-backed suites in this container without Docker.** Postgres 16 is installed
 at `/usr/lib/postgresql/16/bin`, and `initdb` refuses to run as root, so:
@@ -27,12 +29,26 @@ makes the harness throw instead of skip. Do **not** write that URL into `apps/ap
 were confirmed working from the maintainer's phone, and `node scripts/verify-deployment.mjs` passes
 **40/40** against production including a real presign → PUT → confirm round-trip against R2.
 
-**What M1 still lacks is a notification that has actually arrived.** `ENABLE_SCHEDULED_JOBS` is off
-**by an explicit cost decision** — pg-boss polling keeps Neon compute awake (D8) — so reminders are
-created and visible but never fire on their own. M1's "done when" is a real passport *and* a real
-notification, so it cannot be reached while that stays off. The proposed way out, not yet built, is
-Cloud Scheduler calling a daily endpoint instead of pg-boss polling: reminders without an always-awake
-database. See [roadmap.md](docs/roadmap.md) § Next actions §4.
+**What M1 still lacks is a notification that has actually arrived — and the code for it now exists.**
+[ADR-0028](docs/decisions/0028-external-trigger-for-the-daily-scan.md) built the way out:
+`POST /api/v1/maintenance::run-daily`, called daily by Cloud Scheduler, authenticated by a
+constant-time-compared `X-Cron-Key`, serialised by an advisory lock. The request wakes the API, the
+scan **and the deliveries** run inline, and everything sleeps again — so `ENABLE_SCHEDULED_JOBS` stays
+off **permanently** and **D8 is closed by avoidance** rather than accepted.
+
+**Delivering inline is the whole point, not an implementation detail.** `scanReminders()` enqueues to
+pg-boss and is now the wrong function to call from the trigger: on a scale-to-zero instance the queued
+`deliver` job sits there until some later request happens to wake a worker, so reminders would look
+scheduled and still never arrive. Use `runRemindersInline()`. Both exist and that duplication is
+deliberate — ADR-0012 still wants the queue for M2's OCR.
+
+**Two things are still needed, and neither is code.** `./scripts/provision.sh cron` (or the `.ps1`)
+binds `CRON_SECRET` and creates the Scheduler job — **no agent container has `gcloud`, so this is a
+you-on-your-machine step**. Until it runs the endpoint answers **503**, which is the correct closed
+state for an unconfigured trigger. Then M1's "done when" needs a notification actually *seen*, which
+needs the job created, reminders switched on from You (so a subscription exists), and a reminder inside
+its lead window. See [roadmap.md](docs/roadmap.md) § Next actions §4.6 — and read the response
+**counts**, because `found 0` means nothing was due, not that it works.
 
 **Deploying M1 first required [ADR-0023](docs/decisions/0023-migrate-on-boot.md).** Nothing had been
 applying migrations since ADR-0021 dropped Fly's `release_command`, and because `/health` does not
@@ -70,7 +86,9 @@ What M1 added, so you do not go looking for it: `documents`, `document_files`, `
 versioning; Web Push; three pg-boss handlers; cursor pagination; `Idempotency-Key`. Then, from the
 design handoffs: `identifier` (ADR-0026/0027), `holder` + `relation` with
 `GET /api/v1/documents/holders`, and the three device-scoped **Feel** preferences on You — density,
-heading face, and a two-register **voice** (`lib/feel.ts`, `lib/voice.ts`; design.md §12).
+heading face, and a two-register **voice** (`lib/feel.ts`, `lib/voice.ts`; design.md §12). Then
+ADR-0028's `POST /api/v1/maintenance::run-daily` — the only endpoint with no session, and the only one
+whose credential is a header rather than a cookie.
 
 **The offline read cache from [ADR-0013](docs/decisions/0013-read-only-offline-v1.md) is built** —
 pulled ahead of M1's "done when" by an explicit product call, so the app can be iterated on without
@@ -195,6 +213,7 @@ Four things worth knowing before you touch anything:
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it. Then `apps/web/src/App.tsx`: the cache is only restored *before* the router because `RestoreGate` holds it there (D49), and a query awaited by a route guard needs `networkMode: 'offlineFirst'` or it hangs forever offline |
 | **Calling a document mutation from a new place** | `useDocuments.ts` — `useCreateDocument` and `useUpdateDocument` may return `{ queued: true }` rather than a document (ADR-0024), so every call site branches; an edit must send the version the form was **read** at |
 | **Adding a mutable column or a new writable domain** | `versioned()` in `apps/api/src/db/columns.ts` — an editable table needs the ADR-0024 version column, and its `PATCH` must take the version as a **required** field so a forgotten precondition is a type error rather than silent last-write-wins |
+| **Anything touching the daily scan, reminders firing, or that `maintenance` endpoint** | [`ADR-0028`](docs/decisions/0028-external-trigger-for-the-daily-scan.md) — pg-boss keeps the queue and loses the clock. The trigger must call **`runRemindersInline()`, not `scanReminders()`**: a queued job on a scale-to-zero instance never drains. `CRON_SECRET` unset ⇒ **503, not 200** — closed is the only safe default for something that writes `sent_at`. The advisory lock is what stops a scheduler retry double-sending |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |
