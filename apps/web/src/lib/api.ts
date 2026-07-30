@@ -329,6 +329,15 @@ export const api = {
      *     `demote`; you promote another photo instead. A thing with photos and no main one would render
      *     an empty hero slot, which is worse than the wrong photo winning.
      *
+     * ── ONE colon on the wire, always ──
+     *
+     * These three paths carried `photos::presign-upload` and shipped a 404 on every photo verb. The `::`
+     * in `things.routes.ts` is Fastify's **registration-time** escape for one literal colon — it never
+     * reaches a URL. conventions/api.md §2 says so in as many words ("The URL clients call is unchanged;
+     * only the registration string is escaped"), `things.test.ts` asserts the OpenAPI paths with a single
+     * colon, and `api.files` below has always written one. A client writes what the server registered,
+     * unescaped.
+     *
      * The bytes themselves go through `api.files.upload` — one `XMLHttpRequest` implementation for both
      * domains, because a second copy is a second place for the `withCredentials` rule to be forgotten.
      */
@@ -338,20 +347,20 @@ export const api = {
         input: PresignPhotoUploadRequest,
       ): Promise<PresignPhotoUploadResponse> =>
         request(
-          `/api/v1/things/${thingId}/photos::presign-upload`,
+          `/api/v1/things/${thingId}/photos:presign-upload`,
           presignPhotoUploadResponseSchema,
           { method: 'POST', body: input },
         ),
 
       confirm: (thingId: string, photoId: string): Promise<ThingPhoto> =>
-        request(`/api/v1/things/${thingId}/photos::confirm`, thingPhotoSchema, {
+        request(`/api/v1/things/${thingId}/photos:confirm`, thingPhotoSchema, {
           method: 'POST',
           body: { photo_id: photoId },
         }),
 
       presignDownload: (thingId: string, photoId: string): Promise<PresignPhotoDownloadResponse> =>
         request(
-          `/api/v1/things/${thingId}/photos::presign-download`,
+          `/api/v1/things/${thingId}/photos:presign-download`,
           presignPhotoDownloadResponseSchema,
           { method: 'POST', body: { photo_id: photoId } },
         ),

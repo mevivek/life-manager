@@ -237,16 +237,17 @@ function BackLink() {
 }
 
 /**
- * The one failure screen, and it has to cover three causes it **cannot tell apart**.
+ * The one failure screen, and it has to cover two causes it **cannot tell apart**.
  *
  * A 404 here is indistinguishable from "belongs to another space" — deliberately, per invariant 4: a 403
- * would confirm the record exists. Today it is also indistinguishable from a third thing, which is that
- * `/api/v1/things/:id` **is not a route yet** (things.md §10): Fastify answers 404 for an unregistered
- * path exactly as it does for a record that is not there.
+ * would confirm the record exists. So the copy names both possibilities in one sentence, speculates about
+ * neither, and the last line is there to stop the reader doing it either. "This thing was deleted" would
+ * be the app confidently reporting one of two causes it cannot actually distinguish.
  *
- * So the copy names all three possibilities in one sentence, speculates about none of them, and the last
- * line is there to stop the reader doing it either. "This thing was deleted" would be the app
- * confidently reporting the cause that is currently the *least* likely of the three.
+ * It used to name a **third** cause — that `/api/v1/things/:id` was not a route yet — because for a while
+ * the client shipped ahead of the API (ADR-0029). The server half landed (things.md §10), so that
+ * sentence became the app telling a user its own feature might not be switched on, which is both false
+ * and not the user's problem. Nothing about a missing record should mention the deployment.
  *
  * Anything that is **not** a 404 — the API down, a contract mismatch, no connection — gets the server's
  * own sentence and a Retry that genuinely refetches. Never flattened into "not found", never swallowed
@@ -274,8 +275,11 @@ function NotHere({ error, onRetry }: { error: unknown; onRetry: () => void }) {
           {notFound ? 'This thing isn’t here' : 'Couldn’t load this thing'}
         </p>
         <p className="mt-2 text-body leading-relaxed text-ink-3 [text-wrap:pretty]">
+          {/* Word for word the sentence `documents.$documentId.tsx` shows for its own 404. Two screens
+              reporting the same fact in the same words is the point — the register is `voice.ts`'s warm
+              default, and a second phrasing of "we cannot tell you why" would only read as a second cause. */}
           {notFound
-            ? 'It may have been deleted, the link may be wrong, or Things isn’t switched on yet. Nothing else to read into it.'
+            ? 'It may have been deleted, or the link is wrong. Nothing else to read into it.'
             : error instanceof Error
               ? error.message
               : 'Something went wrong reaching the server.'}

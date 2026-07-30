@@ -1064,7 +1064,7 @@ describe('the whole screen', () => {
     })
   })
 
-  it('is CALM about a 404, and names the reason it is probably a 404 today', async () => {
+  it('is CALM about a 404, and never blames the deployment for it', async () => {
     server.use(
       http.get(`*/api/v1/things/${THING_ID}`, () =>
         HttpResponse.json(
@@ -1077,11 +1077,20 @@ describe('the whole screen', () => {
 
     expect(await screen.findByText('This thing isn’t here')).toBeInTheDocument()
     /**
-     * Three causes it cannot tell apart — deleted, another space (invariant 4: never a 403), and Things
-     * not being switched on at all (things.md §10), which is the actual one today. The copy names all
-     * three and speculates about none.
+     * TWO causes it cannot tell apart — deleted, or another space (invariant 4: never a 403) — named in
+     * the same words `documents.$documentId.tsx` uses for its own 404.
+     *
+     * It used to name a third, "or Things isn’t switched on yet", from when the client shipped ahead of
+     * the API. The server half exists (things.md §10), so that sentence was the app telling a user a
+     * falsehood about its own deployment. The negative assertion is the guard: this screen must never
+     * explain a missing record by pointing at unbuilt infrastructure.
      */
-    expect(screen.getByText(/isn’t switched on yet/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'It may have been deleted, or the link is wrong. Nothing else to read into it.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/switched on|not (a )?route|isn’t built/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Back to things' })).toBeInTheDocument()
   })
 
@@ -1174,15 +1183,15 @@ describe('a thing’s photos', () => {
     const asked: string[] = []
     server.use(
       /**
-       * A **RegExp**, not a path string, and it is not a style choice.
+       * An **exact** RegExp, and the exactness is the regression guard.
        *
-       * MSW matches path strings with `path-to-regexp`, where a `:` opens a parameter — so
-       * `photos::presign-download` is parsed as a literal colon followed by a param called
-       * `presign-download`, and it does not match the literal URL the client sends. The documents side
-       * gets away with a string because its verbs carry a *single* colon. conventions/api.md §2 is why
-       * the URL has two.
+       * §2 of conventions/api.md governs Fastify **registration**, not the wire: the `::` in
+       * `things.routes.ts` is an escape for one literal colon, so the URL a client sends has a single
+       * one. This handler is written to match only that. A path string would not do — MSW parses one
+       * with `path-to-regexp`, where `:presign` reads as a parameter, so `files:x-download` and
+       * `files::presign-download` both match it and reintroducing the `::` would pass.
        */
-      http.post(/\/photos::presign-download$/, async ({ request }) => {
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:presign-download$/, async ({ request }) => {
         const body = (await request.json()) as { photo_id: string }
         asked.push(body.photo_id)
         return HttpResponse.json(
@@ -1214,6 +1223,37 @@ describe('a thing’s photos', () => {
     expect(screen.getByText('2 photos')).toBeInTheDocument()
   })
 
+  /**
+   * Two rows can carry `is_hero: true` at once, and that is the **server's** design rather than a bug.
+   *
+   * `presign-upload { make_hero: true }` writes the intention onto the unconfirmed row (things.schema.ts
+   * permits it), and the demotion of its siblings happens at `:confirm`. So between the presign and the
+   * confirm — or forever, if the upload was abandoned — a detail response holds a confirmed hero and an
+   * unconfirmed pretender. Every client path filters `uploaded_at !== null` first, which is what makes it
+   * benign; this pins that order, because reading `is_hero` first would put a photo with no bytes in the
+   * frame and presign a URL for it.
+   */
+  it('ignores an UNCONFIRMED is_hero row — bytes first, then the flag', async () => {
+    const asked = servePhotoBytes()
+    await renderDetail(
+      detail({
+        name: 'Boiler',
+        photos: [
+          photo({ id: HERO, is_hero: true }),
+          // A presign whose upload never completed, carrying the intention it was created with.
+          photo({ id: SECOND, is_hero: true, uploaded_at: null }),
+        ],
+      }),
+    )
+
+    const image = await screen.findByRole('img', { name: 'Boiler' })
+    expect(image).toHaveAttribute('src', `https://r2.test/${HERO}.jpg`)
+    // Not presigned at all, so not merely un-drawn: the unconfirmed row costs no round-trip.
+    expect(asked).toEqual([HERO])
+    // And it is not in the strip either, so the count is of real photos.
+    expect(screen.getByText('1 photo')).toBeInTheDocument()
+  })
+
   it('draws the picker instead of an empty frame when there is no photo', async () => {
     await renderDetail(detail({ photos: [] }))
     // The comp's own words on the wizard's photo step. An inert empty box would be furniture.
@@ -1241,8 +1281,8 @@ describe('a thing’s photos', () => {
     servePhotoBytes()
     const bodies: unknown[] = []
     server.use(
-      // A RegExp for the same reason as the download handler above — the `::` in the path.
-      http.post(/\/photos::presign-upload$/, async ({ request }) => {
+      // Exact, for the same reason as the download handler above: one colon on the wire.
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:presign-upload$/, async ({ request }) => {
         bodies.push(await request.json())
         return HttpResponse.json(
           {
@@ -1275,6 +1315,58 @@ describe('a thing’s photos', () => {
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toEqual({ mime: 'image/jpeg', size_bytes: 5, make_hero: false })
+  })
+
+  /**
+   * The whole three-step dance, and the point of it is the **paths**.
+   *
+   * The client wrote `photos::presign-upload`, `::confirm` and `::presign-download`, so every photo verb
+   * 404ed against the real API while all of this looked wired. The `::` in `things.routes.ts` is Fastify's
+   * **registration** escape for one literal colon (conventions/api.md §2, and `things.test.ts` asserts the
+   * generated OpenAPI paths with a single one) — it never reaches a URL.
+   *
+   * So the three handlers are anchored to the exact single-colon paths, and `onUnhandledRequest: 'error'`
+   * in `test/setup.ts` finishes the guard: put the escape back and the request matches nothing.
+   */
+  it('presigns, PUTs and CONFIRMS — each at its single-colon path, not the `::` registration form', async () => {
+    const paths: string[] = []
+    let confirmed: unknown = null
+    server.use(
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:presign-upload$/, ({ request }) => {
+        paths.push(new URL(request.url).pathname)
+        return HttpResponse.json(
+          {
+            photo_id: SECOND,
+            upload_url: 'https://r2.test/put',
+            storage_key: 'spaces/x/things/y/z',
+            expires_at: '2026-07-30T13:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+      // The bytes go straight to storage — never through the API (ADR-0008).
+      http.put('https://r2.test/put', () => new HttpResponse(null, { status: 200 })),
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:confirm$/, async ({ request }) => {
+        paths.push(new URL(request.url).pathname)
+        confirmed = await request.json()
+        return HttpResponse.json(photo({ id: SECOND, is_hero: true }), { status: 201 })
+      }),
+    )
+
+    await renderDetail(detail({ name: 'Boiler', photos: [] }))
+    const input = document.querySelector('input[type="file"]')
+    await userEvent.upload(
+      input as HTMLInputElement,
+      new File(['bytes'], 'boiler.jpg', { type: 'image/jpeg' }),
+    )
+
+    await waitFor(() => expect(paths).toHaveLength(2))
+    expect(paths).toEqual([
+      `/api/v1/things/${THING_ID}/photos:presign-upload`,
+      `/api/v1/things/${THING_ID}/photos:confirm`,
+    ])
+    // The photo is named in the body on `:confirm`, never in the path — api.md §2 rule 2.
+    expect(confirmed).toEqual({ photo_id: SECOND })
   })
 
   it('refuses a PDF before any bytes move, and says why', async () => {

@@ -245,7 +245,12 @@ describe('a thing row', () => {
     expect(screen.getByText('Old iPhone')).toBeInTheDocument()
     expect(container.querySelector('.opacity-55')).not.toBeNull()
     expect(screen.getByText('No longer yours')).toBeInTheDocument()
-    expect(screen.getByText('Handed to Sam · 2026-03-04')).toBeInTheDocument()
+    /**
+     * The **formatted** date. This assertion used to expect the raw `2026-03-04`, which is what the row
+     * actually printed — and what the detail banner's `awayLabel` never did, so one record read two ways
+     * on two screens. Both now go through `formatDateShort`; no screen shows a user an ISO date.
+     */
+    expect(screen.getByText('Handed to Sam · 4 Mar 2026')).toBeInTheDocument()
   })
 
   it('reads as a sentence when a lent thing has no “who” recorded', async () => {

@@ -24,14 +24,18 @@ import {
  * The client shipped ahead of the API (ADR-0029), so for a while a thing's photos could be listed from
  * the detail response and nothing else — no bytes, no upload, no viewer. The file said so at length and
  * drew a strip of grey tiles labelled with a mime. The API landed with all four verbs
- * (`photos::presign-upload`, `::confirm`, `::presign-download`, the `is_hero` patch and the delete), so
+ * (`photos:presign-upload`, `:confirm`, `:presign-download`, the `is_hero` patch and the delete), so
  * the honest rendering is now the comp's: a real image at the top, a real strip below, and a control
  * that adds one. Debt **D59** is what tracked the gap.
+ *
+ * The verbs above carry ONE colon, which is what a client sends. `things.routes.ts` registers them with
+ * `::` because Fastify reads a bare `:` as a path parameter — a registration escape, not part of the URL
+ * (conventions/api.md §2). Writing `::` in `lib/api.ts` 404ed every one of them.
  *
  * ── One `<img src>` on render, and exactly one ──
  *
  * A photo's bytes come from R2 behind a short-lived presigned URL, so an `<img>` costs a
- * `POST …::presign-download`. `DocumentFiles`'s header note explains why the *scans* strip therefore
+ * `POST …:presign-download`. `DocumentFiles`'s header note explains why the *scans* strip therefore
  * shows filenames rather than previews: one presign per file per paint, with every signed URL alive in
  * the DOM.
  *
