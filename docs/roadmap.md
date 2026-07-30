@@ -4,12 +4,15 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M1 built, DEPLOYED, and in real use. One human step from done.**
+**Current position: M1 built, DEPLOYED, fully provisioned, and one observation from done.**
 
-R2, VAPID and the Neon rotation are all provisioned, real documents are in, and the daily scan now has
-a trigger ([ADR-0028](decisions/0028-external-trigger-for-the-daily-scan.md)) — but nothing has run
-`provision.sh cron` yet, so the endpoint answers 503 and **no notification has arrived**. That, plus a
-week of use for lens 4, is all that stands between M1 and done. See §4.6 below.
+R2, VAPID, the Neon rotation and now `CRON_SECRET` plus the Cloud Scheduler job are all provisioned; real
+documents are in; and the daily scan has been called against production and reported
+`found: 1, delivered: 0, undelivered: 1` — the mechanism working, with no push subscription to deliver to.
+
+**What is left is not code.** Turn reminders on from the You screen, call the endpoint again, and see the
+notification. Until one has actually been *seen*, M1's "done when" is unmet. Then lens 4 of the review
+wants a week of real use. See §4.6–7 below.
 
 Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
 Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
@@ -103,24 +106,36 @@ browser pass at phone width.
    `/api/v1/maintenance:run-daily`; the request wakes the API, the scan and the deliveries run inline,
    and everything sleeps again. D8 is **closed by avoidance**.
 
-   **What remains is one command on your machine, because there is no `gcloud` in an agent container:**
+   **Provisioned and proven in production, same day.** `./scripts/provision.ps1 cron` bound
+   `CRON_SECRET` and created the Cloud Scheduler job `life-manager-daily-scan` (`ENABLED`, `0 8 * * *`,
+   `Etc/UTC`, first fire `2026-07-31T08:00:00Z`). A real call against production returned:
 
-       ./scripts/provision.sh cron      # or  .\scripts\provision.ps1 cron  on Windows
+       { "status": "ran", "today": "2026-07-30", "found": 1, "delivered": 0,
+         "undelivered": 1, "errored": 0, "swept": 0, "duration_ms": 579 }
 
-   It binds `CRON_SECRET` and creates the Scheduler job with the same value in its header. Until then
-   the endpoint answers **503**, which is the correct closed state — an unconfigured trigger must not
-   be an open one.
+   Every layer is therefore exercised against the real thing: the secret, the constant-time compare,
+   the content-type parser, the advisory lock, the scan, and the counts coming back.
 
-   **Then M1's "done when" needs a notification you actually saw**, which needs three things true at
-   once: the job created, reminders turned on from the You screen on the phone (so a push subscription
-   exists), and a reminder inside its lead window. Run the job by hand rather than waiting for 08:00:
+   **It took four bugs to get there, three of them found by the maintainer running it** — see debt
+   **D53**, because the pattern matters more than the individual fixes. In order: `--headers` passed to
+   gcloud's `update` verb which does not accept it (and it failed *between* two writes, leaving the API
+   on the new secret while the job held the old one); gcloud echoing the secret in its own success
+   output; a verify instruction pointing at `logs read`, which renders `textPayload` while this API logs
+   JSON; and a **415** on any bodyless POST declaring `application/octet-stream` — which is what Cloud
+   Scheduler sends, so the daily run would have failed in production.
 
-       gcloud scheduler jobs run life-manager-daily-scan --location=us-central1 --project=life-manager-01
+7. **Turn reminders on, and SEE the notification.** `undelivered: 1` with `errored: 0` above means the
+   scan found a due reminder and had nowhere to send it: no live push subscription in the space. Switch
+   reminders on from the **You** screen on the phone, then call the endpoint again and expect
+   `delivered: 1`.
 
-   Read the **counts**, not the status code. `found 0` means nothing was due — not that it works.
-   `undelivered` means found but no live subscription, which is honest rather than broken.
+   Nothing has been lost in the meantime — `sent_at` is written only after a successful send, so that
+   reminder is still pending and either a manual call or the 08:00 UTC run will pick it up.
 
-7. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
+   **Until a notification has actually been seen, M1 is not done.** The counts above are the mechanism
+   working, which is not the same claim.
+
+8. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
    incomplete without it.
 
 > **Litter to clear — now TWO accounts, and the count only grows.** Each verification run creates a

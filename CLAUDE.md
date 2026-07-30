@@ -43,13 +43,29 @@ pg-boss and is now the wrong function to call from the trigger: on a scale-to-ze
 scheduled and still never arrive. Use `runRemindersInline()`. Both exist and that duplication is
 deliberate — ADR-0012 still wants the queue for M2's OCR.
 
-**Two things are still needed, and neither is code.** `./scripts/provision.sh cron` (or the `.ps1`)
-binds `CRON_SECRET` and creates the Scheduler job — **no agent container has `gcloud`, so this is a
-you-on-your-machine step**. Until it runs the endpoint answers **503**, which is the correct closed
-state for an unconfigured trigger. Then M1's "done when" needs a notification actually *seen*, which
-needs the job created, reminders switched on from You (so a subscription exists), and a reminder inside
-its lead window. See [roadmap.md](docs/roadmap.md) § Next actions §4.6 — and read the response
-**counts**, because `found 0` means nothing was due, not that it works.
+**PROVISIONED AND PROVEN IN PRODUCTION, 2026-07-30 — one link short of done.** `CRON_SECRET` is bound
+and the Cloud Scheduler job `life-manager-daily-scan` exists (`ENABLED`, `0 8 * * *`, `Etc/UTC`). A real
+call against production returned:
+
+    { "status": "ran", "today": "2026-07-30", "found": 1, "delivered": 0,
+      "undelivered": 1, "errored": 0, "swept": 0, "duration_ms": 579 }
+
+So the whole chain works — auth, content type, advisory lock, scan, counts. **`undelivered: 1` with
+`errored: 0` means the scan found a due reminder and had nowhere to send it**: no live push subscription
+in the space, because reminders have not been switched on from the You screen on the phone yet. Nothing
+was lost — `sent_at` is written only after a successful send, so that reminder is still pending.
+
+**What is left is observation, not code:** turn reminders on from You, call the endpoint again, and see
+`delivered: 1` with a notification on the phone. Until that is *seen*, M1's "done when" is unmet — do
+not mark it done on the strength of the counts above. To call it by hand without putting the secret on a
+command line:
+
+    $key = (gcloud.cmd secrets versions access latest --secret=CRON_SECRET --project=life-manager-01)
+    Invoke-RestMethod -Method Post -Uri https://api.mevivek.dev/api/v1/maintenance:run-daily `
+      -Headers @{ 'X-Cron-Key' = $key } | ConvertTo-Json
+
+Read the **counts**: `found 0` means nothing was due, not that it works. And **never** run a bare
+`gcloud scheduler jobs describe` — it prints the `X-Cron-Key` header in full (debt D52).
 
 **Deploying M1 first required [ADR-0023](docs/decisions/0023-migrate-on-boot.md).** Nothing had been
 applying migrations since ADR-0021 dropped Fly's `release_command`, and because `/health` does not
@@ -163,7 +179,7 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D51 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D53 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -223,7 +239,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D51, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D53, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing. **D53 before touching `scripts/provision.*`** |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
