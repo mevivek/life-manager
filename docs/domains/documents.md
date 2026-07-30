@@ -266,14 +266,20 @@ Verified against a real S3 implementation.
 
 ## 6. Background jobs
 
-Registered with pg-boss ([ADR-0012](../decisions/0012-pg-boss-background-jobs.md)).
+Registered with pg-boss ([ADR-0012](../decisions/0012-pg-boss-background-jobs.md)) — **except the
+clock**. [ADR-0028](../decisions/0028-external-trigger-for-the-daily-scan.md) moved the daily trigger
+to Cloud Scheduler calling `POST /api/v1/maintenance:run-daily`, because a pg-boss `schedule` needs
+something to be running when it fires and the API is scale-to-zero. So in production the "cron" rows
+below fire from **outside** the process, and the scan **delivers inline** rather than enqueueing:
+`runRemindersInline()`, not `scanReminders()`. The queue entries still exist and are still right for a
+worker that is actually running; they are just not what runs.
 
 | Job | Trigger | Does | On failure |
 |---|---|---|---|
-| `reminders.scan` | cron, daily 08:00 UTC | Find `due_on - lead_days <= today` and `sent_at is null`; enqueue one `deliver` per reminder | Retry with backoff; alert after 3 failures — a silent scan failure means silent missed renewals |
+| `reminders.scan` | **HTTP, daily 08:00 UTC** (Cloud Scheduler → `/maintenance:run-daily`) | Find `due_on - lead_days <= today` and `sent_at is null`; deliver each one **in the request** | Per-reminder `try`/`catch` so one bad push cannot stop the rest; the retry is **tomorrow**, because `sent_at` is written only after a successful send. Counts come back in the response, so "ran and delivered nothing" is distinguishable from "did not run" |
 | `reminders.deliver` | queued | Send via `channel`; set `sent_at` | Retry 3×; leave `sent_at` null so the next scan retries |
 | `documents.extract-text` | on `:confirm` (M2) | OCR → `document_text`; refresh search | Retry 2×, then give up. The document stays usable without extracted text |
-| `documents.sweep-abandoned` | cron, daily | Delete unconfirmed file rows >24h old and their orphaned R2 objects | Retry next run |
+| `documents.sweep-abandoned` | **the same HTTP call**, immediately after the deliveries | Delete unconfirmed file rows >24h old and their orphaned R2 objects | Retry next run. Ordered *after* the scan rather than an hour later — one call means ordering replaces the gap that two cron schedules needed |
 
 ## 7. UI surface
 

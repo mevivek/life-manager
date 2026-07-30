@@ -4,6 +4,7 @@ import { actorHook } from './auth/actor.hook.js'
 import { authRoutes } from './auth/auth.routes.js'
 import { documentsRoutes } from './domains/documents/documents.routes.js'
 import { healthRoutes } from './domains/health/health.routes.js'
+import { maintenanceRoutes } from './domains/maintenance/maintenance.routes.js'
 import { meRoutes } from './domains/me/me.routes.js'
 import { remindersRoutes } from './domains/reminders/reminders.routes.js'
 import { jobsPlugin } from './jobs/jobs.plugin.js'
@@ -71,6 +72,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(idempotencyPlugin)
 
   await app.register(healthRoutes)
+  await app.register(maintenanceRoutes)
   await app.register(meRoutes)
   await app.register(documentsRoutes)
   await app.register(remindersRoutes)

@@ -467,6 +467,45 @@ console.log('\n[8] optional features report their configuration honestly')
         : '      → web push is NOT configured (reminders will not be delivered)',
     )
   }
+
+  /**
+   * The maintenance trigger must NOT be callable without the secret. ADR-0028.
+   *
+   * This is the one check here that tests a *refusal*, and it is the important kind: the endpoint
+   * runs cross-space work with no session, so a deployment where it answers 200 to an anonymous POST
+   * would let anyone burn every user's reminders — writing `sent_at` so the real notification never
+   * arrives. Deliberately no valid key is used: this script must be safe to run against production
+   * repeatedly, and triggering a real reminder scan is not that.
+   *
+   * 401 means configured and closed. 503 means CRON_SECRET is unbound — also closed, and reported
+   * separately because it means reminders cannot fire at all yet.
+   */
+  const trigger = await fetch(`${API}/api/v1/maintenance:run-daily`, {
+    method: 'POST',
+    headers: { origin: APP },
+  })
+  ok(
+    trigger.status === 401 || trigger.status === 503,
+    'POST /maintenance:run-daily refuses an unauthenticated call',
+    `expected 401 or 503, got ${trigger.status}`,
+  )
+  console.log(
+    trigger.status === 503
+      ? '      → the daily scan is NOT configured (CRON_SECRET unbound — reminders never fire)'
+      : '      → the daily scan IS configured and refuses callers without the key',
+  )
+
+  // A wrong key must be indistinguishable from no key: a different status would tell an attacker
+  // that guessing is worth continuing.
+  const wrongKey = await fetch(`${API}/api/v1/maintenance:run-daily`, {
+    method: 'POST',
+    headers: { origin: APP, 'x-cron-key': 'not-the-key-but-long-enough-to-be-plausible' },
+  })
+  ok(
+    wrongKey.status === trigger.status,
+    'a wrong key is answered exactly like a missing one',
+    `missing → ${trigger.status}, wrong → ${wrongKey.status}`,
+  )
 }
 
 console.log('\n[cleanup]')

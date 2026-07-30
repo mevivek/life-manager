@@ -146,6 +146,85 @@ export async function deliverReminder(payload: DeliverPayload): Promise<{ sent: 
 }
 
 /**
+ * Scan and deliver **in one pass, in the caller's process**, with no queue in between.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  Why this exists next to `scanReminders`, which looks like it already does the job
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `scanReminders` enqueues a `reminders.deliver` job per due reminder and returns. That is correct
+ * when a worker is running — and on Cloud Run with `--min-instances=0` there is no such thing. The
+ * instance exists because a request woke it and goes away shortly after the response, so anything
+ * `send()`-ed during that request sits in the queue until the *next* request happens to wake a worker
+ * with time to spare. Reminders would appear to be scheduled and never arrive, which is a worse
+ * failure than not having the feature (ADR-0028).
+ *
+ * So the HTTP trigger does the whole thing synchronously and reports what happened.
+ *
+ * **What is genuinely lost, stated plainly:** pg-boss's retry-with-backoff and per-job dead-lettering.
+ * ADR-0012 rejected "external cron hitting an HTTP endpoint" partly on those grounds, and it was
+ * right to. Two things make the trade acceptable here rather than merely tolerable:
+ *
+ *  1. **Per-item failure isolation is kept**, by catching around each delivery. One unreachable push
+ *     endpoint cannot stop the other reminders — which was ADR-0012's specific objection.
+ *  2. **The retry is tomorrow**, because `sent_at` is only written after a successful send. Combined
+ *     with the three lead days (90/30/7) every reminder gets several independent chances, so a day's
+ *     delay on one is not a missed renewal. A daily job is the one workload where a 24-hour retry
+ *     interval is defensible.
+ */
+export async function runRemindersInline(): Promise<{
+  today: string
+  found: number
+  delivered: number
+  undelivered: number
+  errored: number
+}> {
+  const today = todayUtc()
+  const due = await remindersRepository.listDueForMaintenance(today)
+
+  if (due.length === 0) {
+    logger.info({ today }, 'reminder run found nothing due')
+    return { today, found: 0, delivered: 0, undelivered: 0, errored: 0 }
+  }
+
+  let delivered = 0
+  let undelivered = 0
+  let errored = 0
+
+  for (const reminder of due) {
+    const payload: DeliverPayload = {
+      reminderId: reminder.id,
+      spaceId: reminder.spaceId,
+      // An orphaned reminder has no title (spec §9 q4 — no FK on `entity_id`). The sweep removes
+      // those, but a run happening before it must not crash on one.
+      title: reminder.documentTitle ?? 'A document',
+      dueOn: reminder.dueOn,
+    }
+
+    try {
+      const { sent } = await deliverReminder(payload)
+      if (sent > 0) delivered += 1
+      else undelivered += 1
+    } catch (error) {
+      errored += 1
+      // Logged and counted, never rethrown: rethrowing here would abandon every reminder after this
+      // one, which is exactly the "one bad document fails the whole scan" failure ADR-0012 warned
+      // about. The count reaches the response, so a caller can alert on it.
+      logger.error(
+        { reminderId: reminder.id, err: error },
+        'reminder delivery threw; continuing with the rest',
+      )
+    }
+  }
+
+  logger.info(
+    { today, found: due.length, delivered, undelivered, errored },
+    'reminder run complete',
+  )
+  return { today, found: due.length, delivered, undelivered, errored }
+}
+
+/**
  * Business rule 10 and spec §9 question 4's cost: sweeps abandoned uploads and orphaned reminders.
  *
  * Deliberately does **not** delete R2 objects yet. Rule 10 says the sweep removes the orphaned

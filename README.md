@@ -141,6 +141,7 @@ itself, rather than half-working.
 |---|---|---|
 | **Files** (ADR-0008) | `R2_ACCOUNT_ID` `R2_ACCESS_KEY_ID` `R2_SECRET_ACCESS_KEY` `R2_BUCKET` | Upload and download return `503` |
 | **Notifications** | `VAPID_PUBLIC_KEY` `VAPID_PRIVATE_KEY` `VAPID_SUBJECT` | Reminders are stored and visible in the app, but nothing is pushed |
+| **The daily scan** (ADR-0028) | `CRON_SECRET` | `POST /api/v1/maintenance:run-daily` answers `503`, so nothing ever *triggers* a push either. Both groups are needed for a notification to arrive |
 
 `R2_ENDPOINT` points the S3 client at any S3-compatible server instead of R2 — the one part of
 ADR-0008's flow that unit tests structurally cannot reach (presigning is offline, so fake
@@ -171,14 +172,27 @@ contract is right. Both storage bugs M1 actually hit were signature-content bugs
 container. Verify that part against real R2. The full reasoning is in `docker-compose.dev.yml`, which
 also records why the image is Adobe S3Mock (Apache-2.0) rather than MinIO (AGPL-3.0).
 
-#### Provisioning R2 and VAPID in production
+#### Provisioning R2, VAPID and the daily scan in production
 
 ```bash
 ./scripts/provision.sh r2       # the four R2_* values
 ./scripts/provision.sh vapid    # the three VAPID_* values (generate the pair first)
 ./scripts/provision.sh neon     # rotate the database credential — debt D18
+./scripts/provision.sh cron     # CRON_SECRET + the Cloud Scheduler job — ADR-0028
 ./scripts/provision.sh status   # what is bound right now, names only
 ```
+
+On Windows use `.\scripts\provision.ps1 <same subcommand>` — same groups, same prompts.
+
+`cron` is the only group that provisions something **outside** Cloud Run: it binds the secret *and*
+creates the Cloud Scheduler job with the same value in its `X-Cron-Key` header, so the value is typed
+once and cannot drift between the two places that must agree. It is also the group that finally makes
+reminders fire — see [ADR-0028](docs/decisions/0028-external-trigger-for-the-daily-scan.md) for why a
+pg-boss cron cannot do it on a scale-to-zero service.
+
+> **`--headers` puts the secret on a command line**, which is the one place these scripts do that.
+> Cloud Scheduler has no file-based header input, so it is unavoidable; it means running `cron` on
+> your own machine rather than a shared host. Nothing is written to disk and nothing is echoed.
 
 The script prompts for each value with echo off and pipes it to `gcloud --data-file=-`, so nothing
 lands in shell history or `ps` output. It exists because three things here fail *late* rather than

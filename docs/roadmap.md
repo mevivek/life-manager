@@ -90,17 +90,30 @@ browser pass at phone width.
 5. ✅ **Real documents are in — 2026-07-30.** Uploads confirmed working from the maintainer's phone,
    after D42: the app's own CSP `connect-src` named the API but not R2, so every browser upload was
    blocked while every server-side check passed. Now leave it a week; that half is unchanged.
-6. **`ENABLE_SCHEDULED_JOBS` stays OFF — an explicit cost decision, 2026-07-30.** pg-boss polls the
-   database continuously, which stops Neon's compute scaling to zero (**D8**), so the cost would be
-   the waiting rather than the work. Consequence: reminders are created and visible in the app but
-   **never fire on their own**, so M1 cannot reach its "done when" — a real notification — as things
-   stand.
+6. ✅ **The daily scan has a trigger — built 2026-07-30, [ADR-0028](decisions/0028-external-trigger-for-the-daily-scan.md).**
+   `ENABLE_SCHEDULED_JOBS` stays **off permanently**, and that is now a decision rather than a
+   deferral: a pg-boss schedule cannot fire on a scale-to-zero service, and forcing it to would cost
+   an always-on instance *and* keep Neon awake (**D8**). Instead Cloud Scheduler POSTs
+   `/api/v1/maintenance:run-daily`; the request wakes the API, the scan and the deliveries run inline,
+   and everything sleeps again. D8 is **closed by avoidance**.
 
-   **The proposed alternative, not yet built:** Cloud Scheduler calling a daily endpoint on the API.
-   The API is already scale-to-zero, so it would wake, run the scan, and sleep again — real reminders
-   with none of D8's exposure. It needs an authenticated trigger endpoint, one `gcloud scheduler`
-   command, and an ADR amending [ADR-0012](decisions/0012-pg-boss-background-jobs.md)'s "pg-boss owns
-   scheduling" position. Roughly an hour. **This is the one thing standing between M1 and done.**
+   **What remains is one command on your machine, because there is no `gcloud` in an agent container:**
+
+       ./scripts/provision.sh cron      # or  .\scripts\provision.ps1 cron  on Windows
+
+   It binds `CRON_SECRET` and creates the Scheduler job with the same value in its header. Until then
+   the endpoint answers **503**, which is the correct closed state — an unconfigured trigger must not
+   be an open one.
+
+   **Then M1's "done when" needs a notification you actually saw**, which needs three things true at
+   once: the job created, reminders turned on from the You screen on the phone (so a push subscription
+   exists), and a reminder inside its lead window. Run the job by hand rather than waiting for 08:00:
+
+       gcloud scheduler jobs run life-manager-daily-scan --location=us-central1 --project=life-manager-01
+
+   Read the **counts**, not the status code. `found 0` means nothing was due — not that it works.
+   `undelivered` means found but no live subscription, which is honest rather than broken.
+
 7. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
    incomplete without it.
 

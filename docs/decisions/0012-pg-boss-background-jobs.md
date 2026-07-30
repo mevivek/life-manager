@@ -1,7 +1,15 @@
 # ADR-0012: Background jobs on pg-boss, no Redis
 
-- **Status:** accepted
+- **Status:** accepted — **scheduling half amended by [ADR-0028](0028-external-trigger-for-the-daily-scan.md)**
 - **Date:** 2026-07-26
+
+> **What 0028 changed, and what it did not.** pg-boss remains the queue, and the property this ADR
+> turns on — enqueueing a job in the same transaction as the write that causes it — is untouched. What
+> did not survive is the *clock*: a pg-boss `schedule` needs something to be running when it fires, and
+> [ADR-0021](0021-cloud-run-for-the-api.md) made the API scale-to-zero. The daily reminder scan is now
+> triggered by Cloud Scheduler over HTTP and runs inline. The `reminders.scan` / `reminders.deliver`
+> queue entries in the table below still exist in code and are still the right design for a worker that
+> is actually running; they are simply not what fires in production.
 
 ## Context
 
