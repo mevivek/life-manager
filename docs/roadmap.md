@@ -87,9 +87,20 @@ browser pass at phone width.
    `./scripts/provision.ps1 neon`, ahead of the first real document exactly as D18's trigger
    required. Revision `life-manager-api-00016-wgs` came up healthy on the new credential, which is
    also proof that migrate-on-boot reconnected.
-5. **Put your real documents in**, then leave it a week.
-6. **Switch `ENABLE_SCHEDULED_JOBS=true`** so the daily scan actually runs unattended — and note
-   that this fires **D8**: measure Neon compute hours that month.
+5. ✅ **Real documents are in — 2026-07-30.** Uploads confirmed working from the maintainer's phone,
+   after D42: the app's own CSP `connect-src` named the API but not R2, so every browser upload was
+   blocked while every server-side check passed. Now leave it a week; that half is unchanged.
+6. **`ENABLE_SCHEDULED_JOBS` stays OFF — an explicit cost decision, 2026-07-30.** pg-boss polls the
+   database continuously, which stops Neon's compute scaling to zero (**D8**), so the cost would be
+   the waiting rather than the work. Consequence: reminders are created and visible in the app but
+   **never fire on their own**, so M1 cannot reach its "done when" — a real notification — as things
+   stand.
+
+   **The proposed alternative, not yet built:** Cloud Scheduler calling a daily endpoint on the API.
+   The API is already scale-to-zero, so it would wake, run the scan, and sleep again — real reminders
+   with none of D8's exposure. It needs an authenticated trigger endpoint, one `gcloud scheduler`
+   command, and an ADR amending [ADR-0012](decisions/0012-pg-boss-background-jobs.md)'s "pg-boss owns
+   scheduling" position. Roughly an hour. **This is the one thing standing between M1 and done.**
 7. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
    incomplete without it.
 

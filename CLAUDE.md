@@ -12,7 +12,7 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 307 tests: web 174 · api 104 · shared 29 — 307/0 measured on
+build` are green. **The suite is 312 tests — 312/0 measured on
 2026-07-30 against a real Postgres**, not inferred from a green pipeline. A container with no Docker
 measures **212 passed / 95 skipped**; all 95 skipped are the API's.
 
@@ -21,12 +21,18 @@ at `/usr/lib/postgresql/16/bin`, and `initdb` refuses to run as root, so:
 `chown postgres <datadir> && su postgres -c "…/initdb -D <datadir> -U postgres --auth=trust"`, start
 it on a spare port, `createdb`, then
 `CI=true TEST_DATABASE_URL=postgres://postgres@127.0.0.1:<port>/<db> pnpm test`. `CI=true` is what
-makes the harness throw instead of skip. Do **not** write that URL into `apps/api/.env`. Deployed
-2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
-**R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
-deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
-when" is a real passport and a real notification: see [roadmap.md](docs/roadmap.md) § Next actions
-§4, where the remaining steps are credentials and a week of use rather than code.
+makes the harness throw instead of skip. Do **not** write that URL into `apps/api/.env`.
+
+**R2 and VAPID are now provisioned, and the database holds real documents** (2026-07-30). Uploads
+were confirmed working from the maintainer's phone, and `node scripts/verify-deployment.mjs` passes
+**40/40** against production including a real presign → PUT → confirm round-trip against R2.
+
+**What M1 still lacks is a notification that has actually arrived.** `ENABLE_SCHEDULED_JOBS` is off
+**by an explicit cost decision** — pg-boss polling keeps Neon compute awake (D8) — so reminders are
+created and visible but never fire on their own. M1's "done when" is a real passport *and* a real
+notification, so it cannot be reached while that stays off. The proposed way out, not yet built, is
+Cloud Scheduler calling a daily endpoint instead of pg-boss polling: reminders without an always-awake
+database. See [roadmap.md](docs/roadmap.md) § Next actions §4.
 
 **Deploying M1 first required [ADR-0023](docs/decisions/0023-migrate-on-boot.md).** Nothing had been
 applying migrations since ADR-0021 dropped Fly's `release_command`, and because `/health` does not
@@ -44,7 +50,7 @@ created a real account with a personal space. Schema is applied to the Neon dev 
 **It is deployed, and nothing runs on the maintainer's laptop.** `app.mevivek.dev` is Cloudflare
 Pages (builds on push from `main`); `api.mevivek.dev` is Cloud Run, scale-to-zero
 ([ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md), superseding ADR-0014's Fly choice);
-Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 25 checks,
+Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 40 checks,
 including the ones `localhost` structurally cannot perform.
 **Check the deployed app with `fetch`, not `curl`.** From an agent container `curl` goes through the
 agent HTTPS proxy, which has been seen returning the SPA fallback HTML for a large asset the origin
