@@ -36,6 +36,7 @@ that must be read exhaustively are no better than no docs
 | **Anything touching auth, ownership, or crypto** | [security-model.md](security-model.md) **in full** → [ADR-0006](decisions/0006-space-based-ownership.md) → [ADR-0009](decisions/0009-sensitivity-tiers.md) |
 | **Building the vault** | [security-model.md](security-model.md) §5 → [ADR-0010](decisions/0010-vault-key-hierarchy.md) |
 | **File upload or download** | [ADR-0008](decisions/0008-object-storage-r2.md) → [architecture.md](architecture.md) §6 |
+| **Anything visual — a screen, a component, a colour, a size** | [conventions/design.md](conventions/design.md) → [ADR-0025](decisions/0025-ledger-design-system.md) |
 | **Writing tests** | [conventions/testing.md](conventions/testing.md) |
 | **Deciding what to build next** | [product/brain.md](product/brain.md) → [product/idea-backlog.md](product/idea-backlog.md) → [roadmap.md](roadmap.md) |
 | **Brainstorming features with the human** | [product/brain.md](product/brain.md) §7 |
@@ -71,6 +72,8 @@ that must be read exhaustively are no better than no docs
   `problem+json`, idempotency
 - [**conventions/data.md**](conventions/data.md) — schema rules: `space_id`, timestamps,
   soft deletes, JSONB, search
+- [**conventions/design.md**](conventions/design.md) — the Ledger design system in practice:
+  tokens, the expiry ladder, type, what colour is for, three tabs forever
 - [**conventions/testing.md**](conventions/testing.md) — what to test at which layer
 
 ### Decisions
