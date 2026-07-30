@@ -230,6 +230,61 @@ describe('replaying', () => {
   })
 })
 
+describe('a write that can never be sent', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('stops claiming "waiting to send" once it keeps failing while online', async () => {
+    const outbox = await import('./outbox')
+    // Online, but every attempt fails at the network layer — a CSP block, a CORS refusal, a DNS
+    // failure. All of these reach JavaScript as a bare network error, identical to being offline.
+    vi.stubGlobal('navigator', { ...globalThis.navigator, onLine: true })
+    server.use(http.patch('*/api/v1/documents/:id', () => HttpResponse.error()))
+
+    await outbox.enqueue({
+      kind: 'document.update',
+      documentId: DOC_ID,
+      patch: { version: 1, title: 'Edited' },
+    })
+
+    await outbox.replay()
+    expect((await outbox.list())[0]?.status).toBe('pending')
+    await outbox.replay()
+    expect((await outbox.list())[0]?.status).toBe('pending')
+
+    // Third strike. This is the fix for a real report: a phone showing full signal, sitting under
+    // "2 changes waiting to send. They will be sent when you are back online" — indefinitely,
+    // because the requests were being blocked by the app's own CSP and never reached the server.
+    const third = await outbox.replay()
+    expect(third.conflicted).toBe(1)
+
+    const [entry] = await outbox.list()
+    expect(entry?.status).toBe('conflict')
+    expect(entry?.error).toMatch(/appear to be online/)
+  })
+
+  it('does NOT count attempts made while genuinely offline', async () => {
+    const outbox = await import('./outbox')
+    vi.stubGlobal('navigator', { ...globalThis.navigator, onLine: false })
+    server.use(http.patch('*/api/v1/documents/:id', () => HttpResponse.error()))
+
+    await outbox.enqueue({
+      kind: 'document.update',
+      documentId: DOC_ID,
+      patch: { version: 1, title: 'Edited on a train' },
+    })
+
+    for (let i = 0; i < 5; i++) await outbox.replay()
+
+    // Waiting is the correct behaviour with no network. Counting these would eventually condemn a
+    // write for the crime of having been made in a tunnel.
+    const [entry] = await outbox.list()
+    expect(entry?.status).toBe('pending')
+    expect(entry?.attempts ?? 0).toBe(0)
+  })
+})
+
 describe('resolving a conflict', () => {
   /** Queues an edit and drives it to `status: 'conflict'` via a 409. */
   async function conflictedEntry() {

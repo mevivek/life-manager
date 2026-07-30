@@ -10,8 +10,20 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   # connect-src must name the API host explicitly: the app and the API are different ORIGINS in
   # production (app.mevivek.dev vs api.mevivek.dev), even though they are the same site.
+  #
+  # It must ALSO name R2. ADR-0008's whole design is that file bytes go browser → R2 directly, never
+  # through the API — so the storage host is a connect target, and leaving it out blocks every
+  # upload. That is not a hypothetical: it shipped, and the symptom was brutal to diagnose. A CSP
+  # violation surfaces to JavaScript as a bare network error, identical to being offline, so the app
+  # queued each upload as "waiting to send" and a phone with full signal sat under that message
+  # indefinitely. Every server-side check passed, because CSP only exists in a browser.
+  #
+  # The wildcard covers the bucket name, which is part of the host in R2's virtual-hosted URLs
+  # (bucket.account.r2.cloudflarestorage.com). `verify-deployment.mjs` §4 now asserts this header
+  # actually permits the origin of a real presigned URL, so a renamed bucket cannot break it silently.
+  #
   # 'unsafe-inline' for style-src is required by Tailwind's runtime-injected styles.
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.mevivek.dev; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.mevivek.dev https://*.r2.cloudflarestorage.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
 
 # Hashed assets are immutable; the service worker and index.html must never be.
 /assets/*

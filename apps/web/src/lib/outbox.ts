@@ -76,7 +76,36 @@ export type OutboxEntry = NewOutboxEntry & {
   status: 'pending' | 'conflict'
   /** Set when `status` is `'conflict'`, for the UI to explain what happened. */
   error?: string
+  /**
+   * Replay attempts that failed with a network error **while the browser reported being online**.
+   *
+   * Offline attempts are not counted — waiting is the correct behaviour when there is genuinely no
+   * network. This counts the other case, which is the dangerous one. See `MAX_ONLINE_ATTEMPTS`.
+   */
+  attempts?: number
 }
+
+/**
+ * How many times a write may fail at the network layer, while online, before it stops being called
+ * "waiting to send" and starts asking for attention.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  A queue that can never drain, and never says so, is worse than a failed request.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `fetch` rejects — and therefore produces an `OfflineError` — for several reasons that are NOT
+ * "you are offline", and the browser deliberately refuses to tell them apart:
+ *
+ *   · a CORS policy that does not allow the request (the R2 bucket's, or the API's)
+ *   · DNS or TLS failure
+ *   · a request blocked by an extension or a captive portal
+ *
+ * Every one of those looks identical to a dropped connection from JavaScript. Without this counter
+ * the write is re-queued forever under a banner promising it will be sent "when you are back
+ * online", which is a lie the user cannot act on — the phone shows full signal and nothing happens,
+ * indefinitely. Three attempts is enough to rule out a genuinely flaky moment.
+ */
+const MAX_ONLINE_ATTEMPTS = 3
 
 /**
  * Change notification, so the UI can show a queue it does not own.
@@ -182,6 +211,12 @@ export async function retryWithVersion(id: string, version: number): Promise<voi
       }
     }),
   )
+}
+
+/** Records a failed online attempt without changing the entry's status. */
+async function bumpAttempts(id: string, attempts: number): Promise<void> {
+  const entries = await read()
+  await write(entries.map((entry) => (entry.id === id ? { ...entry, attempts } : entry)))
 }
 
 async function markConflict(id: string, message: string): Promise<void> {
@@ -293,6 +328,32 @@ export async function replay(): Promise<ReplayResult> {
       result.sent++
     } catch (error) {
       if (error instanceof OfflineError) {
+        /**
+         * Genuinely offline: stop, change nothing, try again on reconnect. Waiting is right, and
+         * counting these against the entry would eventually condemn a write for the crime of being
+         * made on a train.
+         */
+        if (!navigator.onLine) {
+          result.interrupted = true
+          return result
+        }
+
+        /**
+         * Online, and the request still never reached the server. That is not a connectivity
+         * problem — see `MAX_ONLINE_ATTEMPTS`. Count it, and once it has failed enough times, stop
+         * pretending it is queued and ask the user to look.
+         */
+        const attempts = (entry.attempts ?? 0) + 1
+        if (attempts >= MAX_ONLINE_ATTEMPTS) {
+          await markConflict(
+            entry.id,
+            'This could not be sent even though you appear to be online. The request never reached the server, which usually means a configuration problem rather than a connection one.',
+          )
+          result.conflicted++
+          continue
+        }
+
+        await bumpAttempts(entry.id, attempts)
         result.interrupted = true
         return result
       }

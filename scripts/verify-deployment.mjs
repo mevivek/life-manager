@@ -309,6 +309,113 @@ console.log('\n[7] the Documents domain actually works — i.e. its tables exist
       ok(false, 'GET /documents/:id', `${detail.status}`)
     }
 
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  A REAL upload, against real R2. This is debt D39's gap, and nothing else covers it.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * `docker-compose.dev.yml` runs Adobe S3Mock, which accepts presigned URLs **without validating
+     * the signature**. So a green local upload says only that the three-step flow is wired up; it
+     * says nothing about whether the URL we mint is one that real storage will accept. Both storage
+     * bugs M1 hit were signature-content bugs that would have passed there.
+     *
+     * This is the check that would have caught them, and it can only run against production.
+     */
+    const bytes = Buffer.from('deploy-check upload probe')
+    const presigned = await fetch(`${API}/api/v1/documents/${documentId}/files:presign-upload`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ mime: 'image/png', size_bytes: bytes.length, make_primary: true }),
+    })
+
+    if (presigned.status === 503) {
+      // Storage genuinely unconfigured. Honest, and not a failure of the deployment.
+      console.log('  SKIP  upload round-trip — storage is not configured (503)')
+    } else if (!presigned.ok) {
+      ok(false, 'presign upload', `${presigned.status} ${(await presigned.text()).slice(0, 200)}`)
+    } else {
+      const { upload_url, file_id } = await presigned.json()
+
+      const put = await fetch(upload_url, {
+        method: 'PUT',
+        // Exactly what the browser sends: the signed content-type, plus an Origin. A mismatch here
+        // is the difference between a working upload and a 403 the user sees as "cannot upload".
+        headers: { 'content-type': 'image/png', origin: APP },
+        body: bytes,
+      })
+
+      /**
+       * ═══════════════════════════════════════════════════════════════════════════════════════
+       *  Does the app's OWN Content-Security-Policy permit talking to this host?
+       * ═══════════════════════════════════════════════════════════════════════════════════════
+       *
+       * This is the check that was missing when uploads silently failed in production. CSP is
+       * enforced only by browsers, so every other assertion in this file — the presign, the PUT, the
+       * CORS preflight, the confirm — passed while the app could not upload at all. `connect-src`
+       * named the API and not R2, and ADR-0008 sends file bytes straight to R2.
+       *
+       * The failure mode is what made it expensive: a blocked request reaches JavaScript as a bare
+       * network error, indistinguishable from being offline, so the client queued each upload under
+       * "waiting to send" forever.
+       *
+       * Comparing the policy against a REAL presigned origin rather than a hard-coded host is the
+       * point — rename the bucket and this still tells the truth.
+       */
+      const cspHeader = (await fetch(`${APP}/`)).headers.get('content-security-policy') ?? ''
+      const connectSrc = /connect-src ([^;]*)/.exec(cspHeader)?.[1]?.trim().split(/\s+/) ?? []
+      const uploadHost = new URL(upload_url).hostname
+      const permitted = connectSrc.some((source) => {
+        if (source === '*') return true
+        const host = source.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+        if (host.startsWith('*.')) return uploadHost.endsWith(host.slice(1))
+        return host === uploadHost
+      })
+      ok(
+        permitted,
+        "the app's CSP allows uploading to storage",
+        permitted
+          ? uploadHost
+          : `connect-src does not permit ${uploadHost} — every browser upload will fail while every check here passes`,
+      )
+      ok(
+        put.ok,
+        'PUT the bytes to real storage',
+        put.ok ? `${put.status}` : `${put.status} ${(await put.text()).slice(0, 300)}`,
+      )
+
+      /**
+       * **The header that decides whether a BROWSER can upload, as opposed to this script.**
+       *
+       * Node ignores CORS entirely, so the PUT above can succeed while every upload from the app
+       * fails. The browser requires `access-control-allow-origin` on the PUT's own response — a
+       * passing preflight is not enough — and when it is missing the browser rejects the request at
+       * the network layer. Our client cannot tell that apart from being offline, so the write is
+       * queued as "waiting to send" and never sent. That is precisely the symptom reported from a
+       * phone with full signal.
+       */
+      ok(
+        put.headers.get('access-control-allow-origin') !== null,
+        'the upload response carries CORS headers, so a browser can read it',
+        put.headers.get('access-control-allow-origin') ??
+          'ABSENT — uploads work from a server and FAIL in the browser',
+      )
+
+      const confirmed = await fetch(`${API}/api/v1/documents/${documentId}/files:confirm`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ file_id }),
+      })
+      ok(confirmed.ok, 'confirm the upload', `${confirmed.status}`)
+
+      // D33: assert a NON-ZERO count. `file_count` was 0 for all of M1 because every assertion
+      // happened to expect 0.
+      const after = await fetch(`${API}/api/v1/documents/${documentId}`, { headers })
+      if (after.ok) {
+        const full = await after.json()
+        ok(full.file_count === 1, 'file_count reflects the upload', `${full.file_count}`)
+      }
+    }
+
     const list = await fetch(`${API}/api/v1/documents?limit=5`, { headers })
     ok(list.ok, 'GET /documents', `${list.status}`)
     if (list.ok) {
@@ -332,10 +439,12 @@ console.log('\n[7] the Documents domain actually works — i.e. its tables exist
      * That produced a FAILING check against a perfectly healthy production API, which is the worst
      * kind of verifier bug: it accuses the deployment of something the deployment did not do.
      */
-    const deleted = await fetch(`${API}/api/v1/documents/${documentId}`, {
-      method: 'DELETE',
-      headers: { cookie, origin: APP },
-    })
+    // `?version=` is required since D41 — a delete without it is refused rather than applied.
+    const current = await (await fetch(`${API}/api/v1/documents/${documentId}`, { headers })).json()
+    const deleted = await fetch(
+      `${API}/api/v1/documents/${documentId}?version=${current.version}`,
+      { method: 'DELETE', headers: { cookie, origin: APP } },
+    )
     ok(deleted.status === 204, 'DELETE /documents/:id', `${deleted.status}`)
   }
 }

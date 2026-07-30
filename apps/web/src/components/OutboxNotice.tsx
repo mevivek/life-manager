@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useOutbox } from '@/features/outbox/useOutbox'
+import { useOnlineStatus } from '@/lib/useOnlineStatus'
 
 /**
  * Tells you there are writes waiting, or writes that need a decision (ADR-0024).
@@ -15,6 +16,7 @@ import { useOutbox } from '@/features/outbox/useOutbox'
  */
 export function OutboxNotice() {
   const { pending, conflicts } = useOutbox()
+  const isOnline = useOnlineStatus()
 
   if (conflicts.length > 0) {
     return (
@@ -35,19 +37,38 @@ export function OutboxNotice() {
   }
 
   if (pending.length > 0) {
+    /**
+     * **Only promise "when you are back online" if we are actually offline.**
+     *
+     * The banner used to say that unconditionally, which produced the report that prompted this
+     * change: a phone showing full signal and full wifi, sitting under a message insisting the
+     * writes would go out once the connection returned. The connection had never left. A message
+     * the user cannot act on, and cannot disprove, is worse than no message.
+     */
+    const label =
+      pending.length === 1
+        ? '1 change waiting to send'
+        : `${pending.length} changes waiting to send`
+
     return (
-      <div
+      <Link
+        to="/outbox"
         role="status"
-        className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+        className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
       >
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-primary" />
-        <span>
-          {pending.length === 1
-            ? '1 change waiting to send'
-            : `${pending.length} changes waiting to send`}
-          . They will be sent when you are back online.
+        <span className="flex items-center gap-2">
+          <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-primary" />
+          <span>
+            {label}
+            {isOnline ? '.' : '. They will be sent when you are back online.'}
+          </span>
         </span>
-      </div>
+        {/* Tappable now. Previously only the conflict banner linked anywhere, so a stuck queue was
+            something you could see and not inspect. */}
+        <span aria-hidden="true" className="shrink-0">
+          View →
+        </span>
+      </Link>
     )
   }
 
