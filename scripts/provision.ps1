@@ -7,7 +7,33 @@
   .\scripts\provision.ps1 r2          # the four R2_* values
   .\scripts\provision.ps1 vapid       # the three VAPID_* values
   .\scripts\provision.ps1 neon        # rotate DATABASE_URL + DATABASE_URL_UNPOOLED (debt D18)
+  .\scripts\provision.ps1 cron        # CRON_SECRET + the Cloud Scheduler job (ADR-0028)
   .\scripts\provision.ps1 status      # what is bound right now, names only
+
+  ── IF IT WILL NOT RUN AT ALL: "cannot be loaded ... is not digitally signed" ──
+
+  That is Windows' execution policy refusing the file, not a problem with the script, and it is the
+  FIRST thing you will hit on a fresh machine. Nothing here needs signing. Run it as:
+
+      powershell -ExecutionPolicy Bypass -File .\scripts\provision.ps1 cron
+
+  One invocation, no lasting change to the machine. Or, for a whole shell session:
+
+      Set-ExecutionPolicy -Scope Process Bypass
+
+  Prefer either of those to `-Scope CurrentUser`, which is a permanent change to your machine's
+  posture for the sake of one script you can read.
+
+  The message is ambiguous between two different causes, and only one has a permanent fix:
+
+      Get-ExecutionPolicy -List
+      Get-Item .\scripts\provision.ps1 -Stream Zone.Identifier -ErrorAction SilentlyContinue
+
+  · Policy is `AllSigned` — every script needs a signature, local or not. Use the bypass above.
+  · Policy is `RemoteSigned` AND that second command returns something — Windows has tagged the file
+    as internet-sourced. `Unblock-File .\scripts\provision.ps1` fixes it for good. Worth noticing
+    rather than bypassing: a `git clone` does not normally set that tag, so it means the file reached
+    the machine through a zip or a browser download.
 
   Same behaviour and the same reasoning as provision.sh — see that file's header for why each
   credential group is bound in ONE update call, why only the `--update-` forms are used, and why

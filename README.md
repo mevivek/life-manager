@@ -184,6 +184,13 @@ also records why the image is Adobe S3Mock (Apache-2.0) rather than MinIO (AGPL-
 
 On Windows use `.\scripts\provision.ps1 <same subcommand>` — same groups, same prompts.
 
+> **First run on Windows will refuse to start:** *"cannot be loaded … is not digitally signed"*. That
+> is the execution policy, not a broken script, and nothing here needs signing. Run it as
+> `powershell -ExecutionPolicy Bypass -File .\scripts\provision.ps1 cron`, which changes nothing
+> lasting. If `Get-ExecutionPolicy -List` says `RemoteSigned` and
+> `Get-Item .\scripts\provision.ps1 -Stream Zone.Identifier` returns something, the file is tagged
+> internet-sourced and `Unblock-File` fixes it permanently — see the script's own header.
+
 `cron` is the only group that provisions something **outside** Cloud Run: it binds the secret *and*
 creates the Cloud Scheduler job with the same value in its `X-Cron-Key` header, so the value is typed
 once and cannot drift between the two places that must agree. It is also the group that finally makes
