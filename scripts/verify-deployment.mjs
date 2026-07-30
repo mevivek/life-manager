@@ -62,6 +62,8 @@ function readEnvFile() {
 }
 
 const env = readEnvFile()
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: this script is never a Turborepo task, so there
+// is no turbo.json cache key to declare it in. Same reasoning as scripts/generate-icons.mjs.
 const cleanupDatabaseUrl = process.env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL_UNPOOLED
 
 let pass = 0
@@ -358,7 +360,9 @@ if (cleanupDatabaseUrl === undefined) {
    */
   console.log('  SKIP  throwaway user NOT removed — no database credential available')
   console.log(`        left behind: ${email}`)
-  console.log('        to clear it, set DATABASE_URL_UNPOOLED and re-run, or add it to apps/api/.env')
+  console.log(
+    '        to clear it, set DATABASE_URL_UNPOOLED and re-run, or add it to apps/api/.env',
+  )
 } else {
   const db = new Client({ connectionString: cleanupDatabaseUrl })
   await db.connect()
