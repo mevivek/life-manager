@@ -111,7 +111,19 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
  * registration, a hallmark — in **plaintext** on disk. Same class of data, same accepted trade, one
  * more domain of it. Nothing here is encrypted and no copy in the app may claim it is (debt D44).
  */
-const PERSISTED_KEY_ROOTS = new Set(['documents', 'things', 'reminders', 'me'])
+/**
+ * **`reminders` was on this list and is gone, because no query is rooted at it.**
+ *
+ * Reminders arrive *nested* inside a document's and a thing's detail response, so they were already
+ * persisted as part of `['documents', 'detail', id]` and the entry bought nothing. What it would have
+ * done is the opposite of what an allowlist is for: the next session to write a `['reminders', …]`
+ * hook would have found its data silently on disk without anyone deciding that it should be. The
+ * inventory of query roots the app actually has is documents · things · me · outbox · health · push,
+ * and `offline.test.ts` fails if a root here is not one of them.
+ *
+ * Exported for that test.
+ */
+export const PERSISTED_KEY_ROOTS = new Set(['documents', 'things', 'me'])
 
 export const queryCachePersister = createAsyncStoragePersister({
   storage: {

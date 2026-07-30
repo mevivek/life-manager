@@ -51,14 +51,58 @@ describe('what may be written to disk', () => {
     // ADR-0029's second domain. Allowlisted deliberately, and it widens debt D47 — a thing's serial
     // is plaintext on the wire and therefore plaintext on disk, same as a document's identifier.
     expect(persisted(['things', 'list', {}])).toBe(true)
-    expect(persisted(['reminders'])).toBe(true)
     // Load-bearing: routes/_authed.tsx guards on `me`, so without it an offline cold start lands on
     // the error screen and every other cached query is unreachable.
     expect(persisted(['me'])).toBe(true)
 
+    // `reminders` used to be allowlisted and asserted here, and NO query in the app is rooted at it —
+    // reminders come nested inside a document's or a thing's detail response. A dead entry is worse
+    // than a missing one: it silently pre-authorises the next `['reminders', …]` hook someone writes.
+    expect(persisted(['reminders'])).toBe(false)
+
     // The allowlist is the point. A future hook must be added deliberately, not inherited.
     expect(persisted(['secrets'])).toBe(false)
     expect(persisted(['vault', 'items'])).toBe(false)
+  })
+
+  it('has no allowlisted root without a query behind it', async () => {
+    /**
+     * The check that would have caught `reminders`.
+     *
+     * Every root is read out of the source rather than listed here — a hand-kept list of "roots the
+     * app has" is the same tautology the allowlist test would otherwise be, and it is what let a dead
+     * entry sit on the list through two milestones. `documentsKey` and friends are `export const … =
+     * ['documents'] as const`; the rest are literals passed straight to `useQuery`.
+     */
+    const { PERSISTED_KEY_ROOTS } = await import('./persister')
+
+    const sources = import.meta.glob('../**/*.{ts,tsx}', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+
+    const roots = new Set<string>()
+    // Tests excluded: a fixture inventing a query key must not be able to justify an allowlist entry.
+    for (const [path, source] of Object.entries(sources)) {
+      if (path.includes('.test.')) continue
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '')
+      for (const [, root] of code.matchAll(/(?:queryKey: |Key = )\[\s*'([a-z-]+)'/g)) {
+        if (root !== undefined) roots.add(root)
+      }
+    }
+
+    // A floor, so a broken scan fails rather than passes vacuously.
+    expect([...roots].sort()).toEqual(
+      expect.arrayContaining(['documents', 'health', 'me', 'outbox', 'push', 'things']),
+    )
+
+    for (const root of PERSISTED_KEY_ROOTS) {
+      expect(
+        [...roots],
+        `'${root}' is on the persist allowlist but no query in the app is rooted at it — either the hook was removed or the entry was never real`,
+      ).toContain(root)
+    }
   })
 
   it('does not persist a failed query', async () => {

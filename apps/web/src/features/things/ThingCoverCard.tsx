@@ -136,7 +136,7 @@ export function coverSpan(
  *     and a mistyped year is the obvious way to get one.
  *
  * 365 and 30.4 rather than calendar arithmetic: this is a rounded phrase, not a date calculation, and
- * `daysUntil` already gives whole calendar days with no timezone in them.
+ * `daysUntil` already gives whole calendar days, counted from the user's LOCAL calendar day.
  */
 export function ageOf(purchasedOn: string | null, today?: Date): string | null {
   if (purchasedOn === null) return null

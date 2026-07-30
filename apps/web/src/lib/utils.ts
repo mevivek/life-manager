@@ -30,8 +30,10 @@ import { extendTailwindMerge } from 'tailwind-merge'
 /**
  * The theme's `--text-*` scale, so a size is not mistaken for a colour. See above.
  *
- * Exported for `utils.test.ts`, which walks it — a token added to `styles.css` and forgotten here is
- * the exact regression that test exists to catch.
+ * Exported for `utils.test.ts`, which **parses `styles.css` and compares it against this list** — a
+ * token added to the stylesheet and forgotten here is the exact regression that test exists to catch.
+ * It used to walk this array alone, which compared the file with itself and could never fail for the
+ * omission it claimed to guard.
  */
 export const TEXT_SIZES = [
   'display',
@@ -65,6 +67,11 @@ export const RADII = ['1', '2', '3', '4', 'pill'] as const
  * Named spacing (`--spacing-*`), for the same reason as the radii: `Button`'s sizes set `min-h-field`
  * and `min-h-tap`, and a caller that overrides with an arbitrary `min-h-[3.375rem]` must win rather
  * than coexist.
+ *
+ * **Naming a token here is only half of it — it does nothing on an axis that is not grouped below.**
+ * `--spacing-gutter` has been in this list from the start and `right-gutter` was still ungrouped,
+ * because `right` was not one of the axes. `utils.test.ts` scans the source for real usages and fails
+ * on an axis it finds that `cn()` cannot merge.
  */
 export const NAMED_SPACING = [
   'gutter',
@@ -90,6 +97,13 @@ const twMerge = extendTailwindMerge({
       py: [{ py: [...NAMED_SPACING] }],
       mx: [{ mx: [...NAMED_SPACING] }],
       gap: [{ gap: [...NAMED_SPACING] }],
+      // `h` and `right` were missing while both were in use — `h-field` on `Input`, `right-gutter` on
+      // the Documents and Things Add pills. A named spacing token is only grouped on the axes named
+      // here, so on any other axis it lands in no group at all and a `className` override *coexists*
+      // with it rather than winning: the `rounded-2` / `rounded-pill` coin flip again (§1's second
+      // failure mode). Nothing collided yet, which is exactly why it was invisible.
+      h: [{ h: [...NAMED_SPACING] }],
+      right: [{ right: [...NAMED_SPACING] }],
       // `font-heading` is a FAMILY and `font-face-h` is a WEIGHT. Both start `font-`, and
       // tailwind-merge's built-in groups only know the stock names — so without these two lines a
       // heading that sets the family and a variant that sets the weight land in no group, never

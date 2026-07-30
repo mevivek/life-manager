@@ -69,6 +69,27 @@ describe('voice', () => {
     expect(warm.clearBody(4)).not.toMatch(/\d/)
   })
 
+  it('describes the saved step the wizard actually draws, not the form it replaced', () => {
+    /**
+     * design.md §13: **a label must be one the value can carry.** Both registers described the
+     * pre-ADR-0030 single-page form — plain promised "Optional fields below", warm invited "Add
+     * anything else now" — and the wizard's saved step has no fields on it. It shows a read-back of
+     * the values, a note naming the blanks, and actions that leave for the record's own screen.
+     *
+     * A sentence naming furniture that is not on screen is the kind of rot that only shows up in the
+     * register nobody switches to, which is the blind spot §12(2) names. So it is asserted.
+     */
+    expect(plain.savedBody).not.toMatch(/optional fields/i)
+    expect(warm.savedBody).not.toMatch(/add anything else/i)
+    // Neither may promise a form or an input on this step.
+    for (const register of [warm.savedBody, plain.savedBody]) {
+      expect(register).not.toMatch(/\bfields? below\b/i)
+    }
+    // Plain says no less than warm: it names what is listed AND what the actions do.
+    expect(plain.savedBody).toMatch(/below/)
+    expect(plain.savedBody).toMatch(/actions/)
+  })
+
   it('differs between registers for every fixed-string sentence', () => {
     // The walk. Each of these is a plain string on the copy object; if a new one is added with the
     // same text in both registers, this catches the half-done translation.

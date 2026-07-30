@@ -11,8 +11,19 @@ import { useOnlineStatus } from '@/lib/useOnlineStatus'
  * it mean something.
  *
  * Rendered in the app shell alongside `OfflineNotice`, and only when there is something to say. The
- * conflict state takes priority and is styled as destructive: pending writes resolve themselves on
- * reconnect and need no action, whereas a conflict will sit there forever until you choose.
+ * conflict state takes priority: pending writes resolve themselves on reconnect and need no action,
+ * whereas a conflict will sit there forever until you choose.
+ *
+ * ── How the conflict state is allowed to be loud ──
+ *
+ * It shipped as `bg-destructive/10 border-destructive/50` — a red-tinted block mixed from the
+ * destructive alias with opacity modifiers. design.md §4 rules that out twice over: **destructive is
+ * text in `--status-late`, never a filled red block**, and a colour must come from a token rather than
+ * from an alpha channel applied to one. The sanctioned way to say "past its date" on a ground is the
+ * status *tint* — `--status-late-bg`, which is what `Alert variant="destructive"` and a detail
+ * screen's `STATUS_BG` both use — with a hairline and ordinary ink on top. So the tint carries the
+ * urgency and the words stay readable, which is also the only way this survives at 390px in dark mode
+ * where a 10% red over near-black is indistinguishable from the paper.
  */
 export function OutboxNotice() {
   const { pending, conflicts } = useOutbox()
@@ -22,14 +33,15 @@ export function OutboxNotice() {
     return (
       <Link
         to="/outbox"
-        className="flex items-center justify-between gap-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm"
+        className="flex items-center justify-between gap-3 rounded-3 border border-rule-2 bg-status-late-bg px-4 py-3 text-body leading-snug text-ink"
       >
-        <span>
+        <span className="font-medium">
           {conflicts.length === 1
             ? '1 change needs your attention'
             : `${conflicts.length} changes need your attention`}
         </span>
-        <span aria-hidden="true" className="shrink-0 text-muted-foreground">
+        {/* The affordance, not the message — quieter ink so the sentence is what reads first. */}
+        <span aria-hidden="true" className="shrink-0 text-meta text-ink-2">
           Review →
         </span>
       </Link>
@@ -54,10 +66,10 @@ export function OutboxNotice() {
       <Link
         to="/outbox"
         role="status"
-        className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+        className="flex items-center justify-between gap-3 rounded-3 border border-rule bg-sunken px-4 py-3 text-body leading-snug text-ink-2"
       >
         <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-primary" />
+          <span aria-hidden="true" className="size-2 shrink-0 rounded-pill bg-ink" />
           <span>
             {label}
             {isOnline ? '.' : '. They will be sent when you are back online.'}
@@ -65,7 +77,7 @@ export function OutboxNotice() {
         </span>
         {/* Tappable now. Previously only the conflict banner linked anywhere, so a stuck queue was
             something you could see and not inspect. */}
-        <span aria-hidden="true" className="shrink-0">
+        <span aria-hidden="true" className="shrink-0 text-meta">
           View →
         </span>
       </Link>

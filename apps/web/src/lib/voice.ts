@@ -137,10 +137,25 @@ export function copyFor(voice: Voice) {
         ? 'Every document with a date is checked once a day. We’d have told you.'
         : `${datedCount} dated ${datedCount === 1 ? 'document' : 'documents'} checked daily.`,
 
-    /** The Add sheet's saved step. */
+    /**
+     * The Add sheet's saved step, rendered after "It’s in Documents." / "It’s in Things."
+     *
+     * ── Both registers used to describe a screen that no longer exists ──
+     *
+     * Plain said *"Saved. Optional fields below."* and warm *"Add anything else now"*, which were true
+     * of the single-page form with its "Add more now" disclosure. **`ADR-0030` replaced that with a
+     * six-step wizard**, and its saved step has no fields on it at all: it draws a `<dl>` reading the
+     * record back, one sentence naming the blanks, then a short list of actions that each *leave* for
+     * the record's own screen. So "fields below" pointed at nothing — design.md §13's rule, in the
+     * register nobody opens (§12(2) named that blind spot exactly).
+     *
+     * What is below is a read-back, a note about gaps, and choices. Both registers now say that, and
+     * plain still says no less than warm: it keeps the fact that the values are listed and adds what
+     * the actions do, where warm spends its second clause on permission to leave.
+     */
     savedBody: warm
-      ? 'It’s in. Add anything else now, or close this and get on with your day.'
-      : 'Saved. Optional fields below.',
+      ? 'Have a look at what went in — or close this and get on with your day.'
+      : 'The values saved are listed below; the actions below fill a gap.',
   }
 }
 
