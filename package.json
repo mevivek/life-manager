@@ -12,8 +12,9 @@
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "biome check .",
-    "format": "biome check --write ."
+    "lint": "node scripts/check-schema-barrel.mjs && biome check .",
+    "format": "biome check --write .",
+    "check:schema-barrel": "node scripts/check-schema-barrel.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",

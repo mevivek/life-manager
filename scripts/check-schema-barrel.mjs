@@ -2,7 +2,30 @@
 /**
  * Fails if a domain table is defined but not re-exported from the schema barrel.
  *
- *     node scripts/check-schema-barrel.mjs
+ *     pnpm check:schema-barrel          # or: node scripts/check-schema-barrel.mjs
+ *
+ * ── Where it runs, and why `lint` rather than `typecheck` or `test` ──
+ *
+ * It is the FIRST thing `pnpm lint` does — `package.json` is JSON and cannot hold this comment, so
+ * the reasoning lives here:
+ *
+ *  • It shipped wired only into `cloudbuild.deploy.yaml`, which meant no local feedback at all: a
+ *    session added a table, saw green, and found out on push. A guardrail nobody runs is a comment.
+ *  • `lint` is the right host because this IS static analysis — Node builtins, a few file reads, no
+ *    install, no build, no Postgres (which is the whole point: the database-backed half in
+ *    `migrations.test.ts` SKIPS wherever no Postgres is reachable, ADR-0018). Measured at ~70ms
+ *    against `biome check .`'s seconds, so the common path does not notice it.
+ *  • `typecheck` and `test` both go through Turborepo/Vitest and would have paid a second process
+ *    tree for it; `lint` is a plain root script, so nothing about `turbo.json`'s task graph, its
+ *    cache keys, or what the pipeline's `typecheck`/`test` steps mean changes.
+ *  • It runs BEFORE `biome check .`, not after: a formatting nit must not be able to hide a table
+ *    that will be missing in production. Cheapest and most consequential check first.
+ *  • Invoked as `node scripts/…` and not `pnpm check:schema-barrel`, because a nested `pnpm run`
+ *    costs ~1.6s of process spawn here — 20× the check itself.
+ *
+ * `pnpm check:schema-barrel` exists for running it alone. The pipeline keeps its own `checks` step
+ * too, and that redundancy is deliberate: that step sits before the deploy guard and before
+ * `pnpm install`, so it runs even on a push whose deploy is skipped.
  *
  * ── The rule this enforces, and why a sentence in a doc was not enough ──
  *
