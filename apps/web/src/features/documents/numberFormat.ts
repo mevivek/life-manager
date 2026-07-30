@@ -134,6 +134,35 @@ export function autoCapitalizeFor(format: NumberFormat | undefined): 'characters
 }
 
 /**
+ * Whether a value **already saved** matches the shape a preset would impose.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  This is the guard that stops an edit form silently rewriting a stored number.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Formatting a saved value on load is only safe when it is lossless. It frequently is not: a document
+ * titled "Passport" whose number is `FAKEM1234471` reformats under the `A#######` mask to `F1234471` —
+ * eight characters where there were twelve, silently, on a value the user never touched. Save without
+ * editing anything and the mangled version is what persists.
+ *
+ * So when a stored value does not fit, the field treats itself as **unformatted** for that document:
+ * no reshaping on load, none while typing, and no completeness counter (which would otherwise report
+ * "Complete" on twelve characters in an eight-character shape). The document's number demonstrably is
+ * not in the preset's shape, which means the shape is the wrong thing to trust — not the number.
+ *
+ * An absent or empty value fits by definition: there is nothing to lose, and the user may be about to
+ * type one that does conform.
+ */
+export function fitsShape(
+  format: NumberFormat | undefined,
+  stored: string | null | undefined,
+): boolean {
+  if (format === undefined) return true
+  if (stored == null || stored === '') return true
+  return significant(formatNumber(format, stored)) === significant(stored)
+}
+
+/**
  * A stored value, grouped for reading aloud.
  *
  * `9999 8888 7777` is how an Aadhaar number is printed and how a person reads one back. An

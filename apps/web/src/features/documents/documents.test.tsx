@@ -760,6 +760,111 @@ describe('DocumentForm', () => {
     expect(screen.getByLabelText('Passport number')).toHaveValue('')
   })
 
+  it('formats the number when EDITING too, recovered from the saved title', async () => {
+    /**
+     * The gap this closes: the preset chooser is hidden when editing, so `activePreset` was always
+     * null there and everything hanging off it fell away — no grouping, no counter, no numeric keypad,
+     * no example. Only the *label* had a fallback, which made it look deliberate: the field said
+     * "Aadhaar number" and then behaved like free text.
+     */
+    const aadhaar = {
+      ...detailFixture,
+      title: 'Aadhaar',
+      doc_type: 'identity' as const,
+      identifier: '999988887777',
+    }
+    renderWithQuery(<DocumentForm initial={aadhaar} onSubmit={vi.fn()} />)
+
+    const field = screen.getByLabelText('Aadhaar number')
+    // Formatted on LOAD, not merely on the next keystroke — otherwise the edit form shows a saved
+    // number differently from the screen the user just came from.
+    expect(field).toHaveValue('9999 8888 7777')
+    // The counter and the example are present, which is what was missing entirely.
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.getByText('1234 5678 9012')).toBeInTheDocument()
+    expect(field).toHaveAttribute('inputmode', 'numeric')
+  })
+
+  it('reformats as you type on the edit form', async () => {
+    const aadhaar = {
+      ...detailFixture,
+      title: 'Aadhaar',
+      doc_type: 'identity' as const,
+      identifier: null,
+    }
+    renderWithQuery(<DocumentForm initial={aadhaar} onSubmit={vi.fn()} />)
+
+    const field = screen.getByLabelText('Aadhaar number')
+    await userEvent.type(field, '999988887777')
+    expect(field).toHaveValue('9999 8888 7777')
+  })
+
+  it('refuses to reformat a stored number the shape would mangle', async () => {
+    /**
+     * The hazard that load-formatting introduces, and the guard against it.
+     *
+     * A document titled "Passport" whose number is `FAKEM1234471` reformats under the `A#######` mask
+     * to `F1234471` — eight characters where there were twelve, on a value nobody touched, and
+     * persisted by a Save that changed something else entirely. `fitsShape` refuses the format for
+     * that document: the number demonstrably is not in the preset's shape, so the shape is the wrong
+     * thing to trust.
+     */
+    const odd = {
+      ...detailFixture,
+      title: 'Passport',
+      doc_type: 'identity' as const,
+      identifier: 'FAKEM1234471',
+    }
+    renderWithQuery(<DocumentForm initial={odd} onSubmit={vi.fn()} />)
+
+    const field = screen.getByLabelText('Passport number')
+    expect(field).toHaveValue('FAKEM1234471')
+    // No completeness counter either — it would report "Complete" on twelve characters in an
+    // eight-character shape, which is worse than saying nothing.
+    expect(screen.queryByText('Complete')).toBeNull()
+    // The label still names a passport. Only the reshaping is dropped, not the identification.
+    expect(field).toBeInTheDocument()
+  })
+
+  it('leaves a conforming stored number alone while formatting it', async () => {
+    const clean = {
+      ...detailFixture,
+      title: 'Passport',
+      doc_type: 'identity' as const,
+      identifier: 'M1234567',
+    }
+    renderWithQuery(<DocumentForm initial={clean} onSubmit={vi.fn()} />)
+    expect(screen.getByLabelText('Passport number')).toHaveValue('M1234567')
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+  })
+
+  it('keeps the shape the document was SAVED as, not the one being typed into the title', async () => {
+    /**
+     * Renaming a document must not start reshaping its number.
+     *
+     * `watch('title')` would have been the obvious source, and it would mean typing "Aadhaar" over a
+     * policy number silently rewrites a stored value to digits-only. On create that boundary is
+     * protected by `carryNumber`, which clears rather than mangles; there is no equivalent safety for
+     * a value the user did not just type. So the shape is fixed at what the document was saved as.
+     */
+    const policy = {
+      ...detailFixture,
+      title: 'Vehicle insurance',
+      doc_type: 'financial' as const,
+      identifier: 'AV-4471-9820',
+    }
+    renderWithQuery(<DocumentForm initial={policy} onSubmit={vi.fn()} />)
+
+    // Free text, because "Vehicle insurance" has no format — the value survives verbatim.
+    expect(screen.getByLabelText('Policy number')).toHaveValue('AV-4471-9820')
+
+    await userEvent.clear(screen.getByLabelText('Title'))
+    await userEvent.type(screen.getByLabelText('Title'), 'Aadhaar')
+
+    // Still the policy number, untouched, under its original label.
+    expect(screen.getByLabelText('Policy number')).toHaveValue('AV-4471-9820')
+  })
+
   it('offers no presets when editing, where a tap would overwrite a real title', async () => {
     // A shortcut that destroys existing data is not a shortcut. `initial` present means editing.
     const existing = {

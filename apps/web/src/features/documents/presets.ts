@@ -266,6 +266,22 @@ export function presetByName(name: string): Preset | null {
 export const GENERIC_NUMBER_LABEL = 'Number'
 
 /**
+ * The preset a **saved** document corresponds to, or null.
+ *
+ * Matched on the **title**, because that is what the preset filled in and the only durable trace it
+ * leaves — the app deliberately does not store "which preset made this". Storing it would be a fourth
+ * kind of type (`doc_type`, `custom_attrs`, tags, and now a preset id) describing the same document.
+ *
+ * Case-insensitive and exact after trimming. A loose `includes()` match would treat a document called
+ * "Passport photos" as a passport, which then governs how its number is formatted — so the strictness
+ * is load-bearing rather than fussy. Debt **D45**.
+ */
+export function presetForTitle(title: string): Preset | null {
+  const needle = title.trim().toLowerCase()
+  return PRESETS.find((preset) => preset.name.toLowerCase() === needle) ?? null
+}
+
+/**
  * What to call this document's number, on a document that was saved some time ago.
  *
  * Matched on the **title**, because that is what the preset filled in and the only durable trace it
@@ -279,7 +295,5 @@ export const GENERIC_NUMBER_LABEL = 'Number'
  * changing every call site.
  */
 export function numberLabelFor(title: string, _docType: DocumentType): string {
-  const needle = title.trim().toLowerCase()
-  const match = PRESETS.find((preset) => preset.name.toLowerCase() === needle)
-  return match?.numLabel ?? GENERIC_NUMBER_LABEL
+  return presetForTitle(title)?.numLabel ?? GENERIC_NUMBER_LABEL
 }
