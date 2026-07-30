@@ -23,3 +23,13 @@ interface ImportMeta {
  * bundler can inline: `lib/persister.ts` reads it at module scope, before React mounts.
  */
 declare const __APP_VERSION__: string
+
+/**
+ * When this bundle was built, ISO 8601, substituted at build time by `define` in `vite.config.ts`.
+ *
+ * A global for the same reason as `__APP_VERSION__` — a compile-time constant, not an env entry, so
+ * there is no way to leave it unset and have the card quietly show nothing. It is the *config
+ * evaluation* time rather than the upload time; see the comment on the `define` for how close those
+ * are and where they are not.
+ */
+declare const __BUILT_AT__: string

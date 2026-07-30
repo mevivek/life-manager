@@ -415,7 +415,7 @@ apps/web/src/lib/utils.ts                    cn() — the tailwind-merge class g
 apps/web/src/lib/theme.ts                    light/dark resolution; index.html mirrors it pre-paint
 apps/web/src/lib/feel.ts + useFeel.tsx       density / face / voice preferences (§12)
 apps/web/src/lib/voice.ts                    the two copy registers (§12)
-apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton
+apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton stat
 apps/web/src/components/TabBar.tsx           three tabs, forever (§8)
 apps/web/src/components/DomainSwitcher.tsx   Documents / Things, drawn now domain two exists (§8)
 apps/web/src/components/PhotoViewer.tsx      the full-screen image viewer for scans and photos
@@ -426,4 +426,13 @@ apps/web/src/features/documents/
 apps/web/src/features/things/
   CoverStatus.tsx                            the cover ladder — four states, the second and last (§2a)
   ThingRow.tsx                               the row every thing list is made of
+apps/web/src/features/health/
+  BuildCard.tsx                              what is deployed, both halves, and whether they agree
 ```
+
+**One rule from the Build card generalises.** It renders `uptime_seconds` as *"Awake for 5 minutes"*,
+never as a deploy time, because the API scales to zero and that number is the last cold start. **A
+label must be one the value can carry**, and this codebase has now refused three comp elements on that
+ground — the toast's *Undo*, You's *"encrypted at rest"*, and *"last deployed"*. When a design asks for
+a fact the system does not hold, the fix is a truer label or an honest "unknown", never the nearest
+plausible number.

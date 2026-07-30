@@ -18,6 +18,9 @@ export default defineConfig({
    */
   define: {
     __APP_VERSION__: JSON.stringify('test'),
+    // Fixed rather than `new Date()`: a global that moves makes any assertion about what the Build
+    // card renders a race with the clock. It is deliberately NOT sha-shaped, matching the local case.
+    __BUILT_AT__: JSON.stringify('2026-07-30T08:15:00.000Z'),
   },
   test: {
     name: 'web',

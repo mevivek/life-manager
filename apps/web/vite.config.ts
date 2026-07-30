@@ -174,5 +174,23 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(
       process.env.VITE_APP_VERSION ?? process.env.CF_PAGES_COMMIT_SHA ?? 'dev',
     ),
+
+    /**
+     * When this bundle was built, for the Build card on You
+     * (`src/features/health/BuildCard.tsx`).
+     *
+     * **It is the moment this config file was EVALUATED, which is not quite the same as the deploy.**
+     * In a Cloudflare Pages build that is seconds before the artefacts are uploaded, so as a "when
+     * did the app I am looking at ship" answer it is accurate to the minute. In `vite dev` it is when
+     * the dev server started and never changes again however long that server runs — so a local
+     * reading can be hours stale, and the card labels a non-sha commit as local rather than claiming
+     * anything about it.
+     *
+     * Separate from `__APP_VERSION__` on purpose. That one is the persisted cache's buster and its
+     * resolution order is load-bearing (debt D46 is the record of it silently being `'dev'` for the
+     * whole life of the feature) — a timestamp changes on every evaluation, so folding it in would
+     * discard the cache on every dev-server restart and on every rebuild of the same commit.
+     */
+    __BUILT_AT__: JSON.stringify(new Date().toISOString()),
   },
 })

@@ -10,8 +10,21 @@ import { setupServer } from 'msw/node'
  * not, the Zod parse in `lib/api` fails and the test goes red — which is the point.
  */
 export const handlers = [
+  /**
+   * `built_at` is present and `null` here on purpose — the shape a deployed image without
+   * `BUILD_TIME` actually returns, which is the majority of them. Tests that want a real deploy time
+   * or a real commit sha override this handler with their own; `BuildCard.test.tsx` does both.
+   *
+   * `version` is deliberately NOT sha-shaped, matching the API's own `0.0.0-dev` default, so mounting
+   * the You screen in an unrelated test cannot make the build-skew warning appear.
+   */
   http.get('*/api/v1/health', () =>
-    HttpResponse.json({ status: 'ok', version: '0.0.0-test', uptime_seconds: 1 }),
+    HttpResponse.json({
+      status: 'ok',
+      version: '0.0.0-test',
+      uptime_seconds: 1,
+      built_at: null,
+    }),
   ),
 
   http.get('*/api/v1/me', () =>

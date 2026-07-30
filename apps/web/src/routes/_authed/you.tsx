@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Chip } from '@/components/ui/chip'
 import { Eyebrow } from '@/components/ui/label'
+import { Stat } from '@/components/ui/stat'
 import { useHolders } from '@/features/documents/useDocuments'
 import { toLedger, useLedger } from '@/features/documents/useLedger'
+import { BuildCard } from '@/features/health/BuildCard'
 import { meQueryOptions } from '@/features/spaces/useMe'
 import { api } from '@/lib/api'
 import type { Feel } from '@/lib/feel'
@@ -129,17 +131,17 @@ function YouPage() {
         <dl className="mt-1">
           <Stat
             term="Documents"
-            numeric
+            mono
             value={ledger === null ? '—' : `${ledger.loadedCount}${approx}`}
           />
           <Stat
             term="With an expiry we watch"
-            numeric
+            mono
             value={ledger === null ? '—' : `${ledger.datedCount}${approx}`}
           />
           <Stat
             term="Without a scan"
-            numeric
+            mono
             value={ledger === null ? '—' : `${ledger.withoutScan.length}${approx}`}
           />
           {/*
@@ -150,7 +152,7 @@ function YouPage() {
           {people.length > 0 && (
             <Stat
               term="People filed for"
-              numeric
+              mono
               value={`${people.length + 1}`}
               note="Including you"
             />
@@ -219,6 +221,12 @@ function YouPage() {
           <Stat term="Export" value="Not yet" note="No way to download everything in one file" />
         </dl>
       </section>
+
+      {/* ── Build ──
+          Directly after App, because it answers the same question one level down: not "what does this
+          app do" but "which copy of it am I looking at". See BuildCard.tsx for why the comparison is
+          the feature and the version string on its own is not. */}
+      <BuildCard />
 
       {/* ── Feel ── */}
       <section className="mt-5">
@@ -327,49 +335,6 @@ function FeelChoice({
         ))}
       </div>
     </fieldset>
-  )
-}
-
-/**
- * One `term / value` line, as a description list rather than a `<div>` pair.
- *
- * `<dl>` is the semantic that makes "Documents / 2" announce as a pair. A row of two spans reads as
- * two unrelated strings, which for a screen that is *entirely* label-and-number is the whole content.
- */
-function Stat({
-  term,
-  value,
-  note,
-  action,
-  /**
-   * Mono, and only for a value that is a **number**.
-   *
-   * design.md §3 gives mono one job — what the machine names: eyebrow labels, masks, serials, counts.
-   * Applying it to every value put "Single user" and "Gone from every list" in a typewriter face,
-   * which reads as code rather than as an answer. Counts get mono because a column of digits should
-   * align; sentences get the sans they are written in.
-   */
-  numeric = false,
-}: {
-  term: string
-  value: string
-  note?: string
-  action?: React.ReactNode
-  numeric?: boolean
-}) {
-  return (
-    <div className="flex min-h-12 items-baseline justify-between gap-3.5 border-b border-rule py-3">
-      <dt className="text-body text-ink-2">
-        {term}
-        {note !== undefined && <span className="mt-px block text-meta text-ink-3">{note}</span>}
-      </dt>
-      {/* One `<dd>` per `<dt>`, so the value and its control stay inside the same pair rather than
-          the control becoming an orphan definition with no term. */}
-      <dd className="flex shrink-0 items-baseline gap-2.5 text-right">
-        <span className={numeric ? 'font-mono text-row' : 'text-body'}>{value}</span>
-        {action !== undefined && <span className="-mr-3">{action}</span>}
-      </dd>
-    </div>
   )
 }
 

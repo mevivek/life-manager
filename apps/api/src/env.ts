@@ -52,8 +52,34 @@ const envSchema = z
     HOST: z.string().min(1).default('127.0.0.1'),
     LOG_LEVEL: logLevelSchema.default('info'),
 
-    /** Reported by `GET /api/v1/health`. Fly sets it from the release; local dev does not. */
+    /**
+     * Reported by `GET /api/v1/health`. The deploy step sets it to the commit sha
+     * (`--update-env-vars=APP_VERSION=${_SHA}` in `cloudbuild.deploy.yaml`); local dev does not.
+     *
+     * The default is deliberately not sha-shaped, and the client depends on that: `BuildCard` only
+     * claims the two halves disagree when both values look like commits, so `0.0.0-dev` against a
+     * local bundle's `dev` draws no warning.
+     */
     APP_VERSION: z.string().min(1).default('0.0.0-dev'),
+
+    /**
+     * When the running image was DEPLOYED, as an ISO 8601 instant — reported as `built_at` by
+     * `GET /api/v1/health`.
+     *
+     * **Optional, and `null` when unset.** A local `pnpm dev`, a `docker build` by hand and any image
+     * from before this variable existed all boot normally and report that they do not know. There is
+     * nothing to substitute: `process.uptime()` is when the instance last woke, not when it shipped
+     * (see `healthResponseSchema`), and rendering it as a deploy time would be the app lying about
+     * the one fact this field exists to carry.
+     *
+     * **Validated here rather than at the response boundary.** The response schema is Zod-serialised,
+     * so a malformed value would turn `/api/v1/health` into a 500 — and health is exactly what the
+     * deploy verifier polls, so the failure would present as "the API did not come up" with no
+     * mention of a timestamp. Failing at boot names the variable instead.
+     *
+     * Set by the deploy step. See `cloudbuild.deploy.yaml`'s `deploy` step and README § Deploying.
+     */
+    BUILD_TIME: z.iso.datetime().optional(),
 
     /** Neon POOLED endpoint. The app's pg Pool. ADR-0005. */
     DATABASE_URL: z.string().min(1),
