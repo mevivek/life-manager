@@ -2,7 +2,6 @@ import type { Document, DocumentListQuery } from '@life-manager/shared'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { z } from 'zod'
-import { DomainSwitcher } from '@/components/DomainSwitcher'
 import { Button } from '@/components/ui/button'
 import { Toast } from '@/components/ui/toast'
 import { useOpenAdd } from '@/features/documents/AddSheetProvider'
@@ -150,8 +149,9 @@ function DocumentsPage() {
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-baseline gap-2">
             {/*
-              No chevron beside "Documents" — the switcher is a row of pills below the title, not a
-              dropdown on it. design.md §8 and `DomainSwitcher`'s own note.
+              No chevron beside "Documents". ADR-0025 §4's mock drew a `Documents ⌄` dropdown to
+              switch domains; there is no domain control on this screen at all now — Things is a tab
+              (ADR-0031) — and design.md §6's no-dropdowns rule covers navigation regardless.
             */}
             <h1 className="font-heading text-title font-face-h leading-tight">Documents</h1>
             <span className="text-body text-ink-3">
@@ -201,14 +201,10 @@ function DocumentsPage() {
         </div>
 
         {/*
-          The domain switcher. design.md §8 says the pills sit beneath the title on **both** list
-          screens, and `things.index.tsx` had it while this one did not — which made `/things`
-          unreachable by navigation, because the tab bar is Now · Documents · You and the only other
-          route in was a thing event on the Now horizon (absent entirely while the Things API 404s).
-          Found by rendering the screen, not by a test: every assertion about this file passed.
+          A row of `Documents` / `Things` pills used to sit here. It is gone: ADR-0031 makes Things a
+          tab, so the domain is reachable from every screen rather than from this one. Do not put a
+          domain control back on a collection screen without superseding that ADR.
         */}
-        <DomainSwitcher current="documents" className="mt-3" />
-
         <DocumentFilters
           filters={filters}
           availableTags={availableTags}
@@ -284,16 +280,17 @@ function DocumentsPage() {
         page's own box is as tall as the archive. It clears the tab bar by sitting above the same
         safe-area inset the bar pads itself with, so it never lands on the home indicator.
 
-        **It carries a hairline, not a shadow.** The comp draws `0 8px 24px rgba(10,10,9,.24)`, which
-        would make it the third thing in the app to cast one — and ADR-0025 §3 allows exactly two, the
-        sheet and the toast, on the grounds that a shadow means "temporarily on top of your life".
-        A permanent control is not that. The ink fill already separates it from any ground it crosses,
-        which is the job the shadow was doing.
+        **It carries the comp's shadow** — `--e-pill`, which is `0 8px 24px rgba(10,10,9,.24)` (comp
+        380). This shipped on a hairline for a while, reasoned from ADR-0025 §3's "only two things
+        lift". That prose is the comp *describing itself* and its own drawing disagrees with it on
+        every screen the pill appears on, so the drawing wins: the pill floats over a scrolling list
+        and the shadow is what keeps its edge legible against a row it happens to be crossing. See
+        design.md §5, which now names three.
       */}
       <button
         type="button"
         onClick={openAdd}
-        className="fixed right-gutter bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-40 flex min-h-[3.25rem] items-center gap-2.5 rounded-pill border border-ink bg-ink pr-5 pl-4 text-head text-onink active:opacity-90"
+        className="fixed right-gutter bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-40 flex min-h-[3.25rem] items-center gap-2.5 rounded-pill border border-ink bg-ink pr-5 pl-4 text-head text-onink shadow-pill active:opacity-90"
       >
         <span aria-hidden="true" className="relative block size-4">
           <span className="absolute top-[7px] left-0 h-[2.5px] w-4 rounded-[1px] bg-current" />

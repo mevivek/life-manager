@@ -3,27 +3,49 @@ import { toLedger, useLedger } from '@/features/documents/useLedger'
 import { cn } from '@/lib/utils'
 
 /**
- * The bottom tab bar — persistent app chrome. ADR-0025 §4.
+ * The bottom tab bar — persistent app chrome.
+ * [ADR-0031](../../../../docs/decisions/0031-things-is-a-fourth-tab.md).
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
- *  Three tabs, permanently visible, always labelled: Now · Documents · You.
+ *  Four tabs, permanently visible, always labelled: Now · Documents · Things · You.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
- * ── This replaces a plan to grow the bar one tab per domain ──
+ * ── This file argued for three tabs for a while, and that is now superseded ──
  *
- * The previous version of this file committed to `Home · Documents · Assets · Money` — the bar
- * "the shape M4 needs". **ADR-0025 reverses that, and the reversal is the load-bearing decision
- * here, not the styling.** Domains never become tabs. When assets, money, people and the vault
- * arrive, the *middle tab's title* becomes a domain switcher: one tap on "Documents ⌄" swaps the
- * collection under the same search, the same filters, the same row. Now stays a single cross-domain
- * deadline feed, because a car's MOT and a passport's expiry belong in one list — and that
- * cross-domain view is the whole reason the dashboard exists.
+ * Read the history, because the *reasoning* still applies to the fifth tab even though the
+ * conclusion did not survive the fourth:
  *
- * Why not five or six tabs: at two-week intervals the user relearns the bar every time they open the
- * app. Three labelled tabs is one glance. Tab count stays three at six domains.
+ *  1. An even earlier version committed to growing one tab per domain — `Home · Documents ·
+ *     Assets · Money`, "the bar the shape M4 needs". **ADR-0025 §4 withdrew that** and decided
+ *     *three tabs, forever*: at fortnightly usage the user relearns the bar every time they open
+ *     the app, so three labelled tabs is one glance. Domains were to be a *switcher* on the middle
+ *     tab's title instead.
+ *  2. **ADR-0029 honoured it** when Things arrived, and shipped `DomainSwitcher` — segmented pills
+ *     beneath the Documents / Things title. It stated the cost outright: *Things is two taps from
+ *     Now rather than one.*
+ *  3. **ADR-0031 reverses that, on evidence.** The maintainer opened the shipped app and reported
+ *     that Things living on the Documents screen did not match the design — which is precisely the
+ *     reopening condition ADR-0029 wrote for itself. Handoff 4's own `thingsNav` knob defaults to
+ *     `tab` and the comp draws the four-tab bar; the switcher was the non-default branch, chosen on
+ *     the strength of ADR-0025 §4 rather than on the design's own default. `DomainSwitcher` is
+ *     deleted, not left unreferenced.
  *
- * **The switcher does not exist yet, and must not be drawn yet** — one domain, no chevron. Honest,
- * never decorative: the control appears the day the second domain does.
+ * **There is no "four tabs, forever" here** — that would be the same over-commitment one slot
+ * later. Four fit, measured: at 390px a slot is 84.5px and "Documents", the longest label in the
+ * bar, renders 63px on one line. Five slots would be 66px and six 54px, so five is marginal and six
+ * truncates. **Before adding a fifth tab, render the bar at 390px in both themes and at compact
+ * density and read the longest label** (design.md §8 has the procedure, §10 the reason). When one
+ * truncates or wraps, the bar is full and the switcher *pattern* returns inside a tab — ADR-0031
+ * § *What happens at domain three*, which also explains why the Vault probably is not a collection
+ * tab at all.
+ *
+ * Two rules the deleted switcher leaves behind, because they are about navigation and not pills:
+ * **no dropdown, ever** (ADR-0025 §4's mocked `Documents ⌄` menu is still refused — design.md §6's
+ * no-dropdowns rule covers navigation), and **navigation is `<Link>`s carrying `aria-current`**,
+ * never buttons calling `navigate`.
+ *
+ * Now stays a single cross-domain deadline feed regardless of the tab count, because a car's MOT and
+ * a passport's expiry belong in one list — that cross-domain view is the whole reason it exists.
  *
  * ── Add used to be the third tab, and is not any more ──
  *
@@ -35,9 +57,10 @@ import { cn } from '@/lib/utils'
  * holds, or a delete: those were squatting as quiet text in the Now header (see `home.tsx`) because
  * ADR-0025 §10 had no better home for them.
  *
- * A tab bar of three places, with the action attached to the surfaces it acts on, is the shape that
- * survives a fourth domain. Add is still a sheet, not a navigation — capture happens on top of what
- * you were looking at — and `/documents/new` still exists as a real route for deep links.
+ * A tab bar of places, with the action attached to the surfaces it acts on, is the shape that
+ * survives a new domain — and it did: Things arrived as a place and needed no room made for it,
+ * because Add was not occupying a slot. Add is still a sheet, not a navigation — capture happens on
+ * top of what you were looking at — and `/documents/new` still exists as a real route for deep links.
  */
 
 type Tab = {
@@ -52,9 +75,14 @@ type Tab = {
  * Inline SVG-free glyphs — plain divs, as the design draws them.
  *
  * `lucide-react` is a dependency and is used elsewhere, but none of its icons are these: the Now
- * glyph is three ruled lines of decreasing length and opacity (a ledger page), and the Documents
- * glyph is a bare 2px rectangle. Both are geometry rather than illustration, which is the point —
- * an icon set here would put a house and a folder in an app that is neither.
+ * glyph is three ruled lines of decreasing length and opacity (a ledger page), the Documents glyph is
+ * a bare 2px rectangle, and Things is two bottom-aligned rectangles of different heights — two
+ * objects standing on a shelf. All three are geometry rather than illustration, which is the point —
+ * an icon set here would put a house, a folder and a cardboard box in an app that is none of them.
+ *
+ * The arbitrary pixel values below are the exception design.md §1 allows: in a glyph the value *is*
+ * the content, and every one of these is read off the comp
+ * (`docs/design/Life-Manager-handoff-4.dc.html` lines 900–926).
  */
 const TABS: Tab[] = [
   {
@@ -78,6 +106,27 @@ const TABS: Tab[] = [
         aria-hidden="true"
         className="block h-4 w-[14px] rounded-[2px] border-2 border-current"
       />
+    ),
+  },
+  {
+    to: '/things',
+    label: 'Things',
+    /*
+      `startsWith` means this lights for `/things/$thingId` too, which is the behaviour a detail
+      screen needs: the bar must keep saying which collection you are inside. Same as Documents.
+    */
+    match: '/things',
+    /*
+      Two rectangles standing on a common baseline, the taller on the right — comp lines 916–919:
+      a 17×15 box, `align-items: flex-end`, 2px stroke, 1px radius, 2px apart. Deliberately NOT a
+      box or a tag icon: the Documents glyph is one rectangle, so two of them reads as "more than
+      one object" without introducing a new visual language for it.
+    */
+    icon: () => (
+      <span aria-hidden="true" className="flex h-[15px] w-[17px] items-end gap-[2px]">
+        <span className="block h-[9px] w-[5px] rounded-[1px] border-2 border-current" />
+        <span className="block h-[14px] w-[8px] rounded-[1px] border-2 border-current" />
+      </span>
     ),
   },
   {

@@ -198,13 +198,22 @@
   --r-pill: 999px;
 
   /**
-   * Elevation is almost entirely HAIRLINE, not shadow. Only two things lift, and they are the two
-   * things temporarily on top of your life: the add sheet and the toast. Everything else is
-   * `--e-0`, a 1px rule.
+   * Elevation is almost entirely HAIRLINE, not shadow. Ordinary UI is `--e-0`, a 1px rule.
+   *
+   * THREE things lift, not two, and the third is the Add pill. Handoff 4 draws the pill with
+   * `0 8px 24px rgba(10,10,9,.24)` on every screen it appears on (comp 380 and 683) while its own §3
+   * prose says only the sheet and the toast do. That prose was followed for a while and the pill
+   * shipped on a hairline; the comp's *drawing* is the authority, so the shadow is back and the token
+   * is named for the thing that wears it. See design.md §5.
+   *
+   * `--e-pill` repeats `--e-toast`'s value because the comp does. Kept as its own name rather than
+   * reusing `shadow-toast` at the call site: two unrelated controls sharing one token is how a change
+   * intended for one of them silently moves the other.
    */
   --e-0: 0 0 0 1px var(--rule);
   --e-sheet: 0 -8px 32px rgb(10 10 9 / 0.18);
   --e-toast: 0 8px 24px rgb(10 10 9 / 0.24);
+  --e-pill: 0 8px 24px rgb(10 10 9 / 0.24);
 
   --m-fast: 120ms;
   --m-base: 220ms;
@@ -352,6 +361,7 @@
 
   --shadow-sheet: var(--e-sheet);
   --shadow-toast: var(--e-toast);
+  --shadow-pill: var(--e-pill);
 
   /* `tracking-heading` moves with the face; `tracking-tight-display` is the fixed serif value it
      replaced on headlines. Both exist because not every tight thing is a heading. */

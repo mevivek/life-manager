@@ -181,13 +181,16 @@ anything visual; the ADR is there for *why*. Six things will bite a session that
    **60** and a service's is 45 ([design.md §2a](docs/conventions/design.md)) — three numbers, two
    ladders, each named beside the ladder that reads it. Reminders still fire at 90/30/7 server-side;
    all of them are allowed to disagree with it.
-4. **Three tabs, forever — Now · Documents · You.** ADR-0025 §4 reversed the old one-tab-per-domain
-   plan; the second design handoff then replaced **Add** with **You**, because a tab is a *place* and Add
-   was a sheet. Add lives in the Now header and as the one emphatic pill on each collection. **The domain
-   switcher now exists**, because domain two does: `components/DomainSwitcher.tsx` draws
-   `Documents` / `Things` as segmented pills beneath the title. It is pills rather than ADR-0025's
-   mocked `Documents ⌄` dropdown — a menu to choose between two things is a tap to reveal what fits on
-   screen — and **domain four is the trigger to revisit that**, when a pill row stops fitting 390px.
+4. **Four tabs — Now · Documents · Things · You**, and **"forever" is not claimed.** This file said
+   *three tabs, forever* until 2026-07-30, because ADR-0025 §4 did and ADR-0029 shipped Things as a pill
+   switcher under the Documents title to honour it. [ADR-0031](docs/decisions/0031-things-is-a-fourth-tab.md)
+   **reverses both on evidence** — the maintainer used the shipped app and did not find the domain, which
+   is the exact reopening condition ADR-0029 wrote for itself — so `DomainSwitcher.tsx` is **deleted** and
+   the comp's own `thingsNav: "tab"` default is what ships. Add is still not a tab (a tab is a *place*; Add
+   is a sheet): it lives in the Now header and as the one emphatic pill on each collection. **Before adding
+   a fifth tab, measure** — 390px, both themes, compact density, read the longest label; the procedure and
+   the current slack are in [design.md §8](docs/conventions/design.md). No dropdown, ever, navigation
+   included.
 5. **A screen whose content can be short needs `flex-1` and a footer with `mt-auto`.** The shell is
    `min-h-dvh`, so without it a sparse archive leaves a screen of dead space above the tab bar —
    reported from a real phone, invisible to every twelve-document fixture.
@@ -300,7 +303,7 @@ Four things worth knowing before you touch anything:
 | **Adding a mutable column or a new writable domain** | `versioned()` in `apps/api/src/db/columns.ts` — an editable table needs the ADR-0024 version column, and its `PATCH` must take the version as a **required** field so a forgotten precondition is a type error rather than silent last-write-wins |
 | **Anything touching the daily scan, reminders firing, or that `maintenance` endpoint** | [`ADR-0028`](docs/decisions/0028-external-trigger-for-the-daily-scan.md) — pg-boss keeps the queue and loses the clock. The trigger must call **`runRemindersInline()`, not `scanReminders()`**: a queued job on a scale-to-zero instance never drains. `CRON_SECRET` unset ⇒ **503, not 200** — closed is the only safe default for something that writes `sent_at`. The advisory lock is what stops a scheduler retry double-sending |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
-| **The tab bar, or where a domain lives** | Still **three tabs** — `TabBar.tsx` is unchanged. Domain two arrived as the **switcher** ADR-0025 §4 promised (`components/DomainSwitcher.tsx`), not a fourth tab. The comp draws both and defaults to the tab; [`ADR-0029`](docs/decisions/0029-the-things-domain.md) § *Alternatives* is why we didn't |
+| **The tab bar, or where a domain lives** | **Four tabs: Now · Documents · Things · You** — [`ADR-0031`](docs/decisions/0031-things-is-a-fourth-tab.md), which reverses ADR-0025 §4's *three tabs, forever* and ADR-0029's switcher. `DomainSwitcher.tsx` is **deleted**; do not put a domain control back on a collection screen. It makes **no** "four tabs, forever" claim: [design.md §8](docs/conventions/design.md) holds the 390px measurement that decides when the bar is full, and the switcher *pattern* is what returns then — inside a tab, never as a dropdown |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |
 | **Changing the schema** | [`docs/agent-playbooks/change-the-schema.md`](docs/agent-playbooks/change-the-schema.md) |

@@ -12,7 +12,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -724,11 +724,21 @@ describe('the away label', () => {
     expect(
       awayLabel({ ownership: 'gone', ownership_who: 'Sam', ownership_since: '2026-07-30' }),
     ).toBe('Handed to Sam · 30 Jul 2026')
+    /**
+     * Unnamed reads as the comp's words — "someone" and "a new owner" (comp 2143) — **not** as the
+     * `Lent out` / `Handed on` an earlier pass wrote. The distinction the code keeps is that these
+     * pronouns are rendered, never stored: `OwnershipPanel` still writes `ownership_who: null`, which
+     * `things.test.ts`'s write assertions pin from the other side.
+     */
     expect(
       awayLabel({ ownership: 'lent', ownership_who: null, ownership_since: '2026-07-30' }),
-    ).toBe('Lent out · 30 Jul 2026')
+    ).toBe('Lent to someone · 30 Jul 2026')
     expect(awayLabel({ ownership: 'gone', ownership_who: null, ownership_since: null })).toBe(
-      'Handed on',
+      'Handed to a new owner',
+    )
+    // A blank string is the same case as absent — never "Lent to  ".
+    expect(awayLabel({ ownership: 'lent', ownership_who: '  ', ownership_since: null })).toBe(
+      'Lent to someone',
     )
   })
 })
@@ -1137,5 +1147,156 @@ describe('formatting money', () => {
      */
     expect(formatMoney('1000', 'ZZZ')).toMatch(/ZZZ/)
     expect(formatMoney('1000', 'ZZ')).toMatch(/ZZ$/)
+  })
+})
+
+// ── Photos ───────────────────────────────────────────────────────────────────
+
+/**
+ * The hero and the strip, now that the photo endpoints exist (things.md §10, debt D59).
+ *
+ * The four things worth pinning are the four that were wrong or absent before, and each of them is a
+ * behaviour rather than a layout:
+ *
+ *  1. **The hero mints exactly one presigned URL**, for the `is_hero` photo and no other. The list row's
+ *     thumbnail is deliberately still not an image because that would be one presign per row.
+ *  2. **A thing with no photo draws the picker**, not an empty frame — the comp's hero is a drop target.
+ *  3. **The strip's tiles open the viewer**, minting the URL at the moment of the tap.
+ *  4. **`make_hero` is `false` from the strip.** Confirming a `make_hero` row demotes its siblings, so an
+ *     "add another photo" that defaulted to `true` would silently steal the main slot.
+ */
+describe('a thing’s photos', () => {
+  const HERO = uuid('11')
+  const SECOND = uuid('12')
+
+  /** Records every presign body, so "exactly one, for the hero" is assertable rather than assumed. */
+  function servePhotoBytes() {
+    const asked: string[] = []
+    server.use(
+      /**
+       * A **RegExp**, not a path string, and it is not a style choice.
+       *
+       * MSW matches path strings with `path-to-regexp`, where a `:` opens a parameter — so
+       * `photos::presign-download` is parsed as a literal colon followed by a param called
+       * `presign-download`, and it does not match the literal URL the client sends. The documents side
+       * gets away with a string because its verbs carry a *single* colon. conventions/api.md §2 is why
+       * the URL has two.
+       */
+      http.post(/\/photos::presign-download$/, async ({ request }) => {
+        const body = (await request.json()) as { photo_id: string }
+        asked.push(body.photo_id)
+        return HttpResponse.json(
+          {
+            download_url: `https://r2.test/${body.photo_id}.jpg`,
+            expires_at: '2026-07-30T13:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+    )
+    return asked
+  }
+
+  it('draws the hero image and presigns ONE url — the hero’s, not every photo’s', async () => {
+    const asked = servePhotoBytes()
+    await renderDetail(
+      detail({
+        name: 'Bosch dishwasher',
+        photos: [photo({ id: SECOND }), photo({ id: HERO, is_hero: true })],
+      }),
+    )
+
+    const image = await screen.findByRole('img', { name: 'Bosch dishwasher' })
+    expect(image).toHaveAttribute('src', `https://r2.test/${HERO}.jpg`)
+    // One presign, and it is the hero's. Two would mean the strip had grown `<img>` tags.
+    expect(asked).toEqual([HERO])
+    // The strip still lists both, by count.
+    expect(screen.getByText('2 photos')).toBeInTheDocument()
+  })
+
+  it('draws the picker instead of an empty frame when there is no photo', async () => {
+    await renderDetail(detail({ photos: [] }))
+    // The comp's own words on the wizard's photo step. An inert empty box would be furniture.
+    expect(screen.getByRole('button', { name: /take a photo of it/i })).toBeInTheDocument()
+    // And no strip: one invitation per screen, not two.
+    expect(screen.queryByText('Photos')).toBeNull()
+  })
+
+  it('opens a strip tile in the viewer, minting its url on the tap', async () => {
+    const asked = servePhotoBytes()
+    await renderDetail(detail({ name: 'Boiler', photos: [photo({ id: HERO, is_hero: true })] }))
+    await screen.findByRole('img', { name: 'Boiler' })
+    expect(asked).toEqual([HERO])
+
+    await userEvent.click(screen.getByRole('button', { name: /JPG/ }))
+
+    // A real dialog — Escape closes it, focus is trapped, the page behind does not scroll.
+    const viewer = await screen.findByRole('dialog')
+    expect(viewer).toHaveAccessibleName('Boiler')
+    // Minted again on the tap rather than reused: a presigned URL is short-lived and is never cached.
+    expect(asked).toEqual([HERO, HERO])
+  })
+
+  it('adds a photo from the strip with make_hero FALSE, so it cannot steal the main slot', async () => {
+    servePhotoBytes()
+    const bodies: unknown[] = []
+    server.use(
+      // A RegExp for the same reason as the download handler above — the `::` in the path.
+      http.post(/\/photos::presign-upload$/, async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json(
+          {
+            photo_id: SECOND,
+            upload_url: 'https://r2.test/put',
+            storage_key: 'spaces/x/things/y/z',
+            expires_at: '2026-07-30T13:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+    )
+
+    await renderDetail(detail({ name: 'Boiler', photos: [photo({ id: HERO, is_hero: true })] }))
+    await screen.findByRole('img', { name: 'Boiler' })
+
+    /**
+     * The hidden `<input type="file">`, driven directly.
+     *
+     * `userEvent.upload` on the button would not reach it — the button calls `.click()` on the input, and
+     * jsdom does not open a file dialog. The input is what the OS hands the file to, so the input is what
+     * the test hands it to. `hidden` is a class, not the attribute, so it is still in the tree.
+     */
+    const input = document.querySelector('input[type="file"]')
+    expect(input).not.toBeNull()
+    await userEvent.upload(
+      input as HTMLInputElement,
+      new File(['bytes'], 'boiler.jpg', { type: 'image/jpeg' }),
+    )
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toEqual({ mime: 'image/jpeg', size_bytes: 5, make_hero: false })
+  })
+
+  it('refuses a PDF before any bytes move, and says why', async () => {
+    servePhotoBytes()
+    await renderDetail(detail({ photos: [] }))
+
+    /**
+     * `fireEvent.change`, not `userEvent.upload`.
+     *
+     * `userEvent.upload` honours the input's own `accept` attribute and drops a file that does not match
+     * it — which would make this test pass for the wrong reason, proving the browser's filter rather than
+     * ours. `accept` is a *hint*: a share sheet, a drag-and-drop or a misreported mime all get past it,
+     * which is why the component checks again. This is the path that arrives when it does.
+     */
+    const input = document.querySelector('input[type="file"]')
+    expect(input).not.toBeNull()
+    fireEvent.change(input as HTMLInputElement, {
+      target: { files: [new File(['bytes'], 'manual.pdf', { type: 'application/pdf' })] },
+    })
+
+    // Business rule 11: `ALLOWED_PHOTO_MIMES` is the image half of the document allowlist. A photo of a
+    // boiler is not a PDF, and the refusal names the file's own type rather than a generic failure.
+    expect(await screen.findByText(/application\/pdf.*isn’t supported/i)).toBeInTheDocument()
   })
 })

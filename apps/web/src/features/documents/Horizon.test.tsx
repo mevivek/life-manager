@@ -260,9 +260,9 @@ describe('the horizon as one cross-domain timeline', () => {
     /**
      * The arithmetic bug this locks out.
      *
-     * Six entries with four shown must say "2 more" — and the old footer computed
-     * `datedDocuments - shown.length`, which here would say `2 - 4 = -2` and print nothing at all while
-     * four dates sat off the bottom of the list. Counting the list against itself cannot drift, whatever
+     * Eight entries with six shown must say "2 more" — and the old footer computed
+     * `datedDocuments - shown.length`, which here would say `2 - 6 = -4` and print nothing at all while
+     * two dates sat off the bottom of the list. Counting the list against itself cannot drift, whatever
      * joins it.
      *
      * `datedDocuments` is deliberately passed as the honest DOCUMENT count (2), not as a total, so a
@@ -280,6 +280,8 @@ describe('the horizon as one cross-domain timeline', () => {
             thing({ id: 't2', name: 'Fridge', warranty_ends_on: iso(160) }),
             thing({ id: 't3', name: 'Laptop', warranty_ends_on: iso(180) }),
             thing({ id: 't4', name: 'Drill', warranty_ends_on: iso(200) }),
+            thing({ id: 't5', name: 'Telly', warranty_ends_on: iso(220) }),
+            thing({ id: 't6', name: 'Chain', warranty_ends_on: iso(240) }),
           ],
         )}
         datedDocuments={2}
@@ -287,10 +289,55 @@ describe('the horizon as one cross-domain timeline', () => {
       />,
     )
 
-    // Four rows at the narrow width (jsdom's `matchMedia` reports no match, so `horizonCount()` is 4).
-    expect(screen.getAllByRole('listitem')).toHaveLength(4)
+    // Six rows: the comp's merged cap (comp 1884), and the four-document cap is not reached here.
+    expect(screen.getAllByRole('listitem')).toHaveLength(6)
     expect(screen.getByText('2 more dates further out.')).toBeInTheDocument()
-    expect(screen.getByText('next 4')).toBeInTheDocument()
+    expect(screen.getByText('next 6')).toBeInTheDocument()
+  })
+
+  it('caps documents at four and the merged list at six, which is two limits and not one', async () => {
+    /**
+     * Handoff 4 applies both caps and this shipped with only one of them (four, full stop). The two
+     * failures either limit alone allows are opposite, and this fixture would show each:
+     *
+     *  - **Documents-only cap.** Six documents and two thing events: without the merged cap this would
+     *    draw seven rows, one more than the comp ever shows.
+     *  - **Merged cap only.** Without the document cap the six nearest documents would fill the list on
+     *    their own and both thing events would be pushed off it — a Things-owning household whose Now
+     *    screen never mentions Things. Capping documents at four is what reserves room for the other
+     *    domain, which is why the cap survives even though six rows would otherwise fit.
+     *
+     * So the assertion is not just the length: it is *which* six. Four documents, both things.
+     */
+    await renderWithRouter(
+      <Horizon
+        entries={entriesFor(
+          [
+            doc({ id: 'd1', title: 'One', expires_on: iso(100) }),
+            doc({ id: 'd2', title: 'Two', expires_on: iso(110) }),
+            doc({ id: 'd3', title: 'Three', expires_on: iso(120) }),
+            doc({ id: 'd4', title: 'Four', expires_on: iso(130) }),
+            doc({ id: 'd5', title: 'Five', expires_on: iso(140) }),
+            doc({ id: 'd6', title: 'Six', expires_on: iso(150) }),
+          ],
+          [
+            thing({ id: 't1', name: 'Boiler', warranty_ends_on: iso(160) }),
+            thing({ id: 't2', name: 'Fridge', warranty_ends_on: iso(170) }),
+          ],
+        )}
+        datedDocuments={6}
+        complete={true}
+      />,
+    )
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(6)
+    for (const title of ['One', 'Two', 'Three', 'Four', 'Boiler', 'Fridge']) {
+      expect(screen.getByText(title)).toBeInTheDocument()
+    }
+    // The fifth and sixth documents are the ones dropped, and the footer counts them.
+    expect(screen.queryByText('Five')).not.toBeInTheDocument()
+    expect(screen.queryByText('Six')).not.toBeInTheDocument()
+    expect(screen.getByText('2 more dates further out.')).toBeInTheDocument()
   })
 
   it('says "date" rather than "document", because the list holds two kinds of thing', async () => {

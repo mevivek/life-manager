@@ -48,12 +48,13 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0022](0022-web-push-library.md) | Web Push library | accepted | `webpush-webcrypto` (MIT), because `web-push` is MPL-2.0 and hand-rolling RFC 8291 is forbidden |
 | [0023](0023-migrate-on-boot.md) | Migrations applied on API boot | accepted | Nothing else applied them once ADR-0021 dropped Fly's release_command; the fix has to ship in the image because of D25 |
 | [0024](0024-offline-writes-outbox.md) | Offline writes via an outbox | accepted | Supersedes 0013's no-writes half. Server `version` precondition, stale write → **409**, IndexedDB outbox replayed on reconnect, conflicts SURFACED never merged |
-| [0025](0025-ledger-design-system.md) | The Ledger design system | accepted | Warm paper, serif + grotesk, colour spent only on status; five-state expiry ladder readable in greyscale; **three tabs forever**, domains become a switcher not tabs. §4's tab NAMES amended by 0026's handoff — Add left the bar, You took the slot |
+| [0025](0025-ledger-design-system.md) | The Ledger design system | accepted — **§4's three-tab rule superseded by 0031** | Warm paper, serif + grotesk, colour spent only on status; five-state expiry ladder readable in greyscale. Everything except §4 stands. §4's tab NAMES were amended by 0026's handoff (Add left the bar, You took the slot); its *"three tabs, forever, domains are a switcher"* rule is **reversed by 0031** |
 | [0026](0026-store-the-full-identifier.md) | Store the full document identifier, unencrypted | accepted — **detail-only rule superseded by 0027** | **Reverses business rule 6.** Full value in `identifier`, mask DERIVED into `identifier_last4`, detail response only. Plaintext — amends 0009's data-minimisation half, not its encryption half (invariant 7 stands) |
 | [0027](0027-identifier-in-the-list-response.md) | The full identifier is returned in the list response | accepted | **Supersedes 0026's detail-only rule.** `identifier` on `documentSchema`, so the archive shows and copies a number with no detail round-trip. Cost accepted and named: the persisted cache holds every number on the device (**D47**) |
 | [0028](0028-external-trigger-for-the-daily-scan.md) | An external scheduler triggers the daily scan over HTTP | accepted | **Amends 0012: pg-boss keeps the queue, loses the clock.** A pg-boss cron cannot fire on a scale-to-zero service, so `POST /maintenance:run-daily` does the scan inline, authenticated by a constant-time-compared `X-Cron-Key` and serialised by an advisory lock. Avoids **D8** rather than accepting it |
-| [0029](0029-the-things-domain.md) | The Things domain — and cover is not expiry | accepted | The second domain, pulled forward from M4. **Cover gets its own four-state ladder** (a depleting bar, 60-day boundary) because a lapsed warranty is not an invalid document. Ownership is `here`/`lent`/`gone`, never a delete. One nullable `thing_id` links the two domains. **Arrives as the switcher ADR-0025 §4 promised, not as a fourth tab** |
+| [0029](0029-the-things-domain.md) | The Things domain — and cover is not expiry | accepted — **navigation decision superseded by 0031** | The second domain, pulled forward from M4. **Cover gets its own four-state ladder** (a depleting bar, 60-day boundary) because a lapsed warranty is not an invalid document. Ownership is `here`/`lent`/`gone`, never a delete. One nullable `thing_id` links the two domains. The domain, the ladder and the link stand; only its *"switcher, not a fourth tab"* paragraph is reversed by **0031** |
 | [0030](0030-capture-as-a-stepped-wizard.md) | Capture is a stepped wizard, two tracks | accepted | Replaces the single-page form: `type→whose→title→number→dates→scan` for a document, `kind→name→detail→purchase→warranty→photo` for a thing. **Q2 is unchanged** — one required field per track, and every other step draws *Skip for now* |
+| [0031](0031-things-is-a-fourth-tab.md) | Things is a fourth tab | accepted | **Reverses 0025 §4's "three tabs, forever" and 0029's switcher.** The bar is `Now · Documents · Things · You`; `DomainSwitcher` is deleted. Evidence, per 0029's own reopening condition: the maintainer used the shipped app and did not find the domain. Explicitly makes **no** "four tabs, forever" claim — the trigger for the fifth is a 390px measurement, and the switcher *pattern* returns inside a tab when the bar is full |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -95,10 +96,10 @@ first
 0022 Web Push library · 0012 pg-boss
 
 **Adding a screen, or touching how anything looks**
-0025 the Ledger design system — tokens, the expiry ladder, the three-tab rule · 0003 SPA shell ·
-0024 what a write does with no network, and what the cache holds · 0026 why a passport number is
-stored in full and why it is not encrypted · 0029 the second status ladder, and why the tab bar
-still has three tabs · 0030 why capture has steps
+0025 the Ledger design system — tokens, the expiry ladder (its §4 tab rule is superseded) · 0031 the
+tab bar as it is now: four tabs, and how to tell when it is full · 0003 SPA shell · 0024 what a write
+does with no network, and what the cache holds · 0026 why a passport number is stored in full and why
+it is not encrypted · 0029 the second status ladder · 0030 why capture has steps
 
 **Working on Things, or on anything a household owns**
 0029 the domain, cover-is-not-expiry, ownership states, the document↔thing link · 0030 the thing

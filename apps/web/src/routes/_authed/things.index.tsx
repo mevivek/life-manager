@@ -1,7 +1,6 @@
 import { KIND_LABELS, type Thing, type ThingKind, thingKindSchema } from '@life-manager/shared'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { z } from 'zod'
-import { DomainSwitcher } from '@/components/DomainSwitcher'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Chip } from '@/components/ui/chip'
@@ -44,7 +43,7 @@ import { useThings } from '@/features/things/useThings'
  *
  *  - `.default` makes the field optional on the way *in*, so `<Link to="/things">` with no search
  *    params typechecks. Without it the router demands all three on every link to this route, including
- *    `DomainSwitcher`'s.
+ *    the tab bar's.
  *  - `.catch` makes it total on the way *out*, so `?ownership=maybe` from a hand-edited URL lands on an
  *    unfiltered list rather than throwing a route error at someone who mistyped.
  */
@@ -118,7 +117,7 @@ function ThingsPage() {
   return (
     <div>
       {/*
-        The header does not scroll away: the switcher and the chips are how you navigate the list, and
+        The header does not scroll away: the count and the chips are how you navigate the list, and
         losing them at the top of a long one means scrolling back up to change your mind.
 
         The negative gutter margins let the `--paper` ground and the bottom hairline run full-bleed
@@ -148,10 +147,10 @@ function ThingsPage() {
         </div>
 
         {/*
-          The domain switcher, not a fourth tab. design.md §8 and ADR-0029 — the comp draws both and
-          defaults to a tab; `TabBar`'s block comment is where the argument against that lives.
+          A row of `Documents` / `Things` pills used to sit here, mirroring the archive's. Both are
+          gone — ADR-0031 makes Things the third tab, so the bar carries the switch and neither
+          collection screen needs a domain control. `TabBar`'s block comment holds the history.
         */}
-        <DomainSwitcher current="things" className="mt-3" />
 
         {/* Absent unless a contents policy is found, which is most of the time. See the component. */}
         <SumInsuredCard things={everything} className="mt-3" />
@@ -210,14 +209,13 @@ function ThingsPage() {
 
       {/*
         ═══════════════════════════════════════════════════════════════════════════════════
-         The Add pill. **A hairline, not a shadow**, and it opens the THING track.
+         The Add pill. **The comp's shadow**, and it opens the THING track.
         ═══════════════════════════════════════════════════════════════════════════════════
 
         `fixed` rather than `absolute`, because the design positions it against the viewport and this
-        page's own box is as tall as the list. The comp draws `0 8px 24px rgba(10,10,9,.24)`, which would
-        make it the third thing in the app to cast a shadow — design.md §5 allows exactly two, the sheet
-        and the toast, on the grounds that a shadow means "temporarily on top of your life". A permanent
-        control is not that, and the ink fill already separates it from any ground it crosses.
+        page's own box is as tall as the list. `shadow-pill` is `--e-pill`, the comp's own
+        `0 8px 24px rgba(10,10,9,.24)` (comp 683) — the same value it draws on the Documents pill, and
+        the reason both wear it is in `documents.index.tsx`'s note and design.md §5.
 
         `openAddThing`, not `openAdd`. design.md §8: **each domain keeps its own Add**, because inside a
         domain the answer to "what are you adding" is already known — so the pill row swaps the
@@ -228,7 +226,7 @@ function ThingsPage() {
       <button
         type="button"
         onClick={openAddThing}
-        className="fixed right-gutter bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-40 flex min-h-[3.25rem] items-center gap-2.5 rounded-pill border border-ink bg-ink pr-5 pl-4 text-head text-onink active:opacity-90"
+        className="fixed right-gutter bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-40 flex min-h-[3.25rem] items-center gap-2.5 rounded-pill border border-ink bg-ink pr-5 pl-4 text-head text-onink shadow-pill active:opacity-90"
       >
         <span aria-hidden="true" className="relative block size-4">
           <span className="absolute top-[7px] left-0 h-[2.5px] w-4 rounded-[1px] bg-current" />

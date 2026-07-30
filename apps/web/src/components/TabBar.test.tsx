@@ -1,4 +1,17 @@
+import type { Document } from '@life-manager/shared'
+import { QueryClientProvider } from '@tanstack/react-query'
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
+import { render, screen } from '@testing-library/react'
+import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { createQueryClient } from '@/lib/query-client'
+import { server } from '@/test/msw'
 /*
  * `?raw` rather than `node:fs`. This package's tsconfig sets `types: ["vite/client", …]` and no
  * `node`, so `readFileSync` typechecks as an unknown global even though Vitest runs it happily —
@@ -6,6 +19,7 @@ import { describe, expect, it } from 'vitest'
  * read a file as a string in this stack, and `vite/client` already declares it.
  */
 import rootSourceRaw from '../routes/__root.tsx?raw'
+import { TabBar } from './TabBar'
 import tabBarSourceRaw from './TabBar.tsx?raw'
 
 /**
@@ -87,5 +101,188 @@ describe('tab bar geometry', () => {
     const insetUses = tabBarSource.match(/env\(safe-area-inset-bottom\)/g) ?? []
     expect(insetUses).toHaveLength(1)
     expect(rootSource).not.toMatch(/pb-\[env\(safe-area-inset-bottom\)\]/)
+  })
+})
+
+// ── The tab set, and which one is lit ─────────────────────────────────────────
+
+/**
+ * These DO render, unlike everything above — because what they assert is DOM, not pixels.
+ *
+ * Which tab carries `aria-current="page"` is the whole of "you are here" for a screen reader, and it is
+ * decided by a `startsWith` on the pathname that a source-text test cannot exercise. A detail route is
+ * the case that breaks: `/things/$thingId` must keep the Things tab lit, because a bar that goes blank
+ * one level down tells the user they have left the app's structure.
+ */
+
+/** A document with only the fields the ledger badge reads. Deliberately not a full fixture. */
+function ledgerDocument(overrides: Partial<Document> & { id: string }): Document {
+  return {
+    space_id: '22222222-2222-4222-8222-222222222222',
+    title: 'Passport',
+    doc_type: 'identity',
+    issuer: null,
+    holder: null,
+    relation: null,
+    identifier: null,
+    identifier_last4: null,
+    thing_id: null,
+    issued_on: null,
+    expires_on: null,
+    country: null,
+    notes: null,
+    tags: [],
+    custom_attrs: {},
+    file_count: 0,
+    version: 1,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+/**
+ * The bar, mounted at `path`, with the four routes it links to so every `<Link>` resolves.
+ *
+ * `RouterProvider` renders nothing until the first match resolves, so awaiting `load()` is what makes
+ * the assertions synchronous afterwards rather than a pile of `waitFor`s. The query client is built
+ * once per call, not per render, for the reason `things.test.tsx` records: a client created in a
+ * component body is a new client on every render, and every in-flight query dies with the old one.
+ */
+async function renderBarAt(path: string, documents: Document[] = []) {
+  /**
+   * The ledger handler is installed HERE rather than per test, and the order matters.
+   *
+   * `setup.ts` sets `onUnhandledRequest: 'error'`, and there is no global `/api/v1/documents` handler
+   * — so mounting the bar without one fails on the badge's fetch rather than on anything being
+   * asserted. `server.use` *prepends*, so a handler a test installed before calling this would be
+   * shadowed by this one; passing the documents in is what keeps one handler and one winner.
+   */
+  server.use(
+    http.get('*/api/v1/documents', () => HttpResponse.json({ data: documents, next_cursor: null })),
+  )
+  const queryClient = createQueryClient()
+  const rootRoute = createRootRoute({
+    component: () => (
+      <QueryClientProvider client={queryClient}>
+        <TabBar />
+      </QueryClientProvider>
+    ),
+  })
+  const children = [
+    createRoute({ getParentRoute: () => rootRoute, path: '/home', component: () => null }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/documents', component: () => null }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/documents/$documentId',
+      component: () => null,
+    }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/things', component: () => null }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/things/$thingId',
+      component: () => null,
+    }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/you', component: () => null }),
+  ]
+  const router = createRouter({
+    routeTree: rootRoute.addChildren(children),
+    history: createMemoryHistory({ initialEntries: [path] }),
+  })
+  await router.load()
+  return render(<RouterProvider router={router as never} />)
+}
+
+/** The tab whose `aria-current` says "you are here", by its visible label. */
+function currentTabLabel(): string | null {
+  const current = screen
+    .getAllByRole('link')
+    .find((link) => link.getAttribute('aria-current') === 'page')
+  return current?.textContent?.trim() ?? null
+}
+
+describe('the tab set', () => {
+  it('is four tabs, in the comp’s order: Now · Documents · Things · You', async () => {
+    // ADR-0031. This was three tabs and ADR-0025 §4 said "forever"; ADR-0029 shipped Things as a pill
+    // switcher under the Documents title, and the maintainer reported that did not match the design.
+    // Asserting the ORDER as well as the set, because the bar's order is the comp's and a domain
+    // inserted after You would read as an afterthought.
+    await renderBarAt('/home')
+    expect(screen.getAllByRole('link').map((link) => link.textContent?.trim())).toEqual([
+      'Now',
+      'Documents',
+      'Things',
+      'You',
+    ])
+  })
+
+  it('links Things at a bare `/things`, with no search params to supply', async () => {
+    // `things.index.tsx`'s search schema carries `.default('')` on every field precisely so this link
+    // typechecks. If those defaults are removed the router demands all three here.
+    await renderBarAt('/home')
+    expect(screen.getByRole('link', { name: 'Things' })).toHaveAttribute('href', '/things')
+  })
+})
+
+describe('which tab is lit', () => {
+  it('lights Things on the collection, and still on a single thing', async () => {
+    // The `startsWith` match, which is the whole reason this test renders. A detail screen must keep
+    // its collection's tab lit — the same agreement `/documents/$documentId` already has.
+    await renderBarAt('/things')
+    expect(currentTabLabel()).toBe('Things')
+  })
+
+  it('lights Things from a thing’s detail route', async () => {
+    await renderBarAt('/things/33333333-3333-4333-8333-333333333333')
+    expect(currentTabLabel()).toBe('Things')
+  })
+
+  it('lights Documents from a document’s detail route, and not Things', async () => {
+    // The control case: two `startsWith` matches that must not overlap. A prefix collision here would
+    // light two tabs, and `aria-current` on two links is a screen reader announcing two locations.
+    await renderBarAt('/documents/44444444-4444-4444-8444-444444444444')
+    expect(currentTabLabel()).toBe('Documents')
+    expect(screen.getByRole('link', { name: 'Things' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('lights exactly one tab, never two', async () => {
+    await renderBarAt('/you')
+    const lit = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('aria-current') === 'page')
+    expect(lit).toHaveLength(1)
+    expect(lit[0]?.textContent?.trim()).toBe('You')
+  })
+})
+
+describe('the Now badge, with a fourth tab beside it', () => {
+  it('stays off when nothing is dated, and Things keeps the current marker', async () => {
+    // The badge is the one piece of the bar that carries meaning rather than navigation, and adding a
+    // tab is exactly the kind of change that moves it onto the wrong link.
+    await renderBarAt('/things', [
+      ledgerDocument({ id: 'aaaaaaa1-0000-4000-8000-000000000000', expires_on: null }),
+    ])
+
+    // No expiry ⇒ nothing needs attention ⇒ no badge, and the Now link keeps its plain name.
+    expect(screen.getByRole('link', { name: 'Now' })).toBeInTheDocument()
+    expect(currentTabLabel()).toBe('Things')
+  })
+
+  it('names the count on the Now link when something is expired', async () => {
+    // A non-zero count, asserted deliberately — debt D33's lesson. `aria-hidden` on the badge plus the
+    // sentence on the link is design.md §9's rule; a bare "1" beside "Now" announces "Now 1", which
+    // says nothing about what the one is.
+    await renderBarAt('/home', [
+      ledgerDocument({
+        id: 'aaaaaaa2-0000-4000-8000-000000000000',
+        // Well past, so `needsYou` is true whatever today is — a fixed future date would rot into the
+        // wrong state as the suite ages.
+        expires_on: '2020-01-01',
+      }),
+    ])
+
+    expect(
+      await screen.findByRole('link', { name: 'Now — 1 document needs attention' }),
+    ).toBeInTheDocument()
   })
 })

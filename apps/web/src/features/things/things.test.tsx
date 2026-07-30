@@ -10,7 +10,6 @@ import {
 import { render, screen } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { DomainSwitcher } from '@/components/DomainSwitcher'
 import { useLedger } from '@/features/documents/useLedger'
 import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
@@ -329,29 +328,12 @@ describe('a thing row', () => {
   })
 })
 
-describe('the domain switcher', () => {
-  it('marks the current domain with aria-current and links to the other', async () => {
-    await renderWithRouter(<DomainSwitcher current="things" />)
-
-    const things = screen.getByRole('link', { name: 'Things' })
-    const documents = screen.getByRole('link', { name: 'Documents' })
-
-    // `aria-current="page"` is what a screen reader reads as "you are here". Styling alone announces
-    // nothing, which is the bug this asserts against.
-    expect(things).toHaveAttribute('aria-current', 'page')
-    expect(documents).not.toHaveAttribute('aria-current')
-    // Real hrefs: a switcher built from buttons cannot be opened in a new tab or long-pressed.
-    expect(documents).toHaveAttribute('href', '/documents')
-  })
-
-  it('is a landmark, and is not a fourth tab', async () => {
-    await renderWithRouter(<DomainSwitcher current="documents" />)
-    // ADR-0029 declines the comp's own `thingsNav: "tab"` default. Two links in a labelled nav, and
-    // `TabBar` is where the three-tabs-forever rule is enforced.
-    expect(screen.getByRole('navigation', { name: 'Domain' })).toBeInTheDocument()
-    expect(screen.getAllByRole('link')).toHaveLength(2)
-  })
-})
+/*
+ * A `describe('the domain switcher')` block used to sit here, asserting `aria-current` on the current
+ * domain's pill and the labelled `Domain` landmark around the pair. **ADR-0031 deleted the component**
+ * — Things is a tab now — so the assertions went with it rather than being kept alive against nothing.
+ * The equivalent claims for the bar are in `components/TabBar.test.tsx`.
+ */
 
 // ── Sum insured ──────────────────────────────────────────────────────────────
 
@@ -530,11 +512,17 @@ describe('the sum insured card', () => {
     )
 
     /**
-     * 14200 + 1400.50 + 9000 = 24600.50, against a 20000 policy: 4600.50 over. The half-unit is in the
-     * fixture on purpose — it is what proves the total is summed in **minor units** rather than through
-     * a float, and it is the digit a rounded display would hide.
+     * 14200 + 1400.50 + 9000 = 24600.50, against a 20000 policy: 4600.50 over.
      *
-     * Asserted as digits with permissive separators rather than a literal `£24,600.50`, because
+     * ── The card ROUNDS, and the sum does not ──
+     *
+     * Every figure on this card goes through `formatMoney(…, 'whole')` — the comp's `gbp()` (line 1891)
+     * is `Math.round` — so 24600.50 displays as 24,601 and the shortfall as 4,601. The half-unit stays
+     * in the fixture because it still proves the thing it was put there for: the total is summed in
+     * **minor units as integers**, and `24601` is only reachable from `2460050`. A float sum would show
+     * up as a different rounded pound, not as a hidden penny.
+     *
+     * Asserted as digits with permissive separators rather than a literal `£24,601`, because
      * `Intl.NumberFormat` groups and points according to the *reader's* locale, and a test that pinned
      * en-US would fail on a machine with a different `LANG` for a reason unrelated to the code. The
      * **symbol** is asserted, and that is the part that matters: it comes from the policy's stored
@@ -542,11 +530,13 @@ describe('the sum insured card', () => {
      */
     const card = await screen.findByRole('link', { name: /Sum insured/ })
     expect(card).toHaveAttribute('href', `/documents/${contentsPolicy.id}`)
-    expect(card.textContent).toMatch(/£\s?24\D?600\D50/)
+    expect(card.textContent).toMatch(/£\s?24\D?601(?!\d)/)
     expect(card.textContent).toMatch(/£\s?20\D?000/)
-    expect(card.textContent).toMatch(/£\s?4\D?600\D50 more than the policy covers/)
+    expect(card.textContent).toMatch(/£\s?4\D?601 more than the policy covers/)
+    // No pence anywhere on the card — the rounding is the assertion, not a side effect of one.
+    expect(card.textContent).not.toMatch(/600\D50/)
     // The excluded row is genuinely excluded: 25400.50 would be the total if `gone` counted.
-    expect(card.textContent).not.toMatch(/25\D?400/)
+    expect(card.textContent).not.toMatch(/25\D?40/)
   })
 
   it('says it is within cover, and names things priced in another currency rather than adding them', async () => {

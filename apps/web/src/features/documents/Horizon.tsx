@@ -39,23 +39,63 @@ import type { HorizonEntry, HorizonTone } from './useLedger'
  * See the branch below. A previous session collapsed them into one `if (rows.length === 0) return null`
  * and shipped a blank half-screen, reported from a real phone.
  *
- * ── Four entries, five at 430px ──
+ * ── How many entries, and it is TWO limits because handoff 4 has two ──
  *
- * From ADR-0025 §8. The count is here rather than in CSS because it is a data decision — slicing in
- * JS is honest about showing fewer rows, whereas hiding the fifth with `display: none` would still
- * put it in the accessibility tree and in the "N more further out" arithmetic below.
+ * This shipped as a single limit of four (five at 430px) and that was only half the comp. Handoff 4
+ * applies both of these, in this order:
+ *
+ *  - **Documents are capped first** — `horizonDocs` is `…slice(0, 4)` (comp 2220), and ADR-0025 §8's
+ *    responsive table is what makes it five at 430px: *"the horizon shows five entries instead of
+ *    four"*.
+ *  - **Then thing events join, and the merged list is capped at SIX** — `buildHorizon` ends
+ *    `items.slice(0, 6)` (comp 1884). That second cap arrived with the second domain and was missed:
+ *    with a single limit of four, one thing with a warranty and a service could push every document
+ *    off the timeline, which is exactly the failure the doc cap is there to prevent from the other
+ *    direction.
+ *
+ * So a 390px screen shows at most four document expiries and at most six rows in total. The order of
+ * the two caps matters: capping the merged list alone would let things crowd out documents, and
+ * capping documents alone (what shipped) hid thing events that were nearer than the fourth document.
+ *
+ * The counts are here rather than in CSS because they are a data decision — slicing in JS is honest
+ * about showing fewer rows, whereas hiding the fifth with `display: none` would still put it in the
+ * accessibility tree and in the "N more further out" arithmetic below.
  *
  * It reads the breakpoint with `matchMedia` at render rather than a resize listener: a phone does not
  * change width mid-session, and a listener for a value that never changes is a subscription to
  * nothing.
  */
 
-const NARROW_COUNT = 4
-const WIDE_COUNT = 5
+const NARROW_DOCUMENTS = 4
+const WIDE_DOCUMENTS = 5
+/** The merged cap, both widths — comp 1884. A wider phone gets more *documents*, not more rows. */
+const TOTAL_COUNT = 6
 
-function horizonCount(): number {
-  if (typeof matchMedia !== 'function') return NARROW_COUNT
-  return matchMedia('(min-width: 430px)').matches ? WIDE_COUNT : NARROW_COUNT
+function documentCount(): number {
+  if (typeof matchMedia !== 'function') return NARROW_DOCUMENTS
+  return matchMedia('(min-width: 430px)').matches ? WIDE_DOCUMENTS : NARROW_DOCUMENTS
+}
+
+/**
+ * The comp's two caps, applied in its order. `entries` arrives sorted by date, and this preserves that
+ * order — it drops rows, it never reorders them.
+ *
+ * Exported for `Horizon.test.tsx`: the interaction between the two limits is the part that has been
+ * wrong once already, and it is arithmetic, so it is worth testing without a DOM.
+ */
+export function limitHorizon(entries: HorizonEntry[], documentLimit: number): HorizonEntry[] {
+  let documents = 0
+  const kept: HorizonEntry[] = []
+
+  for (const entry of entries) {
+    if (entry.entity === 'document') {
+      if (documents >= documentLimit) continue
+      documents++
+    }
+    kept.push(entry)
+  }
+
+  return kept.slice(0, TOTAL_COUNT)
 }
 
 /**
@@ -137,7 +177,7 @@ export function Horizon({
     )
   }
 
-  const shown = entries.slice(0, horizonCount())
+  const shown = limitHorizon(entries, documentCount())
   /**
    * What is on the timeline but did not fit — and **only** that.
    *

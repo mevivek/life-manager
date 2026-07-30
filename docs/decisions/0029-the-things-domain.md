@@ -3,7 +3,11 @@
 - **Status:** accepted
 - **Date:** 2026-07-30
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [ADR-0031](0031-things-is-a-fourth-tab.md), **in part** — only the navigation
+  decision ("*The Things navigation is the switcher on the Documents title, not a fourth tab*", and the
+  *A fourth tab — the comp's own default* alternative). The domain, the cover ladder, the ownership
+  states and the `thing_id` link all stand. The body below is left exactly as accepted (ADR-0015):
+  read 0031 for what changed and why.
 
 ## Context
 

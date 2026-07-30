@@ -11,7 +11,7 @@ import { ServiceHistory } from './ServiceHistory'
 import { ThingCoverCard } from './ThingCoverCard'
 import { ThingDocuments } from './ThingDocuments'
 import { ThingFacts } from './ThingFacts'
-import { ThingPhotos } from './ThingPhotos'
+import { ThingHero, ThingPhotos } from './ThingPhotos'
 import { ThingSerial } from './ThingSerial'
 import { useThing } from './useThings'
 
@@ -50,12 +50,12 @@ import { useThing } from './useThings'
  * record (a name and nothing else, business rule 1) still draws a cover card, four fact rows, the claim
  * pack, the handover control and the delete — so there is no void here to relocate.
  *
- * ── This screen renders its ERROR state today, and that is expected ──
+ * ── The error state is no longer the default view ──
  *
- * things.md §10: there are no `things` tables, no repository, no service and no routes. `useThing`
- * therefore 404s against the deployed API, and will until a session builds the server half against
- * `packages/shared/src/things.ts`. The failure copy is written to be honest about that rather than to
- * report a deleted record — see `NotHere`.
+ * This note used to say the screen renders its error branch in production, because there was no Things
+ * API. There is now (things.md §10), so `NotHere` is a real error state again rather than the everyday
+ * one. Its copy is still written to be honest about a request that failed rather than to report a
+ * deleted record, which is the right wording either way.
  */
 export function ThingDetail({
   thingId,
@@ -118,7 +118,14 @@ export function ThingDetail({
     <div>
       <BackLink />
 
-      <div className="pt-1.5">
+      {/*
+        The hero photo, above the name — comp 697. A record whose subject is a physical object opens
+        with a picture of it; when there is no picture yet, the frame is the control that takes one.
+        See `ThingPhotos.tsx` for why this is the one `<img>` in the app minted on render.
+      */}
+      <ThingHero thingId={detail.id} name={detail.name} photos={detail.photos} />
+
+      <div className="pt-3.5">
         {/*
           `text-[1.6875rem]` (27px) is copied verbatim from `documents.$documentId.tsx`, and the
           arbitrary value is the point: a detail screen's title sits between `--t-title` (24px) and
@@ -191,7 +198,7 @@ export function ThingDetail({
         today={today}
       />
 
-      <ThingPhotos photos={detail.photos} />
+      <ThingPhotos thingId={detail.id} name={detail.name} photos={detail.photos} />
 
       {/* ── 6. The pack, the handover, the delete ── */}
       <ClaimPack thing={detail} />

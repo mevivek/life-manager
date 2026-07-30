@@ -20,8 +20,9 @@ Warm paper, ink-black hierarchy. A **serif for what a human wrote** (titles, dat
 **grotesk for what the machine says** (labels, status, controls), **mono for eyebrows and data**.
 **Colour is spent only on status** — a document's expiry (§2) or a thing's cover (§2a), and nothing
 else. There is no brand accent and adding one breaks the system rather than extending it. Elevation is a
-**1px hairline**, not a shadow; exactly two things lift. Light and dark are at **full parity**. Three
-tabs, forever — domains are a switcher (§8).
+**1px hairline**, not a shadow; exactly two things lift. Light and dark are at **full parity**. The bar
+is **four tabs — Now · Documents · Things · You**, and how many it holds is a *measurement*, not a
+promise (§8).
 
 ---
 
@@ -283,44 +284,70 @@ problems in four cards read as four sections.
 
 ---
 
-## 8. Navigation: three tabs, forever
+## 8. Navigation: four tabs — Now · Documents · Things · You
 
-**Now · Documents · You.** Permanently visible, always labelled.
+`apps/web/src/components/TabBar.tsx`. Permanently visible, always labelled, in the comp's order.
+[ADR-0031](../decisions/0031-things-is-a-fourth-tab.md).
 
 **A tab is a place.** That is the rule the names follow from, and it is why Add is *not* one: it opens
 a sheet and leaves you where you were, so it belonged on the surfaces it acts on — a text button in
-the Now header, an ink pill on Documents — rather than in a bar of destinations. ADR-0025 §4 named the
-third tab Add; the second design handoff replaced it with You, which is a place, and gave the account,
-sign-out and theme controls the home §10 said they needed.
+the Now header, an ink pill on each collection — rather than in a bar of destinations. ADR-0025 §4 named
+the third tab Add; the second design handoff replaced it with You, which is a place, and gave the
+account, sign-out and theme controls that §10 said they needed.
 
-**Domains never become tabs.** When money, people and the vault arrive, the *middle tab's title* keeps
-switching the collection under the same search, the same filters, the same row. Now stays a single
-cross-domain deadline feed, because a car's MOT and a passport's expiry belong in one list. Tab count
-stays three at six domains.
+**Now stays a single cross-domain deadline feed** regardless of the tab count, because a car's MOT and a
+passport's expiry belong in one list.
 
-This reverses an earlier plan to grow the bar one tab per domain. See ADR-0025 §4 before proposing
-tabs again.
+**Each domain keeps its own Add.** Inside a domain the answer to "what are you adding" is already known,
+so Documents' pill opens the document track and Things' opens the thing track
+([ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md)).
 
-### The switcher now exists, because domain two does
+**A detail screen keeps its collection's tab lit.** `/things/$thingId` lights Things,
+`/documents/$documentId` lights Documents — a `startsWith` match on the pathname. A bar that goes blank
+one level down tells the user they have left the app's structure. `TabBar.test.tsx` renders both.
 
-`apps/web/src/components/DomainSwitcher.tsx`. **Things arrived, so the control ADR-0025 §4 promised got
-drawn** — segmented `Documents` / `Things` pills beneath the title, on both screens.
+### How many tabs the bar holds is a measurement, not a promise
 
-Three things about it:
+This section said **"three tabs, forever"** and **"domains never become tabs"** for two milestones, and
+both are now wrong. The history is worth carrying, because the reasoning still applies to the *fifth*
+tab even though the conclusion did not survive the fourth:
 
-- **It is a switcher, not a fourth tab, and the comp's default disagrees.** Handoff 4 draws both and
-  ships a `thingsNav: "tab" | "switch"` knob defaulting to `tab` — while its own §4 prose still says
-  "three tabs, forever". We ship the switcher, and
-  [ADR-0029](../decisions/0029-the-things-domain.md) § *Alternatives considered* is where the argument
-  lives. Cost, stated: Things is two taps from Now rather than one.
-- **Pills, not a chevron menu.** ADR-0025 §4's mock drew a dropdown under `Documents ⌄`, which is right
-  for six domains and wrong for two: a menu to choose between two things is a tap to reveal what could
-  already be on screen. §6's no-dropdowns rule applies to navigation too. **Revisit at domain four**,
-  where a row of pills stops fitting 390px — that is the trigger, and it is the same
-  "draw it the day it is needed" discipline that kept the switcher itself unbuilt until now.
-- **Each domain keeps its own Add.** The pill row swaps the collection *and* what the Add button
-  captures, because inside a domain the answer to "what are you adding" is already known
-  ([ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md)).
+1. **ADR-0025 §4** withdrew an even earlier plan to grow the bar one tab per domain, and decided three
+   tabs *forever*: at fortnightly usage a user relearns the bar every time they open the app, so a
+   smaller bar is a real advantage. Domains were to be a switcher on the middle tab's title.
+2. **ADR-0029** honoured that when Things arrived and shipped `DomainSwitcher` — `Documents` / `Things`
+   pills beneath the title — naming its cost: *Things is two taps from Now rather than one.*
+3. **[ADR-0031](../decisions/0031-things-is-a-fourth-tab.md) reverses it, on evidence.** The maintainer
+   opened the shipped app and reported that Things living on the Documents screen did not match the
+   design — the exact reopening condition ADR-0029 wrote for itself. Handoff 4's `thingsNav` knob
+   defaults to `tab` and the comp draws the four-tab bar; the switcher was its non-default branch.
+   `DomainSwitcher` is deleted rather than left unreferenced.
+
+**Do not write "four tabs, forever".** Four fit, measured. The bar's padding is fixed (`px-3.5`, plus an
+8px gap per seam), so at 390px a slot is **84.5px at four tabs, 66px at five, 54px at six** — against a
+"Documents" label that renders **63px**. Five leaves three pixels; six truncates.
+[roadmap.md](../roadmap.md) still has Money, the Vault, People and Notes.
+
+**Before adding a fifth tab, run this — it is §10 applied to the bar, and it is the trigger:**
+
+1. Render the bar at **390px**, in **both themes**, and at **`data-density="compact"`**.
+2. Read the longest label. Today that is **Documents**: **63px in an 84.5px slot**, one line, ~22px of
+   slack — *identical* in light, dark, compact and the grotesk face, because the bar pads itself with a
+   fixed `px-3.5` rather than `--gutter`, so density does not move it. At 430px the slot is 94.5px; at
+   360px it is 77px and still fits.
+3. If a label truncates (`scrollWidth > clientWidth`) or wraps, or a tab drops below `--tap-min` in
+   *width*, **the bar is full.** The answer then is the switcher **pattern**, returning inside the
+   domain-holding tab — not a shorter label, and not a dropdown.
+
+Two rules the deleted switcher leaves behind, because they are about navigation rather than about pills:
+
+- **No dropdown, ever, including in navigation.** ADR-0025 §4's mock drew a `Documents ⌄` chevron menu.
+  §6's no-dropdowns rule covers navigation too: a menu that must be opened to reveal a choice that would
+  fit on screen costs a tap and hides the options. A switcher, if one returns, is a visible row.
+- **Navigation is `<Link>`s carrying `aria-current="page"`, never buttons calling `navigate`.** A button
+  has no href, cannot be long-pressed or opened in a new tab, and `selected`-style styling announces
+  nothing to a screen reader. Exactly one tab may be current; two `aria-current`s is the app claiming
+  two locations.
 
 ### Now is cross-domain, and shape is what separates the domains on it
 
@@ -416,8 +443,7 @@ apps/web/src/lib/theme.ts                    light/dark resolution; index.html m
 apps/web/src/lib/feel.ts + useFeel.tsx       density / face / voice preferences (§12)
 apps/web/src/lib/voice.ts                    the two copy registers (§12)
 apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton stat
-apps/web/src/components/TabBar.tsx           three tabs, forever (§8)
-apps/web/src/components/DomainSwitcher.tsx   Documents / Things, drawn now domain two exists (§8)
+apps/web/src/components/TabBar.tsx           four tabs — Now · Documents · Things · You (§8)
 apps/web/src/components/PhotoViewer.tsx      the full-screen image viewer for scans and photos
 apps/web/src/features/documents/
   ExpiryStatus.tsx                           the expiry ladder — five states (§2)

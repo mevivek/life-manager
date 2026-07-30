@@ -36,19 +36,36 @@
 export function formatMoney(
   amount: string | null | undefined,
   currency: string | null | undefined,
+  /**
+   * `'whole'` drops the minor units — `£24,601` rather than `£24,600.50`.
+   *
+   * The comp's `gbp()` (line 1891) is `"£" + Math.round(n).toLocaleString("en-GB")`, and every figure
+   * it feeds is a **total** on the Sum insured card. That is the right call for a total and the wrong
+   * one for a price: an aggregate of eight things to the penny is false precision that makes the
+   * number harder to read and no more accurate, while "Paid" on a thing is a single amount off a
+   * receipt and the pence are part of it. So this is per-call rather than a global default.
+   *
+   * `Intl` rounds half away from zero here, which is what `Math.round` does for positive values — and
+   * every value this sees is positive.
+   */
+  precision: 'exact' | 'whole' = 'exact',
 ): string | null {
   if (amount == null || amount.trim() === '') return null
 
   const value = Number(amount)
   if (!Number.isFinite(value)) return amount
 
+  const digits = precision === 'whole' ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}
+
   if (currency == null || currency.trim() === '') {
     // No symbol, no code, no guess — just the number, grouped so it is readable.
-    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
+    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, ...digits }).format(value)
   }
 
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value)
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency, ...digits }).format(
+      value,
+    )
   } catch {
     /**
      * `Intl` throws `RangeError` on a **malformed** currency code — anything that is not three

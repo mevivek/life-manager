@@ -24,11 +24,13 @@ import { cn } from '@/lib/utils'
  * ── There is no "Build the pack" button, and that is deliberate ──
  *
  * The comp draws one (line 863) and wires it to a toast saying the pack is "ready". Nothing is ready:
- * there is **no endpoint that assembles a pack**, and — the part that decides it — the client has no
- * route to the *files* either. `api.things` carries no photo verbs, so a thing's photo bytes are
- * unreachable from here (see `ThingPhotos`), and a "pack" whose photo and receipt are missing is not
- * the thing the word promises. A text summary of six field values would be a different, lesser artefact
- * wearing the same label.
+ * there is **no endpoint that assembles a pack**. A text summary of six field values would be a
+ * different, lesser artefact wearing the same label.
+ *
+ * This note used to give a second reason — that the client could not reach a thing's photo bytes
+ * either. That half is now false: `api.things.photos` exists and `ThingPhotos` renders real images. The
+ * first reason is the one that decides it, and it has not moved: assembling a multi-file bundle is
+ * server work (zip, or a PDF), and there is no route for it.
  *
  * `components/ui/toast.tsx` is the precedent and it is explicit: the comp drew an "Undo" the system
  * cannot honour, and we refused to ship it rather than shipping a control that lies. Same call here. So

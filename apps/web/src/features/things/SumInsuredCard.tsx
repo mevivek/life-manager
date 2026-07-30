@@ -111,9 +111,15 @@ export function SumInsuredCard({
    * `?? ''` is unreachable: `formatMoney` returns `null` only for an absent amount, and
    * `fromMinorUnits` always produces one. Written rather than asserted because `noNonNullAssertion` is
    * a lint error and an empty string in a figure slot is a visible bug, not a crash.
+   *
+   * **`'whole'` — every figure on this card is rounded**, which is the comp's `gbp()` (line 1891). All
+   * three of them are aggregates: the total of what was paid, the policy's sum insured, and the
+   * difference. `£24,600.50 of things filed vs £15,000 covered` reads as though the pence were the
+   * point; they are noise in a number whose job is "am I under-insured". The *ratio* the bar draws is
+   * unaffected — it is computed from the minor units above, not from these strings.
    */
   const format = (minorUnits: number) =>
-    formatMoney(fromMinorUnits(minorUnits), policy.currency) ?? ''
+    formatMoney(fromMinorUnits(minorUnits), policy.currency, 'whole') ?? ''
 
   return (
     /**

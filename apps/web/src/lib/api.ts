@@ -18,11 +18,16 @@ import {
   type MeResponse,
   meResponseSchema,
   type PresignDownloadResponse,
+  type PresignPhotoDownloadResponse,
+  type PresignPhotoUploadRequest,
+  type PresignPhotoUploadResponse,
   type PresignUploadRequest,
   type PresignUploadResponse,
   type Problem,
   type PushSubscription as PushSubscriptionPayload,
   presignDownloadResponseSchema,
+  presignPhotoDownloadResponseSchema,
+  presignPhotoUploadResponseSchema,
   presignUploadResponseSchema,
   problemSchema,
   pushPublicKeyResponseSchema,
@@ -37,12 +42,14 @@ import {
   type ThingHoldersResponse,
   type ThingListQuery,
   type ThingListResponse,
+  type ThingPhoto,
   type ThingService,
   type ThingServiceCreate,
   type ThingUpdate,
   thingDetailResponseSchema,
   thingHoldersResponseSchema,
   thingListResponseSchema,
+  thingPhotoSchema,
   thingSchema,
   thingServiceSchema,
 } from '@life-manager/shared'
@@ -262,17 +269,12 @@ export const api = {
   },
 
   /**
-   * ═══════════════════════════════════════════════════════════════════════════════════════
-   *  NONE OF THESE ENDPOINTS EXIST YET. ADR-0029, domains/things.md §10.
-   * ═══════════════════════════════════════════════════════════════════════════════════════
+   * Things. ADR-0029, domains/things.md §5.
    *
-   * The Things *contract* is written (`packages/shared/src/things.ts`) and its screens are built; the
-   * API is another session's work. So every call here answers **404** against the deployed API today,
-   * and each Things screen renders its error state. That is expected and temporary.
-   *
-   * It is written now rather than later for the reason invariant 9 exists: this is the only place the
-   * paths and shapes are stated, so the session that builds the server implements these rather than a
-   * second guess at them. The paths are exactly `things.md` §5.
+   * **The server half exists now** — this block used to open by saying every call here 404s, which was
+   * true while the client shipped first and is not any more (things.md §10). The paths below were
+   * written against the contract in `packages/shared/src/things.ts` and the API implemented that
+   * contract unchanged, which is what invariant 9 is for.
    */
   things: {
     list: (query: Partial<ThingListQuery> = {}): Promise<ThingListResponse> =>
@@ -313,6 +315,58 @@ export const api = {
         body: input,
         idempotencyKey,
       }),
+
+    /**
+     * A thing's photos. things.md §5, and the same three-step dance as a document's scans: presign →
+     * PUT the bytes straight to storage → confirm.
+     *
+     * Two differences from `api.files`, both from the contract rather than from taste:
+     *
+     *  - **The photo is named in the BODY on the download verb**, not in the path. `:presign-download`
+     *     after a `:photoId` parameter routes correctly and generates a broken OpenAPI path —
+     *     conventions/api.md §2, and the block comment at the top of `things.routes.ts`.
+     *  - **`is_hero` is promotion-only.** `thingPhotoUpdateSchema` is `z.literal(true)`, so there is no
+     *     `demote`; you promote another photo instead. A thing with photos and no main one would render
+     *     an empty hero slot, which is worse than the wrong photo winning.
+     *
+     * The bytes themselves go through `api.files.upload` — one `XMLHttpRequest` implementation for both
+     * domains, because a second copy is a second place for the `withCredentials` rule to be forgotten.
+     */
+    photos: {
+      presignUpload: (
+        thingId: string,
+        input: PresignPhotoUploadRequest,
+      ): Promise<PresignPhotoUploadResponse> =>
+        request(
+          `/api/v1/things/${thingId}/photos::presign-upload`,
+          presignPhotoUploadResponseSchema,
+          { method: 'POST', body: input },
+        ),
+
+      confirm: (thingId: string, photoId: string): Promise<ThingPhoto> =>
+        request(`/api/v1/things/${thingId}/photos::confirm`, thingPhotoSchema, {
+          method: 'POST',
+          body: { photo_id: photoId },
+        }),
+
+      presignDownload: (thingId: string, photoId: string): Promise<PresignPhotoDownloadResponse> =>
+        request(
+          `/api/v1/things/${thingId}/photos::presign-download`,
+          presignPhotoDownloadResponseSchema,
+          { method: 'POST', body: { photo_id: photoId } },
+        ),
+
+      makeHero: (thingId: string, photoId: string): Promise<ThingPhoto> =>
+        request(`/api/v1/things/${thingId}/photos/${photoId}`, thingPhotoSchema, {
+          method: 'PATCH',
+          body: { is_hero: true },
+        }),
+
+      remove: (thingId: string, photoId: string): Promise<null> =>
+        request(`/api/v1/things/${thingId}/photos/${photoId}`, noContentSchema, {
+          method: 'DELETE',
+        }),
+    },
   },
 
   files: {

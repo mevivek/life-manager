@@ -27,6 +27,7 @@ import {
   type DocumentDraft,
   EMPTY_DOCUMENT_DRAFT,
   EMPTY_THING_DRAFT,
+  coverEndsOn,
   fieldsFor,
   KIND_META,
   MAKES,
@@ -41,7 +42,7 @@ import {
   toDocumentCreate,
   toThingCreate,
 } from './captureTracks'
-import { ExpiryGlyph } from './ExpiryStatus'
+import { ExpiryGlyph, formatDate } from './ExpiryStatus'
 import {
   autoCapitalizeFor,
   caretForSignificant,
@@ -83,9 +84,11 @@ import { useCreateDocument, useHolders, useIssuers } from './useDocuments'
  *    screen that says out loud that six invitations have not become six obligations. `CaptureSheet.test.tsx`
  *    walks both tracks pressing it on every step and asserts a save, which is the test the ADR asks for
  *    by name.
- *  - **A tap on a choice step advances it** (design.md §6). Picking a preset, a broad type, a holder, a
- *    kind or a cover length sets the value *and* moves on — "choose, then press Continue" is two taps
- *    for one decision and the capture budget (ADR-0025 §5) has no room for it.
+ *  - **A tap on a choice step advances it** (design.md §6). Picking a preset, a broad type, a holder or
+ *    a kind sets the value *and* moves on — "choose, then press Continue" is two taps for one decision
+ *    and the capture budget (ADR-0025 §5) has no room for it. **The cover length is the one exception**,
+ *    and it is the comp's: its note reads the chosen length back as a date, which advancing would make
+ *    unshowable. See the chip row on the `warranty` step.
  *
  * ── Why this replaced a single page, and what it must NOT replace ──
  *
@@ -99,10 +102,14 @@ import { useCreateDocument, useHolders, useIssuers } from './useDocuments'
  * ── What is deliberately NOT here ──
  *
  * The comp draws an upload control on the `scan` and `photo` steps. There is nothing to attach bytes
- * to yet: `document_files` rows hang off a `document_id` that does not exist until the save, and a
- * thing's photos need endpoints that are not built (things.md §10). A control that renders, focuses,
- * announces and does nothing is the failure mode this codebase has shipped twice — see the note on
- * `useOpenAdd` — so the step carries the copy and the saved step carries the action.
+ * to *from inside the wizard*: both a `document_files` row and a `thing_photos` row hang off an id that
+ * does not exist until the save. So the step carries the copy and the **saved** step carries the action —
+ * "Attach a scan" for a document, "Add a photo" for a thing, each opening the record that now exists.
+ *
+ * Holding the bytes in wizard state and uploading them after the create is the obvious alternative, and
+ * it is the one that has to fail well: the record is saved and the photo is not, mid-sheet, with no row
+ * to put the error on. The saved step's link puts the upload on the screen that can show its progress,
+ * its failure and its retry — which is the same screen the user would land on anyway.
  */
 
 // ── The sheet, and the wizard it wraps ───────────────────────────────────────
@@ -840,6 +847,21 @@ export function CaptureWizard({
 
       {step === 'name' && (
         <div className="mt-4 flex flex-col gap-1.5">
+          {/*
+            The duplicate catch — comp 1015–1020, and it was missing entirely until now.
+
+            Filing the same laptop twice is the mistake this domain invites: a thing has no expiry to
+            make the second record obviously redundant, and a household buys two of some things
+            (identical chairs, two of the same phone) so it must never *block*. It is a warning with a
+            link, exactly as the comp draws it.
+          */}
+          <DuplicateWarning
+            draft={thing}
+            onOpen={(id) => {
+              onLeave?.()
+              void navigate({ to: '/things/$thingId', params: { thingId: id } })
+            }}
+          />
           <Label htmlFor="capture-lead">{fields.lead.label}</Label>
           <Input
             id="capture-lead"
@@ -1018,19 +1040,43 @@ export function CaptureWizard({
                   <Chip
                     key={option.label}
                     selected={thing.coverMonths === option.months}
-                    onClick={() =>
-                      // "No cover" (0 months) is an ANSWER, not a skip — which is why it advances
-                      // like every other choice and is read back on the saved step.
-                      chooseAndAdvance(() => setThing({ ...thing, coverMonths: option.months }))
-                    }
+                    /**
+                     * ═══════════════════════════════════════════════════════════════════════
+                     *  This step does NOT auto-advance, and it is the one choice step that
+                     *  does not. The comp is deliberate about it.
+                     * ═══════════════════════════════════════════════════════════════════════
+                     *
+                     * Every other chip row here advances on tap — a preset, a broad type, a
+                     * holder, a kind — which is design.md §6's rule and the comp's behaviour at
+                     * all four (`presets`, `types.pickAdd`, `people`, `pKinds` each set
+                     * `addStep`). `pCovers.pick` is the exception: it sets `pCover` and stays
+                     * put, because the sentence below **reads the answer back** and turns a
+                     * length into a date. Advancing would make that note unshowable, and a user
+                     * who picked "2 years" would never see which date the app derived.
+                     *
+                     * This shipped auto-advancing and the note was a static sentence about
+                     * warranties in general. *Skip for now* is still drawn, so the step is not a
+                     * required field — it is one tap plus Continue rather than one tap.
+                     */
+                    onClick={() => setThing({ ...thing, coverMonths: option.months })}
                   >
                     {option.label}
                   </Chip>
                 ))}
               </div>
+              {/*
+                The comp's `pCoverNote` (comp 2602) — three sentences, and which one appears depends on
+                what was picked. Before anything is picked it is the warranty-versus-expiry line, which
+                is the sentence that explains why this step is not the expiry step (ADR-0029).
+              */}
               <p className="text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
-                A warranty is not an expiry — a dishwasher whose cover ended keeps washing dishes.
-                We’ll tell you before it ends, not after.
+                {thing.coverMonths === null
+                  ? 'A warranty is not an expiry — a dishwasher whose cover ended keeps washing dishes. We’ll tell you before it ends, not after.'
+                  : thing.coverMonths === 0
+                    ? // "No cover" is an ANSWER, not a skip, and this is what makes that legible: the
+                      // record is still worth having without a date to watch.
+                      'No warranty to watch. It still gets a record, a photo and its documents.'
+                    : `Cover runs to ${coverEndsLabel(thing)}.`}
               </p>
             </fieldset>
           )}
@@ -1040,7 +1086,8 @@ export function CaptureWizard({
       {step === 'photo' && (
         <p className="mt-4 text-row leading-relaxed text-ink-2 [text-wrap:pretty]">
           {KIND_META[thing.kind === '' ? 'other' : thing.kind]?.photoSub ??
-            'One of the thing, and one of the serial plate if you can reach it. Save it first — photos hang off a thing that exists.'}
+            'One of the thing, and one of the serial plate if you can reach it.'}{' '}
+          Save it first — a photo hangs off a thing that exists, and the next screen takes it.
         </p>
       )}
 
@@ -1285,9 +1332,21 @@ function SavedStep({
           until it replays (ADR-0024) — and an action that cannot work is worse than one not offered.
           "Add another" still works: the outbox takes as many as quota allows.
 
-          A thing gets no id-dependent action at all, and that is not an oversight: the equivalent is
-          "add a photo", and a thing's photo endpoints do not exist yet (things.md §10).
+          A thing now gets the same treatment, because its photo endpoints landed: "Add a photo" opens
+          the record, where the hero frame is the picker. This used to be absent, and the note here said
+          why — a control for an endpoint that does not exist is the failure mode this codebase has
+          shipped twice.
         */}
+        {savedId !== null && saved.track === 'thing' && (
+          <SavedAction
+            onClick={() => {
+              onLeave?.()
+              void navigate({ to: '/things/$thingId', params: { thingId: savedId } })
+            }}
+          >
+            Add a photo
+          </SavedAction>
+        )}
         {savedId !== null && saved.track === 'document' && (
           <>
             <SavedAction
@@ -1392,6 +1451,22 @@ function subFor(step: CaptureStep, kind: ThingKind | '', numLabel: string | unde
 function shapeFor(shape: string | undefined, isPlate: boolean, series: PlateSeries): string {
   if (isPlate) return PLATE_SHAPE[series]
   return shape ?? ''
+}
+
+/**
+ * What the cover-length note says once a length is picked — the comp's `pCoverNote` (comp 2602).
+ *
+ * Two shapes, and which one appears depends on whether the purchase date is in hand. With it there is a
+ * real date to read back; without it there is only the promise that the count starts from whenever the
+ * date is filled in. **It never counts from today** — that is the fabricated-date trap the `warranty`
+ * step's own comment describes, and `coverEndsOn` is the single place that rule lives.
+ */
+function coverEndsLabel(thing: ThingDraft): string {
+  const label = COVER_LENGTHS.find((option) => option.months === thing.coverMonths)?.label ?? 'that'
+  const ends = coverEndsOn(thing)
+  return ends === null
+    ? `roughly ${label} from the purchase date, once you add it`
+    : formatDate(ends)
 }
 
 function primaryLabel(isLastStep: boolean, track: CaptureTrack, saving: boolean): string {

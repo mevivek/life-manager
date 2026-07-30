@@ -1,10 +1,12 @@
 import type {
+  PhotoMime,
   ThingCreate,
   ThingListQuery,
   ThingServiceCreate,
   ThingUpdate,
 } from '@life-manager/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { api } from '@/lib/api'
 
 /**
@@ -17,14 +19,9 @@ import { api } from '@/lib/api'
  * persist allowlist in `lib/persister.ts`, so these responses reach IndexedDB — see the note there
  * about the serials that puts on the device (debt D47, widened).
  *
- * ═══════════════════════════════════════════════════════════════════════════════════════
- *  NONE OF THESE ENDPOINTS EXIST YET. ADR-0029, things.md §10.
- * ═══════════════════════════════════════════════════════════════════════════════════════
- *
- * Every call here answers **404** against the deployed API today, so each Things screen renders its
- * error state until another session builds the server half. That is deliberate and temporary, and it
- * is the reason `packages/shared/src/things.ts` was written first: whichever session builds the API
- * implements *that* contract rather than a second guess at it (invariant 9).
+ * **The API exists now.** This block used to open with "none of these endpoints exist yet"; the server
+ * half landed and implemented `packages/shared/src/things.ts` unchanged, which is what invariant 9 is
+ * for. things.md §10 is the file that tracks what is left.
  *
  * ── The writes are NOT queued offline, and that is a decision rather than an omission ──
  *
@@ -36,13 +33,13 @@ import { api } from '@/lib/api'
  *     `retryWithVersion` both narrow on `kind !== 'document.create'` and then read `.documentId`, so
  *     a fourth kind without that field is a type error in two places that have nothing to do with
  *     things. Widening the queue is the API session's work, alongside the endpoints.
- *  2. **A queue for an API that does not exist would hold writes that can never replay.** The outbox
- *     replays on reconnect and marks a 4xx as a conflict the *user* must resolve — so today a thing
- *     captured offline would come back as an unresolvable conflict naming a 404, which is strictly
- *     worse than the write failing plainly at the moment it was made.
+ *  2. **The queue would need a `thing.create` before a photo could be queued against it.** A photo
+ *     hangs off a `thing_id`, so queueing one for a thing that is itself only in the outbox means
+ *     replaying two entries in order and remapping a temporary id between them — which is
+ *     `remapTempId`'s job for documents and does not generalise for free.
  *
  * So `OfflineError` propagates and the UI says the change was not saved, exactly as ADR-0013 had it.
- * When the endpoints land, the fix is one outbox kind and one `writeOrQueue` wrapper per mutation.
+ * The fix is one outbox kind and one `writeOrQueue` wrapper per mutation — debt D59's remaining half.
  */
 
 export const thingsKey = ['things'] as const
@@ -152,5 +149,105 @@ export function useLogService(thingId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: thingsKey })
     },
+  })
+}
+
+// ── Photos ───────────────────────────────────────────────────────────────────
+//
+// The sibling of `useDocuments.ts`'s file hooks, and read that file's notes before changing these:
+// the reasoning about progress state, about `useMutation` versus `useQuery` for a presigned URL, and
+// about `XMLHttpRequest` is all there and applies unchanged.
+
+/**
+ * Uploads one photo: presign → PUT the bytes → confirm.
+ *
+ * ── Progress is `useState`, not the Query cache ──
+ *
+ * Exactly `useUploadFile`'s reasoning: it changes many times a second, and a cache write per progress
+ * event would have `persister.ts` throttle-writing the whole cache to IndexedDB for the duration of an
+ * upload. It is transient view state.
+ *
+ * ── No offline queue, unlike a document's scan ──
+ *
+ * `useUploadFile` catches `OfflineError` and enqueues the bytes. This does not, and the reason is at the
+ * top of this file: `lib/outbox.ts`'s entry union has no thing kind, and a photo queued against a thing
+ * that is itself only in the outbox needs a temporary-id remap that does not exist yet. So an offline
+ * upload fails plainly at the moment it is attempted, which is the honest outcome and not a lost photo.
+ *
+ * ── `makeHero` is the CALLER's decision, and it must be ──
+ *
+ * `presignPhotoUploadRequestSchema` defaults `make_hero` to `true`, and confirming a `make_hero` row
+ * demotes its siblings in the same transaction. So an upload from the strip's "Add another photo" would
+ * silently steal the main slot from whatever the user chose — which is why it is a parameter rather than
+ * a default: the empty hero frame passes `true`, the strip passes `false`, and promoting afterwards is a
+ * separate deliberate tap (`useMakePhotoHero`).
+ */
+export function useUploadThingPhoto(thingId: string) {
+  const queryClient = useQueryClient()
+  const [progress, setProgress] = useState<number | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: async ({ file, makeHero }: { file: File; makeHero: boolean }) => {
+      setProgress(0)
+      const presigned = await api.things.photos.presignUpload(thingId, {
+        // Validated server-side against `ALLOWED_PHOTO_MIMES`; this is the browser's own reported
+        // type, and anything outside the allowlist comes back as a 400 rather than being uploaded.
+        mime: file.type as PhotoMime,
+        size_bytes: file.size,
+        make_hero: makeHero,
+      })
+
+      await api.files.upload(presigned.upload_url, file, setProgress)
+
+      // Pinned at 1 for the confirm round-trip rather than reset — see `useUploadFile`: clearing it
+      // first makes the tile flick back to "no progress", which reads as the upload restarting.
+      setProgress(1)
+      return api.things.photos.confirm(thingId, presigned.photo_id)
+    },
+    onSuccess: () => {
+      // The whole root: a first photo becomes the hero, which is also the list row's thumbnail.
+      void queryClient.invalidateQueries({ queryKey: thingsKey })
+    },
+    onSettled: () => setProgress(null),
+  })
+
+  return Object.assign(mutation, { progress })
+}
+
+export function useDeleteThingPhoto(thingId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (photoId: string) => api.things.photos.remove(thingId, photoId),
+    onSuccess: () => {
+      // Deleting the hero promotes the newest remaining photo server-side, so the list's thumbnail
+      // changes too — hence the root key rather than just the detail.
+      void queryClient.invalidateQueries({ queryKey: thingsKey })
+    },
+  })
+}
+
+export function useMakePhotoHero(thingId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (photoId: string) => api.things.photos.makeHero(thingId, photoId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: thingsKey })
+    },
+  })
+}
+
+/**
+ * Mints a photo's download URL at the moment of the tap.
+ *
+ * **A mutation and never a query.** A `useQuery` here would land the signed URL in the persisted Query
+ * cache and therefore in IndexedDB, which is what `persister.ts`'s `shouldDehydrateMutation: () => false`
+ * exists to prevent (security-model.md §6) — and it is short-lived, so a cached one would be a dead link
+ * anyway. `DocumentFiles`'s header note is the long version.
+ */
+export function usePresignPhoto(thingId: string) {
+  return useMutation({
+    mutationFn: (photoId: string) => api.things.photos.presignDownload(thingId, photoId),
   })
 }

@@ -148,6 +148,17 @@ export function OwnershipBanner({ thing }: { thing: OwnershipFields }) {
  * something without recording to whom — so the comp's `"Lent to " + a.who` would print "Lent to null".
  * `ownership_since` is nullable for the same reason.
  *
+ * ── The unnamed case says the comp's words, and the split is deliberate ──
+ *
+ * The comp (line 2143) fills the blank with **"someone"** for a lend and **"a new owner"** for a
+ * hand-on, and those are the words drawn here: `Lent to someone`, `Handed to a new owner`. An earlier
+ * pass wrote `Lent out` / `Handed on`, which is fine prose and was not the comp's.
+ *
+ * What the comp does and this app must not is **store** that word — see `setAway` below, where the
+ * column stays `null`. An indefinite pronoun in a sentence is honest ("we do not know who"); the same
+ * string in a `who` column is a name the user never gave, which then reads back as fact on the edit
+ * screen and in an export. So the substitution lives here, in the rendering, and nowhere else.
+ *
  * Exported for the test: this is a sentence assembled from three nullable fields, which is exactly the
  * shape that goes wrong on the row nobody made a fixture for.
  */
@@ -156,9 +167,10 @@ export function awayLabel(
 ): string {
   const who = thing.ownership_who
   const named = who !== null && who.trim() !== ''
-  const verb = thing.ownership === 'lent' ? 'Lent' : 'Handed'
+  const lent = thing.ownership === 'lent'
 
-  const stem = named ? `${verb} to ${who}` : thing.ownership === 'lent' ? 'Lent out' : 'Handed on'
+  const subject = named ? who : lent ? 'someone' : 'a new owner'
+  const stem = `${lent ? 'Lent' : 'Handed'} to ${subject}`
   return thing.ownership_since === null
     ? stem
     : `${stem} · ${formatDateShort(thing.ownership_since)}`
@@ -197,8 +209,12 @@ export function OwnershipPanel({ thing }: { thing: OwnershipFields }) {
         /**
          * `null` rather than `''` for a name the user did not give. An empty string is a blank that is
          * not absent — it sorts differently and reads as a person called nothing (conventions/api.md
-         * §8). The comp substitutes "someone" / "a new owner" here, which invents a value the user
-         * declined to enter and then shows it back to them as fact.
+         * §8).
+         *
+         * **And `null` rather than the comp's "someone" / "a new owner".** The comp writes those into
+         * the record (line 2143); this writes nothing, and `awayLabel` says the comp's words at render
+         * time instead. A pronoun in a sentence is honest; a pronoun in a `who` column is a name the
+         * user declined to enter, shown back to them as fact on the edit screen and in an export.
          */
         ownership_who: who.trim() === '' ? null : who.trim(),
         // Today, in local date parts. `ownership_since` is a calendar date, and `toISOString()` would

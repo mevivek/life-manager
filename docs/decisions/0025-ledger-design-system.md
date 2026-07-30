@@ -3,6 +3,11 @@
 - **Status:** accepted
 - **Date:** 2026-07-29
 - **Supersedes:** the navigation plan recorded in `components/TabBar.tsx` (one tab per domain)
+- **Superseded by:** [ADR-0031](0031-things-is-a-fourth-tab.md), **§4 only** — the *"three tabs,
+  forever"* rule and *"domains never become tabs"*. Everything else here stands: the tokens, the type
+  system, the expiry ladder, the hairline, the capture budget. §4's tab *names* were separately amended
+  by the second design handoff (Add left the bar, You took the slot). The body below is left exactly as
+  accepted (ADR-0015).
 
 ## Context
 
