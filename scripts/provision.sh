@@ -276,7 +276,15 @@ EOF
   # --headers passes the secret to `gcloud` as an ARGUMENT, which is the one place in this script a
   # value reaches a command line. Unavoidable: Cloud Scheduler has no file-based header input. It is
   # visible in this shell's `ps` for the duration of the call, so run this on your own machine and not
-  # on a shared host. The value is not written to disk and not echoed.
+  # on a shared host. The value is not written to disk.
+  #
+  # `--format=none` on both branches below is NOT cosmetic and must not be removed: on success gcloud
+  # prints the job as YAML, and that dump INCLUDES the headers it was just given. Without it the secret
+  # is echoed to the terminal, into scrollback, and into any screenshot of it — found the hard way on
+  # the first real run, which had to be rotated. `--quiet` does not suppress it; it only stops prompts.
+  #
+  # The same applies to anything that READS the job: `jobs describe` and `jobs list --format=yaml`
+  # print the header. Inspect it with `--format='value(schedule,state)'` instead.
   printf '\nCreating the Scheduler job\n'
   if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
     note 'job exists — updating it'
@@ -287,6 +295,7 @@ EOF
       --http-method=POST \
       --headers="X-Cron-Key=${secret}" \
       --attempt-deadline=180s \
+      --format=none \
       --quiet
   else
     gcloud scheduler jobs create http "$SCHEDULER_JOB" \
@@ -297,6 +306,7 @@ EOF
       --headers="X-Cron-Key=${secret}" \
       --attempt-deadline=180s \
       --description='Daily reminder scan and sweep (ADR-0028)' \
+      --format=none \
       --quiet
   fi
   note 'done'
@@ -309,6 +319,7 @@ Verify — do not wait until 08:00 UTC to find out:
        gcloud scheduler jobs run ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT}
        gcloud scheduler jobs describe ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT} \\
          --format='value(status,lastAttemptTime)'
+     # NOTE the --format. A bare \`jobs describe\` prints the X-Cron-Key header in full.
 
   2. Read what the API reported. "found 0" means nothing was due, which is NOT the same as working:
        gcloud run services logs read ${SERVICE} --region=${REGION} --project=${PROJECT} --limit=20

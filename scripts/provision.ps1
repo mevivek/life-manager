@@ -455,7 +455,12 @@ header (so the caller sends it). This script does both, so you paste it once.
   #
   # --headers passes the secret as a command-line ARGUMENT, the one place in this script a value does.
   # Unavoidable - Cloud Scheduler has no file-based header input - so run this on your own machine and
-  # not a shared host. It is not written to disk and not echoed.
+  # not a shared host. It is not written to disk.
+  #
+  # It is also why `--format=none` below is load-bearing: gcloud's success output echoes the headers
+  # back, so the value would otherwise land in the terminal. Anything that reads a scheduler job -
+  # `jobs describe`, `jobs list --format=yaml` - prints the header too. Use
+  # `--format='value(schedule,state)'` when inspecting it, or expect to rotate.
   $uri = "$ApiOrigin/api/v1/maintenance:run-daily"
   $exists = Invoke-Gcloud -Quiet -GcArgs @(
     'scheduler', 'jobs', 'describe', $SchedulerJob, "--location=$Region", "--project=$Project"
@@ -473,7 +478,14 @@ header (so the caller sends it). This script does both, so you paste it once.
     "--uri=$uri",
     '--http-method=POST',
     "--headers=X-Cron-Key=$secret",
-    '--attempt-deadline=180s'
+    '--attempt-deadline=180s',
+    # `--format=none` is NOT cosmetic and must not be removed.
+    #
+    # On success gcloud prints the created job as YAML, and that dump INCLUDES the headers it was
+    # just given — so without this the secret is echoed to the terminal, into scrollback, and into
+    # any screenshot of it. Found the hard way: the first real run of this command displayed the
+    # value and it had to be rotated. `--quiet` does not suppress it; it only stops prompts.
+    '--format=none'
   )
   if (-not $exists) { $jobArgs += '--description=Daily reminder scan and sweep (ADR-0028)' }
   $jobArgs += '--quiet'
