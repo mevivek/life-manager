@@ -6,6 +6,7 @@ import { Eyebrow } from '@/components/ui/label'
 import { DocumentListSkeleton } from '@/components/ui/skeleton'
 import { DocumentRow } from '@/features/documents/DocumentRow'
 import { ExpiryGlyph, formatDate, NEEDS_YOU_DAYS } from '@/features/documents/ExpiryStatus'
+import { GettingStarted } from '@/features/documents/GettingStarted'
 import { Horizon } from '@/features/documents/Horizon'
 import { NotificationsCard } from '@/features/documents/NotificationsCard'
 import { type Ledger, toLedger, useLedger } from '@/features/documents/useLedger'
@@ -14,6 +15,17 @@ import { useTheme } from '@/lib/useTheme'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authed/home')({ component: NowPage })
+
+/**
+ * At or below this many documents, Now shows `GettingStarted` instead of the space a fuller archive
+ * would occupy.
+ *
+ * Four, because that is roughly where the screen stops looking half-loaded: one "Needs you" card plus
+ * two or three horizon entries fills a 390×844 viewport. It is a **display** threshold with nothing
+ * behind it — no reminder, no query, no server rule reads this, so getting it wrong costs a paragraph
+ * appearing one document too early or too late.
+ */
+const GETTING_STARTED_MAX = 4
 
 /**
  * **Now** — the screen the whole design turns on. ADR-0025 §1.
@@ -276,6 +288,13 @@ function NowBody({ ledger }: { ledger: Ledger }) {
           </Link>
         </div>
       )}
+
+      {/*
+        A nearly-empty archive gets told what to add next, rather than being shown the empty half of a
+        screen designed for a full one. `complete` is required: without the whole archive loaded,
+        `loadedCount` is a page size and every archive would look tiny on first paint.
+      */}
+      {complete && loadedCount <= GETTING_STARTED_MAX && <GettingStarted count={loadedCount} />}
 
       {/*
         The ledger footer. Every number is derived from what was actually loaded, and `complete` is

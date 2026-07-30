@@ -17,6 +17,8 @@ import {
   needsYou,
   span,
 } from './ExpiryStatus'
+import { GettingStarted } from './GettingStarted'
+import { Horizon } from './Horizon'
 
 /**
  * Web tests for Documents.
@@ -202,6 +204,59 @@ describe('formatDate', () => {
     expect(formatDate('2026-09-12')).toBe('12 September 2026')
     expect(formatDate('2026-01-01')).toBe('1 January 2026')
     expect(formatDate('2026-12-31')).toBe('31 December 2026')
+  })
+})
+
+/**
+ * The two states a nearly-empty Now screen shows. Both were blank before a real phone with two
+ * documents in it made the hole visible — and neither is reachable from a twelve-document fixture,
+ * which is why they get tests of their own rather than being covered incidentally.
+ *
+ * Neither component renders a `<Link>`, so both mount without a router. That is a property worth
+ * keeping: it is what makes them testable at all.
+ */
+describe('the horizon with no entries', () => {
+  it('states that nothing else is dated when every dated document is already urgent', () => {
+    // The reported case: one passport expiring in 6 days, so `rows` is empty while `datedTotal` is 1.
+    render(<Horizon rows={[]} datedTotal={1} complete={true} />)
+    expect(screen.getByText(/nothing else has a date we watch\./i)).toBeInTheDocument()
+    expect(screen.getByText(/the horizon/i)).toBeInTheDocument()
+  })
+
+  it('renders nothing when the archive holds no dates at all, because the headline says it', () => {
+    const { container } = render(<Horizon rows={[]} datedTotal={0} complete={true} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('does not claim a total it cannot know when the archive did not fit on one page', () => {
+    render(<Horizon rows={[]} datedTotal={2} complete={false} />)
+    expect(screen.getByText(/nothing else has a date we watch on this page\./i)).toBeInTheDocument()
+  })
+})
+
+describe('GettingStarted', () => {
+  it('counts in words that agree with the number', () => {
+    render(<GettingStarted count={1} />)
+    expect(screen.getByText('One document in your ledger.')).toBeInTheDocument()
+  })
+
+  it('pluralises above one', () => {
+    render(<GettingStarted count={2} />)
+    expect(screen.getByText('2 documents in your ledger.')).toBeInTheDocument()
+  })
+
+  it('points at the Add tab rather than adding a second control that competes with it', () => {
+    // The decision this locks in: the Add tab is permanently on screen, so a button here would be a
+    // second route to one action. If someone adds one, this fails rather than shipping the rivalry.
+    render(<GettingStarted count={2} />)
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByText(/use/i)).toBeInTheDocument()
+  })
+
+  it('tells the user a title alone is enough — Q2, same promise the form keeps', () => {
+    render(<GettingStarted count={3} />)
+    expect(screen.getByText(/a title on its own is enough/i)).toBeInTheDocument()
   })
 })
 
