@@ -14,7 +14,8 @@
       "!**/coverage",
       "!apps/api/drizzle",
       "!apps/web/src/routeTree.gen.ts",
-      "!apps/web/dev-dist"
+      "!apps/web/dev-dist",
+      "!docs/design"
     ]
   },
   "formatter": {
