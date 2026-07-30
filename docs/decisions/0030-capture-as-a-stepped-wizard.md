@@ -124,3 +124,15 @@ the same wizard full-page.
 - **A wizard is a place where "required" creeps back in.** The single most likely future regression is
   someone adding a validation guard to a step because a blank one looks unfinished. The guard against
   it is a test that walks both tracks pressing Skip on every skippable step and asserts a save.
+
+  > **The 2026-07-30 fidelity pass found the mirror-image mistake**, which this list did not anticipate:
+  > not a step made required, but a step made *too fast*. "A tap on a choice step advances it" had been
+  > applied to the **cover length** as well, where handoff 4 deliberately does not (`pCovers.pick` sets
+  > the value and stays put, unlike `presets`, `types`, `people` and `pKinds`) — because that step's note
+  > **reads the answer back as a date**, and advancing made it unshowable. So the rule is now stated with
+  > its exception: advance on a choice **whose answer needs no confirmation**. The step is still
+  > skippable, so this costs one tap and buys the derived date.
+  >
+  > The same pass added the comp's **duplicate catch** on the thing track's `name` step (comp 1015),
+  > which had been missed entirely. It is a warning with a link and **never a block** — a household
+  > genuinely owns two identical chairs, so Q2 has no exception for a duplicate either.

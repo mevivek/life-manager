@@ -20,7 +20,7 @@ Warm paper, ink-black hierarchy. A **serif for what a human wrote** (titles, dat
 **grotesk for what the machine says** (labels, status, controls), **mono for eyebrows and data**.
 **Colour is spent only on status** — a document's expiry (§2) or a thing's cover (§2a), and nothing
 else. There is no brand accent and adding one breaks the system rather than extending it. Elevation is a
-**1px hairline**, not a shadow; exactly two things lift. Light and dark are at **full parity**. The bar
+**1px hairline**, not a shadow; three things lift (§5). Light and dark are at **full parity**. The bar
 is **four tabs — Now · Documents · Things · You**, and how many it holds is a *measurement*, not a
 promise (§8).
 
@@ -196,7 +196,8 @@ What this forbids:
 - **No accent hue.** No brand colour to admire. The user opens this twice a month and wants an answer.
 - **No colour per `doc_type`.** Seven type-colours is a code nobody learns at fortnightly intervals.
 - **Exactly one control in the app is emphatic**: the Add pill on Documents. It is an ink fill with a
-  hairline and **no shadow** — see §5. A second emphatic control anywhere means one of them is wrong.
+  hairline **and the comp's `--e-pill` shadow** — see §5. A second emphatic control anywhere means one
+  of them is wrong.
 - **Destructive is text in `--status-late`, never a filled red block** — a red button makes "delete"
   the loudest thing on a screen whose subject is a passport.
 - `--color-destructive` is an **alias** onto `--status-late`. Do not introduce a second red.
@@ -205,16 +206,25 @@ What this forbids:
 
 ## 5. Elevation is a hairline
 
-`--e-0` is `0 0 0 1px var(--rule)` and that is the whole inventory for ordinary UI. **Exactly two
-things cast a shadow**, because they are the two things temporarily on top of your life:
+`--e-0` is `0 0 0 1px var(--rule)` and that is the whole inventory for ordinary UI. **Three things
+cast a shadow, and no fourth:**
 
 - the add sheet — `--e-sheet`
 - the toast — `--e-toast`
+- the **Add pill** — `--e-pill`
 
-The Add pill is the case that tests this rule and does not break it: the comp drew it with
-`0 8px 24px`, which would have made it a third. It ships on a hairline instead, because a *permanent*
-control is not temporarily on top of anything — and the ink fill already separates it from any ground
-it crosses.
+**The pill was the exception this section used to claim it wasn't.** It shipped on a hairline for a
+while, reasoned from ADR-0025 §3's "only the sheet and the toast lift" — but that sentence is the comp
+*describing itself*, and the comp's own **drawing** puts `0 8px 24px rgba(10,10,9,.24)` on the pill on
+**every screen it appears on** (handoff 4, lines 380 and 683). When a comp's prose and its drawing
+disagree, the drawing is the design: the pill floats over a scrolling list, and the shadow is what keeps
+its edge legible against whatever row it happens to be crossing.
+
+`--e-pill` repeats `--e-toast`'s value, because the comp does. It is a separate token name so a change
+meant for one of them cannot silently move the other.
+
+The rule that survives is the one that matters: **a fourth shadow needs an argument**, and "it would
+look nicer raised" is not one.
 
 A card with a drop shadow claims to float above a screen it is actually part of. Group related rows
 inside **one** bordered card with hairline dividers rather than giving each its own box — four
@@ -229,6 +239,19 @@ problems in four cards read as four sections.
   genuinely unbounded (a date), use the native input for that type.
 - **Everything tappable clears 44px** (`--tap-min`), including text-only buttons. `Button`'s `sm` size
   is *narrower*, not shorter.
+
+  ⚠ **`Chip` does not, and this rule and `chip.tsx` currently contradict each other.** Measured at
+  390px: a filter chip is **36px**, a form chip **40px**, `Tag` **30px**, and the reminder chip's `×` is
+  **18×24** — the smallest target in the app. Those are close to the comp, which draws its filter pills
+  at `min-height:36px` and its form pills at `40px` (handoff 4, lines 299–303 and 981). So the code
+  matches the design and misses the floor this bullet states, and the two cannot both be right.
+
+  **It is unresolved on purpose rather than quietly reworded.** Raising every chip to 44px changes the
+  density of five screens and departs from the comp; softening this bullet to name the exceptions
+  concedes a real accessibility floor. Whichever way it goes it is a maintainer's call — see the
+  fidelity review's *needs a decision* list — and until then neither the rule nor the component should be
+  edited to agree with the other by stealth. The `×` is the part worth fixing first regardless: it is
+  below the floor on **both** readings.
 - **Required is drawn by weight, not an asterisk** — `<Input emphasis>` gives a 1.5px `--ink` border.
   On a form where everything else is optional forever, an asterisk on one field implies the others
   were merely not-yet-starred.
@@ -275,8 +298,15 @@ problems in four cards read as four sections.
   fact rather than an absence. Collapsing both into one `if (rows.length === 0) return null` is how
   the blank half-screen shipped.
 - **At 430px nothing reflows.** The gutter and the display size step up via tokens, and the horizon
-  shows five entries instead of four. Row heights are unchanged: a taller row on a bigger phone just
-  means more scrolling.
+  shows five **documents** instead of four. Row heights are unchanged: a taller row on a bigger phone
+  just means more scrolling.
+- **The horizon has TWO limits, not one** — `limitHorizon()` in `Horizon.tsx`. Documents are capped
+  first (four, five at 430px, the bullet above), then thing events join and the **merged list is capped
+  at six**, both widths. Handoff 4 applies both (`horizonDocs = …slice(0, 4)` at comp 2220, then
+  `items.slice(0, 6)` at comp 1884); this shipped with only the first, so one thing with a warranty and
+  a service could push every document off the timeline. The two caps fail in opposite directions and
+  `Horizon.test.tsx` covers each: without the merged cap the list can exceed six rows, and without the
+  document cap the six nearest documents fill it and a Things-owning household never sees Things on Now.
 - **The page body never scrolls sideways.** Wide content gets `overflow-x: auto` on its own container.
 - Do not touch the `@layer base` app-shell rules in `styles.css` without reading the comment on each
   one. Every rule removes a specific "this is a web page" tell, and each looks deletable to someone
@@ -452,6 +482,7 @@ apps/web/src/features/documents/
 apps/web/src/features/things/
   CoverStatus.tsx                            the cover ladder — four states, the second and last (§2a)
   ThingRow.tsx                               the row every thing list is made of
+  ThingPhotos.tsx                            the 172px hero AND the strip — the app's only <img> on render
 apps/web/src/features/health/
   BuildCard.tsx                              what is deployed, both halves, and whether they agree
 ```

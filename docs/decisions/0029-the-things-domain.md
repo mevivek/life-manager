@@ -142,7 +142,10 @@ mono kicker for a thing event, the existing **round** dot and no kicker for a do
   > The ADR-0006 measurement this ADR asked for also came out clean: `apps/api/src/db/scoped.ts` was not
   > touched. What did *not* come free was the playbook, which needed five amendments — see
   > [add-a-domain.md](../agent-playbooks/add-a-domain.md) § *If this playbook didn't work*.
-  > Two client gaps remain (offline outbox, photo verbs); [things.md](../domains/things.md) §10 has them.
+  > Two client gaps remained (offline outbox, photo verbs); [things.md](../domains/things.md) §10 has
+  > them. **The photo half closed on 2026-07-30** in the design-fidelity pass: `api.things.photos`, four
+  > hooks, and the comp's hero and strip in `ThingPhotos.tsx` (debt D59). The offline outbox is still
+  > open, and is the only client gap left.
 - **Sum insured is computed in the client**, which means the number is only as complete as the page
   loaded — exactly the `complete` caveat the Now footer already carries. It is drawn only when a
   contents policy is found, so the common case is that the card is absent rather than wrong.

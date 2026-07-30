@@ -214,6 +214,10 @@ you don't know it:
   domain would measure. Two things are still off: **§9(2) is unanswered so nothing creates a thing
   reminder** (the capability is built, the switch is not — things.md §6, debt D58), and **Things writes
   do not use the offline outbox yet**. things.md §10 lists every file and what is left.
+  **Photos are wired now** (debt D59, closed for reads and writes): `api.things.photos`, the four hooks,
+  and the comp's 172px hero plus the 150px strip in `ThingPhotos.tsx`. **The hero is the only `<img src>`
+  in the app minted on render** — one presign for the `is_hero` photo, once per mount, never cached — and
+  the list row's thumbnail is deliberately still a glyph, because that one would be a presign per row.
 - **COVER IS NOT EXPIRY, and that is the one design rule most likely to be broken by accident.** A
   passport that expires is *invalid*; a dishwasher whose warranty ends **keeps washing dishes**. So
   there is a second status ladder — four states, a proportional depleting **bar** rather than the
@@ -233,17 +237,20 @@ the switcher ADR-0025 §4 promised, even though the comp's own default knob says
 made a Bharat-series plate `22 BH 1234 AA` untypeable). The series is an explicit choice and the
 digit-count hint drops for it, because two formats have no single length.
 
-What still does **not** exist: OCR and previews (M2), offline *download* of files, password reset,
-Playwright, R2 object deletion, and **any way for a user to undo a delete** (soft-delete sets
+What still does **not** exist: OCR and document previews (M2 — a *thing's* photos do render now, hero and
+strip), offline *download* of files, password reset, Playwright, R2 object deletion, and **any way for a user to undo a delete** (soft-delete sets
 `deleted_at`, but there is no restore endpoint — so no "Undo" and no "recoverable for 30 days" copy;
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D59 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D61 with triggers, so check there
 before "fixing" one. **D54 and D55 are the two newest and both are traps for a fresh session:**
 the web and API deploy on separate triggers, so a response field added to the client must never be
 *required* of the server (it took the archive down once); and `lib/outbox.test.ts` is **flaky**, so
-do not accept anyone's description of a failure in it as expected.
+do not accept anyone's description of a failure in it as expected. **D60 and D61 are the two newest and
+both need a product call, not a fix:** the cover bar has no minimum floor, so `ending` and `ended` can
+look identical — and the comp has the same flaw, so matching the design and being correct point in
+opposite directions; and the app icon is a smudge at 16px, where the fix costs the tab/app-icon match.
 
 ## Start here — next actions
 
@@ -311,7 +318,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D59, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing. **D53 before touching `scripts/provision.*`** |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D61, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing. **D53 before touching `scripts/provision.*`** |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**

@@ -16,18 +16,18 @@ import { Chip, Tag } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Eyebrow, Label } from '@/components/ui/label'
 import { Sheet } from '@/components/ui/sheet'
-import { useCreateThing } from '@/features/things/useThings'
+import { useCreateThing, useThings } from '@/features/things/useThings'
 import { ApiError } from '@/lib/api'
 import { useFeel } from '@/lib/useFeel'
 import { cn } from '@/lib/utils'
 import {
   type CaptureStep,
   type CaptureTrack,
+  coverEndsOn,
   DOC_STEPS,
   type DocumentDraft,
   EMPTY_DOCUMENT_DRAFT,
   EMPTY_THING_DRAFT,
-  coverEndsOn,
   fieldsFor,
   KIND_META,
   MAKES,
@@ -181,6 +181,13 @@ export function CaptureWizard({
    */
   onLeave?: () => void
 }) {
+  /**
+   * Needed by the `name` step's duplicate warning, which links to the thing the user already has.
+   *
+   * `SavedStep` has its own `useNavigate` for its own links; a hook cannot be shared down without
+   * prop-drilling it, and both call sites are inside the same router either way.
+   */
+  const navigate = useNavigate()
   const [track, setTrack] = useState<CaptureTrack>(intent?.track ?? 'document')
   /** An index into `visibleSteps`, not into the track's full list — see `visibleSteps`. */
   const [at, setAt] = useState(0)
@@ -1452,6 +1459,79 @@ function shapeFor(shape: string | undefined, isPlate: boolean, series: PlateSeri
   if (isPlate) return PLATE_SHAPE[series]
   return shape ?? ''
 }
+
+/**
+ * The comp's duplicate catch (comp 1015–1020, `hasDupe`).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  A WARNING WITH A LINK, never a block. Q2 survives this too.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * A household legitimately owns two of the same thing — two identical dining chairs, the same phone
+ * bought twice — so this must not disable `Continue` and must not clear anything. It says *"you already
+ * have this"* and offers the record, which is the whole intervention: the person who genuinely meant to
+ * file a second one carries on typing, and the person who forgot they had already done it taps through.
+ *
+ * ── The match is the comp's, deliberately loose in both directions ──
+ *
+ * `"MacBook Air" + "M3"` against a stored `"MacBook Air M3"`: the typed text may be a prefix of the
+ * record or the record may be a prefix of the typed text, so it tests containment **both ways**. Three
+ * characters is the floor — below it, "TV" would flag every television in the house.
+ *
+ * ── Why a query here is cheap ──
+ *
+ * `useThings(DUPLICATE_QUERY)` is the same key `things.index.tsx` already fetches unfiltered, so capture
+ * opened from the Things screen serves it straight from the cache. Opened from Now it is one small
+ * request while the user is typing a name, and `enabled` keeps it from firing at all until there are
+ * enough characters to match on.
+ */
+function DuplicateWarning({
+  draft,
+  onOpen,
+}: {
+  draft: ThingDraft
+  onOpen: (thingId: string) => void
+}) {
+  const typed = `${draft.lead} ${draft.model}`.trim().toLowerCase()
+  const enabled = typed.length > 3
+  const things = useThings(DUPLICATE_QUERY, { enabled })
+
+  if (!enabled) return null
+
+  const match = (things.data?.data ?? []).find((candidate) => {
+    const name = candidate.name.toLowerCase()
+    return name.includes(typed) || typed.includes(name)
+  })
+  if (match === undefined) return null
+
+  return (
+    /**
+     * `--status-soon`'s tint, which is the comp's `warnbg`. It is a status — "this may be a mistake" —
+     * and design.md §4 spends colour on exactly that.
+     */
+    <div className="mb-1 rounded-2 border border-rule-2 bg-status-soon-bg px-3.5 py-3">
+      <p className="text-body font-medium leading-snug [text-wrap:pretty]">
+        You already have “{match.name}” filed
+        {match.purchased_on === null ? '' : `, bought ${formatDate(match.purchased_on)}`}.
+      </p>
+      <Button
+        variant="quiet"
+        size="bare"
+        className="mt-1 px-0 text-body"
+        onClick={() => onOpen(match.id)}
+      >
+        Open the one you have
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * The unfiltered first page, matching `things.index.tsx`'s `BASE_QUERY` so the two share one fetch.
+ *
+ * Named rather than inline: an object literal in the hook call is a new query key on every render.
+ */
+const DUPLICATE_QUERY = { sort: 'name', order: 'asc', limit: 100 } as const
 
 /**
  * What the cover-length note says once a length is picked — the comp's `pCoverNote` (comp 2602).

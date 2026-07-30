@@ -47,10 +47,22 @@ export const thingListKey = (query: Partial<ThingListQuery>) =>
   [...thingsKey, 'list', query] as const
 export const thingDetailKey = (id: string) => [...thingsKey, 'detail', id] as const
 
-export function useThings(query: Partial<ThingListQuery> = {}) {
+export function useThings(
+  query: Partial<ThingListQuery> = {},
+  /**
+   * `enabled: false` holds the request without unmounting the caller.
+   *
+   * Added for capture's duplicate warning, which needs the list only once enough of a name has been
+   * typed to match on — and a component that mounts and unmounts as the user types would remount the
+   * hook on every keystroke. The key is unchanged either way, so an enabled instance still shares the
+   * Things screen's fetch.
+   */
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: thingListKey(query),
     queryFn: () => api.things.list(query),
+    enabled: options.enabled ?? true,
   })
 }
 

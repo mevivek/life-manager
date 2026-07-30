@@ -398,12 +398,21 @@ so `scoped(actor, things)` type-checked on first use. That is the claim ADR-0006
    entry union is document-shaped, and widening it was left with the endpoints rather than done before
    them. Now that the endpoints exist, this is one outbox kind plus one `writeOrQueue` per mutation —
    see the note at the top of `apps/web/src/features/things/useThings.ts`.
-3. **No client for the photo verbs.** The four endpoints exist and are tested; `api.things` has no
-   method for them and `ThingPhotos.tsx` says so on screen. Debt **D59**.
-4. **Two comments in `apps/web/` are now false**, and were left alone deliberately because the API
-   session's brief was not to touch the client: the header block in
-   `apps/web/src/features/things/useThings.ts` and the `things:` block in `apps/web/src/lib/api.ts`
-   both still announce in a banner that *"none of these endpoints exist yet"* and that every call
-   answers 404. They do exist. Fix those banners in whichever pass closes items 2 and 3 — a confident
-   false comment costs a session more than a missing one.
+3. ~~**No client for the photo verbs.**~~ **Done** — `api.things.photos` carries all five
+   (`presign-upload`, `confirm`, `presign-download`, `makeHero`, `remove`), `useThings.ts` has four
+   hooks, and `ThingPhotos.tsx` draws the comp's **172px hero** and its **150px strip** with a real
+   upload control, promotion, removal and the full-screen viewer. Debt **D59** is closed for reads and
+   writes; what is left of it is the offline half, which is item 2.
+
+   Two things about the shape, because they are the interesting part:
+
+   - **The hero is the only `<img src>` in the app minted on render** — one presign, for the `is_hero`
+     photo, once per mount. A document's scans and a thing's *strip* stay tap-to-open, because N
+     presigns per paint is the cost `DocumentFiles.tsx` refuses. The URL never reaches the Query cache.
+   - **The list row's 52×40 thumbnail (comp 633–639) is still not an image**, for the same reason: one
+     presign per row. If it ever wants the real photo the answer is a thumbnail URL on the list
+     response, not twenty presigns.
+4. ~~**Two comments in `apps/web/` are now false.**~~ **Fixed** — the banners in `useThings.ts` and
+   `lib/api.ts` no longer claim the endpoints are missing, and `ThingDetail.tsx`'s note no longer says
+   the error state is the everyday view.
 5. **Money**, which is M4 step 3 and has no doc yet.

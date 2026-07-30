@@ -170,9 +170,7 @@ function interceptCreates() {
  * mutations). `router.load()` is awaited because `RouterProvider` renders nothing until the first
  * match resolves.
  */
-async function renderWizard(
-  props: Partial<Parameters<typeof CaptureWizard>[0]> = {},
-): Promise<{ onDone: () => void; onCancel: () => void }> {
+async function renderWizard(props: Partial<Parameters<typeof CaptureWizard>[0]> = {}) {
   const onDone = vi.fn()
   const onCancel = vi.fn()
   const rootRoute = createRootRoute({
@@ -192,13 +190,29 @@ async function renderWizard(
     path: '/documents',
     component: () => null,
   })
+  /**
+   * The Things routes, because the wizard navigates into that domain from two places now: the saved
+   * step's "Add a photo", and the `name` step's duplicate warning.
+   */
+  const thing = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/things/$thingId',
+    component: () => null,
+  })
+  const things = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/things',
+    component: () => null,
+  })
   const router = createRouter({
-    routeTree: rootRoute.addChildren([detail, list]),
+    routeTree: rootRoute.addChildren([detail, list, thing, things]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
   })
   await router.load()
   render(<RouterProvider router={router as never} />)
-  return { onDone, onCancel }
+  // The router is returned so a test can assert where the wizard navigated. `window.location` cannot
+  // answer that — the history is a memory history, so the browser URL never moves.
+  return { onDone, onCancel, router }
 }
 
 const skip = () => screen.getByRole('button', { name: 'Skip for now' })
@@ -361,6 +375,51 @@ describe('a tap on a choice step advances it', () => {
     await userEvent.click(continueOn())
     // ...and the serial's LABEL follows the kind — things.md §4 rule 8.
     expect(screen.getByLabelText('Registration')).toBeInTheDocument()
+  })
+
+  it('does NOT advance on a cover length, because its note reads the answer back', async () => {
+    /**
+     * The one choice step that stays put, and the comp is deliberate about it (`pCovers.pick` sets
+     * `pCover` and never touches `addStep`, where `presets`, `types`, `people` and `pKinds` all do).
+     * This shipped auto-advancing, which made the note below unreachable.
+     */
+    await renderWizard({ intent: { track: 'thing' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Appliance' }))
+    await userEvent.type(screen.getByLabelText('Make'), 'Bosch')
+    await userEvent.click(continueOn())
+    await userEvent.click(skip())
+
+    // purchase — a date, so the length below can become a real one.
+    expect(screen.getByText('Step 4 of 6')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Bought'), '2025-10-08')
+    await userEvent.click(continueOn())
+
+    expect(screen.getByText('Step 5 of 6')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '2 years' }))
+
+    // Still on the warranty step, with the derived date read back rather than a length echoed.
+    expect(screen.getByText('Step 5 of 6')).toBeInTheDocument()
+    expect(screen.getByText('Cover runs to 8 October 2027.')).toBeInTheDocument()
+    // And it is still skippable — not advancing must not turn it into a required field (Q2).
+    expect(skip()).toBeInTheDocument()
+  })
+
+  it('says a thing gets a record even with no cover, rather than going quiet', async () => {
+    await renderWizard({ intent: { track: 'thing' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Appliance' }))
+    await userEvent.type(screen.getByLabelText('Make'), 'Bosch')
+    await userEvent.click(continueOn())
+    await userEvent.click(skip())
+    // A purchase date, because without one the step asks for the cover END date instead of a length —
+    // nothing here counts from today, which would fabricate a warranty. See the `warranty` step.
+    await userEvent.type(screen.getByLabelText('Bought'), '2025-10-08')
+    await userEvent.click(continueOn())
+    await userEvent.click(screen.getByRole('button', { name: 'No cover' }))
+
+    // "No cover" is an ANSWER, not a skip, and the comp's note is what makes that legible.
+    expect(
+      screen.getByText('No warranty to watch. It still gets a record, a photo and its documents.'),
+    ).toBeInTheDocument()
   })
 
   it('names a holder in one tap and sends it as a label', async () => {
@@ -988,5 +1047,67 @@ describe('visibleSteps', () => {
     expect(visibleSteps('document', true)[0]).toBe('whose')
     // `forThing` means nothing on the thing track — there is no thing to file a thing against.
     expect(visibleSteps('thing', true)).toHaveLength(6)
+  })
+})
+
+// ── The duplicate catch ──────────────────────────────────────────────────────
+
+/**
+ * comp 1015–1020. This was missing from the shipped wizard entirely, and a thing is the record most
+ * likely to be filed twice: there is no expiry to make the second one look obviously redundant.
+ *
+ * The two properties that matter are opposite, and both are asserted below: it **warns** (so a
+ * forgotten laptop is caught) and it **never blocks** (so a household with two identical chairs can
+ * file the second one). Q2 has no exception for a duplicate.
+ */
+describe('filing a thing you may already have', () => {
+  function serveThings(rows: Thing[]) {
+    server.use(
+      http.get('*/api/v1/things', () => HttpResponse.json({ data: rows, next_cursor: null })),
+    )
+  }
+
+  async function typeName(name: string) {
+    const rendered = await renderWizard({ intent: { track: 'thing' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Laptop' }))
+    await userEvent.type(screen.getByLabelText('Make'), name)
+    return rendered
+  }
+
+  it('warns, names the record and its purchase date, and links to it', async () => {
+    serveThings([
+      thingFixture({
+        id: '99999999-9999-4999-8999-999999999999',
+        name: 'MacBook Air M3',
+        purchased_on: '2025-10-08',
+      }),
+    ])
+    const { router } = await typeName('MacBook Air')
+
+    // The typed text is a prefix of the record, which is one of the two directions the comp matches in.
+    expect(
+      await screen.findByText(/You already have “MacBook Air M3” filed, bought 8 October 2025/),
+    ).toBeInTheDocument()
+    // And it does not block: the required field is filled, so Continue is live.
+    expect(continueOn()).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open the one you have' }))
+    // Left the wizard for the record the user already had, rather than filing a second one.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/things/99999999-9999-4999-8999-999999999999'),
+    )
+  })
+
+  it('stays quiet below four characters, so “TV” does not flag every television', async () => {
+    serveThings([thingFixture({ id: '99999999-9999-4999-8999-999999999999', name: 'TV' })])
+    await typeName('TV')
+    // Nothing, and nothing fetched either — `enabled` holds the request until there is enough to match.
+    expect(screen.queryByText(/You already have/)).toBeNull()
+  })
+
+  it('says nothing when the name is genuinely new', async () => {
+    serveThings([thingFixture({ id: '99999999-9999-4999-8999-999999999999', name: 'Dell XPS 13' })])
+    await typeName('ThinkPad E14')
+    expect(screen.queryByText(/You already have/)).toBeNull()
   })
 })
