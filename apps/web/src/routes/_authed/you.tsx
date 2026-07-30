@@ -125,37 +125,40 @@ function YouPage() {
         </p>
       </Card>
 
-      {/* ── What we hold ── */}
+      {/*
+        ── What we hold ──
+
+        ═══════════════════════════════════════════════════════════════════════════════════
+         A ROW OF FIGURES, which is what the comp draws (handoff 4, lines 392–399).
+        ═══════════════════════════════════════════════════════════════════════════════════
+
+        This was a `<dl>` of `Stat` rows, which is the right primitive for the App section below —
+        label on the left, answer on the right, one line each — and the wrong one here. The comp puts
+        three **28px mono figures side by side** with a small label under each, and it is right to: a
+        count is read as a magnitude, and three magnitudes beside each other are comparable in a way
+        three right-aligned values on separate lines are not. The rest of this screen was rewritten
+        around honesty (see the header note) and this row was left in the old shape by omission.
+
+        The labels are the comp's own words too — *"Documents filed"*, *"Expiries watched"*, *"Missing
+        a scan"* — rather than the longer ones this carried. They are short because they sit under a
+        figure, and each is still true.
+
+        `flex-wrap`, which the comp does not need: the fourth figure only exists once somebody else is
+        filed for, and four of these do not fit 390px.
+      */}
       <section className="mt-5">
         <Eyebrow>What we hold</Eyebrow>
-        <dl className="mt-1">
-          <Stat
-            term="Documents"
-            mono
-            value={ledger === null ? '—' : `${ledger.loadedCount}${approx}`}
-          />
-          <Stat
-            term="With an expiry we watch"
-            mono
-            value={ledger === null ? '—' : `${ledger.datedCount}${approx}`}
-          />
-          <Stat
-            term="Without a scan"
-            mono
-            value={ledger === null ? '—' : `${ledger.withoutScan.length}${approx}`}
-          />
+        <dl className="mt-3.5 flex flex-wrap gap-x-7 gap-y-4">
+          <Figure term="Documents filed" value={count(ledger?.loadedCount, approx)} />
+          <Figure term="Expiries watched" value={count(ledger?.datedCount, approx)} />
+          <Figure term="Missing a scan" value={count(ledger?.withoutScan.length, approx)} />
           {/*
             Only once someone else is filed for. On a single-person archive "1 including you" is a
             statistic about nothing, and it would imply the app does something with people that it
             does not — holders are a label, and nobody is invited.
           */}
           {people.length > 0 && (
-            <Stat
-              term="People filed for"
-              mono
-              value={`${people.length + 1}`}
-              note="Including you"
-            />
+            <Figure term="People filed for" value={`${people.length + 1}`} note="Including you" />
           )}
         </dl>
       </section>
@@ -370,6 +373,46 @@ function NotYet({ label, children }: { label: string; children: React.ReactNode 
  * the abstract permission prompt that component exists to avoid. This tells you where you stand and
  * sends you to Now to act.
  */
+/**
+ * One big mono figure with its label beneath — the comp's `youStats` (lines 392–399).
+ *
+ * Still a `<dt>`/`<dd>` pair inside a `<dl>`, for the reason `ui/stat.tsx` gives: "Documents filed /
+ * 12" has to announce as a pair, and two stacked spans read as two unrelated strings. The *visual*
+ * order is figure-then-label while the *document* order is label-then-figure — see the note on the
+ * wrapper below.
+ *
+ * Local to this screen rather than in `components/ui/`: it is the one place in the app that draws a
+ * figure this way, and a primitive with one caller is a primitive nobody can change safely.
+ */
+function Figure({ term, value, note }: { term: string; value: string; note?: string }) {
+  return (
+    /*
+      `flex-col-reverse`, so the DOM order is `<dt>` then `<dd>` and the VISUAL order is figure then
+      label. Both matter and they disagree: the comp draws the figure on top, and a screen reader has to
+      hear "Documents filed" before "8" or the number is a bare digit with no subject.
+    */
+    <div className="flex flex-col-reverse">
+      <dt className="mt-1.5 text-meta leading-snug text-ink-3">
+        {term}
+        {note === undefined ? '' : ` · ${note}`}
+      </dt>
+      {/* `text-display` (28px) is the token nearest the comp's 28px, in mono because a count is
+          something the machine names — design.md §3. */}
+      <dd className="font-mono text-display leading-none font-medium">{value}</dd>
+    </div>
+  )
+}
+
+/**
+ * A count, or an em dash while the ledger has not loaded.
+ *
+ * `approx` is the `+` that keeps every figure here honest: past `LEDGER_PAGE_LIMIT` the number is a
+ * floor, and a floor rendered as a total is debt D33 again in a different costume.
+ */
+function count(value: number | undefined, approx: string): string {
+  return value === undefined ? '—' : `${value}${approx}`
+}
+
 function PushStatus() {
   const publicKey = useQuery({
     queryKey: ['push', 'public-key'],
