@@ -119,6 +119,19 @@ code path is not new either — only its caller is.
 - **Cold starts pay a round trip.** A no-op migration on an already-current database is one
   connection, one lock, one `select` from `__drizzle_migrations`. Small, but on the critical path of
   every scale-from-zero request.
+
+  > **Measured 2026-07-30, and the cost is not the round trip — it is *whose* round trip goes first.**
+  > The no-op migration itself is **11ms** against an awake Postgres, and pg-boss's `start()` another
+  > 12ms; the compiled module graph is 880ms. But `applyMigrations()` runs before `app.listen()`, so
+  > it opens **the first connection to a sleeping Neon** and every endpoint queues behind that wake —
+  > including `/api/v1/health`, which [exists](../../apps/api/src/domains/health/health.routes.ts)
+  > specifically to answer without touching the database. Production measured **8825ms cold against
+  > 22ms warm on `/health`**, of which roughly 7s is unattributed by anything in our code.
+  >
+  > This does not change the decision: D25 still makes the runtime the only thing that can apply
+  > migrations. It is recorded because the honest version of "small" is "small unless the database is
+  > asleep, which on scale-to-zero is most of the time" — and because the next person to time a cold
+  > start should not have to rediscover that `/health` is not a fast path. Debt **D50**.
 - **Migrations are no longer separable from the deploy.** You cannot deploy the code and migrate
   later, or roll back the code without thinking about the schema. Pre-v1 with additive migrations
   this is fine; it is a real constraint from M3 onward, when
@@ -129,3 +142,11 @@ code path is not new either — only its caller is.
 **Revisit if:** the repository gets connected to Cloud Build properly (then move this into the
 pipeline as a step gated before `deploy`, and close D25 at the same time), or the cold-start cost
 ever shows up in practice.
+
+**The second condition has now fired** (2026-07-30, see the measurement above) — and the response was
+deliberately *not* to move migrations off boot, because D25 has not changed. What was fixed instead is
+the client, which was showing a blank screen for the whole wait rather than the app (debt **D49**).
+That treats the symptom on purpose: the wake is unavoidable while the API is scale-to-zero
+([ADR-0021](0021-cloud-run-for-the-api.md)), so the thing worth removing was the *appearance* of a
+failed launch. If the wake ever needs attacking directly, `--cpu-boost` and lazy-loading the S3 client
+off the boot path are the cheap first moves, and they are recorded in D50 rather than here.

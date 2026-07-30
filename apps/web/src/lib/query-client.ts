@@ -29,6 +29,13 @@ export function createQueryClient(): QueryClient {
          * screen instead of being replaced by an error — which is the entire point of
          * [ADR-0013](../../../../docs/decisions/0013-read-only-offline-v1.md)'s read cache. Contrast
          * the mutation setting below, where the same default is actively wrong.
+         *
+         * **The exception is a query a ROUTE GUARD awaits**, and it is not a small one. `pause`
+         * means the promise never settles, so a `beforeLoad` that awaits such a query hangs and the
+         * app launches to a permanently blank screen — which is exactly what `_authed` did offline.
+         * A query on that path must opt into `networkMode: 'offlineFirst'` for itself; see
+         * `features/spaces/useMe.ts`. This default is right for the component case and wrong for
+         * the guard case, so it stays here and the guard's query overrides it.
          */
       },
 

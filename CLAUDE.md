@@ -12,9 +12,9 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 312 tests — 312/0 measured on
+build` are green. **The suite is 316 tests — 316/0 measured on
 2026-07-30 against a real Postgres**, not inferred from a green pipeline. A container with no Docker
-measures **212 passed / 95 skipped**; all 95 skipped are the API's.
+measures **216 passed / 95 skipped**; all 95 skipped are the API's.
 
 **You can run the database-backed suites in this container without Docker.** Postgres 16 is installed
 at `/usr/lib/postgresql/16/bin`, and `initdb` refuses to run as root, so:
@@ -75,10 +75,25 @@ design handoffs: `identifier` (ADR-0026/0027), and `holder` + `relation` with
 pulled ahead of M1's "done when" by an explicit product call, so the app can be iterated on without
 provisioning R2 or VAPID. The Query cache persists to IndexedDB via `apps/web/src/lib/persister.ts`;
 there is still deliberately **no `runtimeCaching` for the API** in the service worker, because two
-caches of Tier 0 data would mean two purge paths. Three things about it are easy to undo by accident:
+caches of Tier 0 data would mean two purge paths. Four things about it are easy to undo by accident:
 `mutations.networkMode: 'always'` (without it TanStack Query pauses and silently replays offline
-writes, bypassing the outbox entirely), `shouldDehydrateMutation: () => false`, and the
-sign-out/sign-in purge in `apps/web/src/lib/session.ts`.
+writes, bypassing the outbox entirely), `shouldDehydrateMutation: () => false`, the
+sign-out/sign-in purge in `apps/web/src/lib/session.ts`, and **`RestoreGate` in
+`apps/web/src/App.tsx`**.
+
+**That last one was broken for the whole life of the feature, and the cache bought nothing (D49,
+fixed 2026-07-30).** `PersistQueryClientProvider` does *not* restore before rendering children — it
+renders them at once and restores in a `useEffect` — so the router started loading first and
+`_authed`'s `ensureQueryData(['me'])` saw an empty cache **every launch**. Online, every cold start
+waited on the API behind a blank page (`/health` measured at **8825ms cold vs 22ms warm**, D50);
+offline the guard awaited a *paused* fetch that never settles, so the app rendered **nothing at all**
+rather than the cached archive. Two rules follow, and neither is optional:
+**a query a route guard `await`s must be `networkMode: 'offlineFirst'`** (`features/spaces/useMe.ts`
+— the global `'online'` default is right for components and fatal here), and **anything reading the
+persisted cache must render below `RestoreGate`**. `apps/web/src/lib/startup.test.tsx` fails if either
+regresses. Note what did *not* catch this: `offline.test.ts` asserted `me` was on the persist
+allowlist and passed throughout — being in the cache file and reaching the guard in time are
+different claims.
 
 **Offline WRITES exist too, via an outbox** ([ADR-0024](docs/decisions/0024-offline-writes-outbox.md),
 superseding 0013's read-only stance). Edits and captures queue in IndexedDB and replay on reconnect;
@@ -128,7 +143,7 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D48 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D51 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -174,7 +189,7 @@ Four things worth knowing before you touch anything:
 | **Anything touching `holder` — the people picker, the Whose filter, the row pill** | [`documents.md`](docs/domains/documents.md) §4 rule 13. **A holder is a LABEL, never a permission** — `space_id` is still the only thing deciding who can read a document. `null` is "mine" and is drawn as *absence*, so there is no "Me" badge on a row. `relation` cannot outlive `holder` (one helper writes both). The `?holder=` filter's "mine" is the literal sentinel `HOLDER_MINE`, not `''`. And in `DocumentForm` the name fields' openness is **derived, not stored** — storing it lit two chips at once |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Adding or changing a FIELD on any cached response** | [`lib/persister.ts`](apps/web/src/lib/persister.ts)'s buster note and debt **D46** — the persisted cache is **rehydrated without re-running Zod**, so the first render after a deploy can hand a component last week's shape. A field the schema says is `string \| null` arrives `undefined`. This crashed the app at its root error boundary on a real phone |
-| **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it |
+| **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it. Then `apps/web/src/App.tsx`: the cache is only restored *before* the router because `RestoreGate` holds it there (D49), and a query awaited by a route guard needs `networkMode: 'offlineFirst'` or it hangs forever offline |
 | **Calling a document mutation from a new place** | `useDocuments.ts` — `useCreateDocument` and `useUpdateDocument` may return `{ queued: true }` rather than a document (ADR-0024), so every call site branches; an edit must send the version the form was **read** at |
 | **Adding a mutable column or a new writable domain** | `versioned()` in `apps/api/src/db/columns.ts` — an editable table needs the ADR-0024 version column, and its `PATCH` must take the version as a **required** field so a forgotten precondition is a type error rather than silent last-write-wins |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
@@ -185,7 +200,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D48, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D51, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**

@@ -1,5 +1,4 @@
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
-import type { PersistedClient } from '@tanstack/react-query-persist-client'
 import { del, get, set } from 'idb-keyval'
 
 /**
@@ -94,11 +93,16 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
  * would buy nothing. `ensureQueryData` returns rehydrated data without a fetch, which is precisely
  * what makes an offline cold start work.
  *
+ * **It only pays off if the restore finishes before the guard runs**, which it did not until
+ * `App.tsx` grew its `RestoreGate` — the guard fetched over the network on every launch and this
+ * entry bought nothing. See the block comment there; `startup.test.tsx` pins it.
+ *
  * The objection to caching `/me` is that a stale space list is dangerous. It is stale-data-shaped,
  * not a security hole: authorization is server-side on every read and write
  * (security-model.md §1(3)), so the client's copy only decides what it *asks* for, never what it is
  * granted. Staleness is the thing ADR-0013 requires us to label rather than hide — see
- * `StaleNotice`.
+ * `components/OfflineNotice.tsx`, which derives the age it shows from the oldest `dataUpdatedAt` in
+ * the restored cache.
  */
 const PERSISTED_KEY_ROOTS = new Set(['documents', 'reminders', 'me'])
 
@@ -154,19 +158,13 @@ export const dehydrateOptions = {
   shouldDehydrateMutation: () => false,
 }
 
-/** How old the restored cache is, or `null` when nothing was restored. Used to label stale data. */
-export async function persistedCacheAge(): Promise<number | null> {
-  const raw = await get<string>(CACHE_KEY)
-  if (raw === undefined) return null
-  try {
-    const parsed: PersistedClient = JSON.parse(raw)
-    return typeof parsed.timestamp === 'number' ? Date.now() - parsed.timestamp : null
-  } catch {
-    // A cache we cannot parse is a cache we cannot date. Not an error path worth surfacing — the
-    // persister will overwrite it on the next write — but it must not throw into a render.
-    return null
-  }
-}
+/**
+ * NOTE: there was a `persistedCacheAge()` here, described as "used to label stale data". Nothing
+ * called it. `OfflineNotice` computes the age it shows from the oldest `dataUpdatedAt` across the
+ * live query cache instead, which is the better source — it dates the *data on screen* rather than
+ * the moment the file was last written. Removed rather than kept, because an exported helper that
+ * names a requirement reads as the thing implementing it.
+ */
 
 /**
  * Deletes the persisted cache outright.

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/label'
 import { useHolders } from '@/features/documents/useDocuments'
 import { toLedger, useLedger } from '@/features/documents/useLedger'
+import { meQueryOptions } from '@/features/spaces/useMe'
 import { api } from '@/lib/api'
 import { endSession } from '@/lib/session'
 import { useTheme } from '@/lib/useTheme'
@@ -48,7 +49,17 @@ function YouPage() {
   const queryClient = useQueryClient()
   const { resolved, toggle } = useTheme()
 
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me, staleTime: 5 * 60 * 1000 })
+  /**
+   * `meQueryOptions`, not a third hand-written copy of the same query.
+   *
+   * This used to be `useQuery({ queryKey: ['me'], queryFn: api.me, staleTime: 5 * 60 * 1000 })`,
+   * which is not merely duplication: two observers on one key with different `networkMode` values
+   * means whichever registers first decides how the *shared* query behaves. Mounting this screen
+   * could therefore put `['me']` back on the default `'online'` mode and re-break the offline launch
+   * that `features/spaces/useMe.ts` exists to fix. The longer `staleTime` is kept — it is a genuine
+   * per-screen choice, and unlike `networkMode` it is safe to vary per observer.
+   */
+  const me = useQuery({ ...meQueryOptions, staleTime: 5 * 60 * 1000 })
 
   /**
    * Counts come from the ledger the Now screen and the tab badge already fetched — same query key, so
