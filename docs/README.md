@@ -37,6 +37,7 @@ that must be read exhaustively are no better than no docs
 | **Building the vault** | [security-model.md](security-model.md) §5 → [ADR-0010](decisions/0010-vault-key-hierarchy.md) |
 | **File upload or download** | [ADR-0008](decisions/0008-object-storage-r2.md) → [architecture.md](architecture.md) §6 |
 | **Anything visual — a screen, a component, a colour, a size** | [conventions/design.md](conventions/design.md) → [ADR-0025](decisions/0025-ledger-design-system.md) |
+| **Seeing the original design comp for a screen** | [design/](design/README.md) — the Claude Design handoff bundles; handoff 3 is authoritative |
 | **Writing tests** | [conventions/testing.md](conventions/testing.md) |
 | **Deciding what to build next** | [product/brain.md](product/brain.md) → [product/idea-backlog.md](product/idea-backlog.md) → [roadmap.md](roadmap.md) |
 | **Brainstorming features with the human** | [product/brain.md](product/brain.md) §7 |

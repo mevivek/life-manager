@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+--canvas:#E4E0D6;
+--paper:#F7F5F0; --raised:#FFFFFF; --sunken:#EFEBE3;
+--ink:#15140F; --ink2:#4A4740; --ink3:#7C776C;
+--rule:#DFDAD0; --rule2:#C6BFB2;
+--ok:#2C5B4A; --warn:#8A5A12; --alert:#96331F; --focus:#2E5AA8;
+--okbg:#E3EDE7; --warnbg:#F3EAD7; --alertbg:#F3E1DB;
+--onink:#F7F5F0;
+--sans:"IBM Plex Sans",system-ui,sans-serif; --serif:"Newsreader",Georgia,serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+[data-t="dark"]{
+--canvas:#0A0A09;
+--paper:#131311; --raised:#1C1C19; --sunken:#0D0D0C;
+--ink:#F2EFE8; --ink2:#B4AFA4; --ink3:#8A857A;
+--rule:#2E2E2A; --rule2:#46453F;
+--ok:#7FBFA4; --warn:#E0B063; --alert:#E88B72; --focus:#8FB4F2;
+--okbg:#17251F; --warnbg:#2A2114; --alertbg:#2B1A16;
+--onink:#131311;
+}
+body{margin:0;background:var(--canvas);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:var(--focus);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font:inherit;color:inherit}
+input,textarea{font-family:inherit}
+input:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+@keyframes lmpulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes lmshimmer{0%{background-position:-200px 0}100%{background-position:320px 0}}
+@keyframes lmrise{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+
+<div style="display:flex;align-items:flex-start;gap:48px;padding:44px 48px 80px">
+
+<div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:24px">
+  <div style="display:flex;align-items:baseline;gap:10px">
+    <span style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Prototype</span>
+    <span style="font:400 13px/1 var(--sans);color:var(--ink3)">tap it — it works</span>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:6px;width:410px">
+    <button onClick="{{ toggleTheme }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:var(--paper);font:500 12px var(--sans);cursor:pointer">{{ themeLabel }}</button>
+    <button onClick="{{ setLibEmpty }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:{{ bgEmpty }};color:{{ fgEmpty }};font:500 12px var(--sans);cursor:pointer">Zero docs</button>
+    <button onClick="{{ setLibClear }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:{{ bgClear }};color:{{ fgClear }};font:500 12px var(--sans);cursor:pointer">All clear</button>
+    <button onClick="{{ setLibFull }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:{{ bgFull }};color:{{ fgFull }};font:500 12px var(--sans);cursor:pointer">Needs attention</button>
+    <button onClick="{{ goAuth }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:var(--paper);font:500 12px var(--sans);cursor:pointer">Sign in</button>
+    <button onClick="{{ cyclePush }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:var(--paper);font:500 12px var(--sans);cursor:pointer">Push: {{ pushLabel }}</button>
+    <button onClick="{{ toggleFail }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:{{ bgFail }};color:{{ fgFail }};font:500 12px var(--sans);cursor:pointer">Server fails</button>
+    <button onClick="{{ toggleLoading }}" style="min-height:30px;padding:0 11px;border:1px solid var(--rule2);border-radius:999px;background:{{ bgLoad }};color:{{ fgLoad }};font:500 12px var(--sans);cursor:pointer">Loading</button>
+  </div>
+
+  <div style="position:relative;width:410px;height:864px;border-radius:52px;background:#1A1A18;padding:10px;box-shadow:0 30px 60px -20px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.2)">
+    <div style="position:relative;width:390px;height:844px;border-radius:42px;overflow:hidden;background:var(--paper);display:flex;flex-direction:column">
+
+      <div style="height:47px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 7px;font:500 14px var(--sans);color:var(--ink)">
+        <span>9:41</span>
+        <div style="display:flex;align-items:center;gap:5px">
+          <div style="display:flex;align-items:flex-end;gap:2px;height:10px"><div style="width:3px;height:4px;background:var(--ink);border-radius:1px"></div><div style="width:3px;height:6px;background:var(--ink);border-radius:1px"></div><div style="width:3px;height:8px;background:var(--ink);border-radius:1px"></div><div style="width:3px;height:10px;background:var(--ink);border-radius:1px"></div></div>
+          <div style="width:22px;height:11px;border:1px solid var(--ink);border-radius:3px;padding:1.5px"><div style="width:70%;height:100%;background:var(--ink);border-radius:1px"></div></div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;padding:0 24px 40px;overflow:hidden">
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px">
+            <div style="width:38px;height:38px;border:1.5px solid var(--ink);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:18px">
+              <div style="width:14px;height:2px;background:var(--ink)"></div>
+            </div>
+            <h1 style="margin:0;font:400 30px/1.15 var(--serif);letter-spacing:-.01em">The paperwork of a life,<br>with the dates attached.</h1>
+            <p style="margin:6px 0 0;font:400 16px/1.45 var(--sans);color:var(--ink2);max-width:300px;text-wrap:pretty">Private, single-user. We tell you what's expiring before it does.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label for="em" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Email</label>
+              <input id="em" type="email" value="rowan@hey.com" style="height:52px;padding:0 14px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label for="pw" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Password</label>
+              <input id="pw" type="password" value="••••••••••" style="height:52px;padding:0 14px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+            </div>
+            <button onClick="{{ signIn }}" style="height:52px;margin-top:6px;border:none;border-radius:10px;background:var(--ink);color:var(--onink);font:600 16px var(--sans);cursor:pointer">Sign in</button>
+            <button onClick="{{ signIn }}" style="height:52px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);font:500 16px var(--sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px">
+              <span style="width:17px;height:17px;border-radius:50%;border:2px solid var(--ink3);border-top-color:var(--alert);border-right-color:var(--warn);border-bottom-color:var(--ok)"></span>
+              Continue with Google
+            </button>
+            <div style="display:flex;justify-content:center;gap:6px;margin-top:8px;font:400 14px var(--sans);color:var(--ink3)">
+              <span>New here?</span><a href="#" onClick="{{ signIn }}">Create an account</a>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isNow }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;overflow-y:auto;overflow-x:hidden">
+          <div style="padding:6px 22px 0">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">{{ todayLabel }}</div>
+              <button onClick="{{ openAdd }}" style="display:flex;align-items:center;gap:6px;min-height:44px;padding:0 4px;border:none;background:transparent;font:500 15px var(--sans);color:var(--ink2);cursor:pointer">
+                <span style="position:relative;width:13px;height:13px"><span style="position:absolute;top:5.5px;left:0;width:13px;height:2px;border-radius:1px;background:var(--ink2)"></span><span style="position:absolute;left:5.5px;top:0;width:2px;height:13px;border-radius:1px;background:var(--ink2)"></span></span>
+                Add
+              </button>
+            </div>
+            <h1 style="margin:5px 0 0;font:400 28px/1.15 var(--serif);letter-spacing:-.01em">{{ nowHeadline }}</h1>
+            <p style="margin:7px 0 0;font:400 15px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">{{ nowSub }}</p>
+          </div>
+
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:24px 22px;display:flex;flex-direction:column;gap:14px">
+              <div style="height:12px;width:40%;border-radius:3px;background:linear-gradient(90deg,var(--sunken),var(--rule),var(--sunken));background-size:320px 100%;animation:lmshimmer 1.3s linear infinite"></div>
+              <div style="height:58px;border-radius:10px;background:linear-gradient(90deg,var(--sunken),var(--rule),var(--sunken));background-size:320px 100%;animation:lmshimmer 1.3s linear infinite"></div>
+              <div style="height:58px;border-radius:10px;background:linear-gradient(90deg,var(--sunken),var(--rule),var(--sunken));background-size:320px 100%;animation:lmshimmer 1.3s linear infinite"></div>
+              <div style="height:58px;border-radius:10px;background:linear-gradient(90deg,var(--sunken),var(--rule),var(--sunken));background-size:320px 100%;animation:lmshimmer 1.3s linear infinite"></div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showFailed }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:20px 22px;padding:16px;border:1px solid var(--rule2);border-radius:12px;background:var(--alertbg)">
+              <div style="font:600 15px var(--sans)">Couldn't load your documents</div>
+              <div style="margin-top:4px;font:400 14px/1.4 var(--sans);color:var(--ink2)">The server didn't answer. Your data is safe.</div>
+              <button onClick="{{ retry }}" style="margin-top:12px;min-height:44px;padding:0 16px;border:1px solid var(--ink);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Try again</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showZero }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:26px 22px 0">
+              <div style="padding:20px;border:1px dashed var(--rule2);border-radius:14px;background:var(--raised)">
+                <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Start here</div>
+                <div style="margin-top:10px;font:400 20px/1.3 var(--serif)">Name one thing. That's the whole first step.</div>
+                <input value="{{ quickTitle }}" onChange="{{ onQuickTitle }}" placeholder="Passport" style="margin-top:14px;width:100%;height:52px;padding:0 14px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--paper);color:var(--ink)">
+                <button onClick="{{ quickSave }}" style="margin-top:10px;width:100%;height:52px;border:none;border-radius:10px;background:var(--ink);color:var(--onink);font:600 16px var(--sans);cursor:pointer">Save it</button>
+                <div style="margin-top:12px;font:400 14px/1.45 var(--sans);color:var(--ink3);text-wrap:pretty">No type, no date, no scan needed. You can add those any time — or never.</div>
+              </div>
+              <div style="margin-top:22px;font:400 14px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">Three good first documents: your passport, your car insurance, the boiler warranty. All three have dates that matter.</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showBody }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:22px 0 0">
+
+              <sc-if value="{{ hasAttention }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:0 22px">
+                  <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:9px">Needs you</div>
+                  <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);overflow:hidden">
+                    <sc-for list="{{ attention }}" as="r" hint-placeholder-count="2">
+                      <div onClick="{{ r.open }}" tabindex="0" style="display:flex;align-items:center;gap:13px;min-height:68px;padding:13px 15px;border-top:{{ r.sep }};cursor:pointer">
+                        <div style="width:14px;flex:none;display:flex;align-items:center;justify-content:center">
+                          <sc-if value="{{ r.isSquare }}" hint-placeholder-val="{{ true }}"><div style="width:13px;height:13px;background:{{ r.tone }};border-radius:2px"></div></sc-if>
+                          <sc-if value="{{ r.isRing }}" hint-placeholder-val="{{ false }}"><div style="width:13px;height:13px;border:3px solid {{ r.tone }};border-radius:50%;animation:lmpulse 2s ease-in-out infinite"></div></sc-if>
+                          <sc-if value="{{ r.isGauge }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:2px"><div style="width:13px;height:3px;border-radius:1px;background:{{ r.g3 }}"></div><div style="width:13px;height:3px;border-radius:1px;background:{{ r.g2 }}"></div><div style="width:13px;height:3px;border-radius:1px;background:{{ r.g1 }}"></div></div></sc-if>
+                          <sc-if value="{{ r.isDash }}" hint-placeholder-val="{{ false }}"><div style="width:13px;height:2px;background:var(--ink3)"></div></sc-if>
+                        </div>
+                        <div style="flex:1;min-width:0">
+                          <div style="font:500 16px/1.3 var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</div>
+                          <div style="margin-top:3px;display:flex;align-items:baseline;gap:7px">
+                            <span style="flex:none;font:{{ r.statusFont }};letter-spacing:{{ r.statusTrack }};text-transform:{{ r.statusCase }};color:{{ r.tone }};white-space:nowrap">{{ r.status }}</span>
+                            <span style="flex:1;min-width:0;font:400 13px var(--sans);color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.meta }}</span>
+                          </div>
+                        </div>
+                        <div style="flex:none;width:7px;height:12px;border-right:1.5px solid var(--rule2);border-top:1.5px solid var(--rule2);transform:rotate(45deg)"></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ allClear }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:0 22px">
+                  <div style="display:flex;gap:13px;padding:16px;border:1px solid var(--rule2);border-radius:12px;background:var(--okbg)">
+                    <div style="flex:none;width:14px;display:flex;justify-content:center;padding-top:3px"><div style="width:13px;height:13px;border:3px solid var(--ok);border-radius:50%"></div></div>
+                    <div>
+                      <div style="font:500 16px/1.3 var(--sans)">Nothing expires in the next 90 days</div>
+                      <div style="margin-top:4px;font:400 14px/1.45 var(--sans);color:var(--ink2)">Every document with a date is checked once a day. We'd have told you.</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ showPushAsk }}" hint-placeholder-val="{{ false }}">
+                <div style="margin:16px 22px 0;padding:16px;border:1px solid var(--rule2);border-radius:12px;background:var(--raised)">
+                  <div style="font:500 16px/1.3 var(--sans)">Want us to tell you, or will you check back?</div>
+                  <div style="margin-top:4px;font:400 14px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">Your passport expires 12 Sep 2026. We can send a notification 90, 30 and 7 days before.</div>
+                  <div style="display:flex;gap:8px;margin-top:13px">
+                    <button onClick="{{ pushGrant }}" style="flex:1;min-height:44px;border:none;border-radius:9px;background:var(--ink);color:var(--onink);font:500 15px var(--sans);cursor:pointer">Turn on reminders</button>
+                    <button onClick="{{ pushLater }}" style="min-height:44px;padding:0 14px;border:1px solid var(--rule2);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Not now</button>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ showPushDenied }}" hint-placeholder-val="{{ false }}">
+                <div style="margin:16px 22px 0;padding:16px;border:1px solid var(--rule2);border-radius:12px;background:var(--warnbg)">
+                  <div style="display:flex;gap:11px">
+                    <div style="flex:none;width:13px;height:13px;margin-top:4px;background:var(--warn);border-radius:2px"></div>
+                    <div>
+                      <div style="font:500 16px/1.3 var(--sans)">Notifications are blocked</div>
+                      <div style="margin-top:4px;font:400 14px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">Reminders are set, but your phone won't deliver them. Settings → Notifications → Life Manager → Allow.</div>
+                      <div style="margin-top:9px;font:400 13px var(--sans);color:var(--ink3)">Until then, this screen is the reminder.</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ showPushUnsupported }}" hint-placeholder-val="{{ false }}">
+                <div style="margin:16px 22px 0;padding:14px 16px;border:1px solid var(--rule);border-radius:12px;background:var(--sunken)">
+                  <div style="font:400 14px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">This browser can't do notifications. Add Life Manager to your home screen and open it from there, or check back — dates live on this screen either way.</div>
+                </div>
+              </sc-if>
+
+              <div style="padding:26px 22px 0">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:11px">
+                  <span style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">The horizon</span>
+                  <span style="font:400 13px var(--sans);color:var(--ink3)">{{ horizonCount }}</span>
+                </div>
+                <div style="position:relative;padding-left:20px">
+                  <div style="position:absolute;left:4px;top:6px;bottom:16px;width:1px;background:var(--rule2)"></div>
+                  <sc-for list="{{ horizon }}" as="h" hint-placeholder-count="4">
+                    <div onClick="{{ h.open }}" tabindex="0" style="position:relative;min-height:56px;padding:0 0 20px;cursor:pointer">
+                      <div style="position:absolute;left:-20px;top:5px;width:9px;height:9px;border-radius:50%;background:{{ h.dotBg }};border:2px solid {{ h.tone }};box-sizing:border-box"></div>
+                      <div style="font:{{ h.whenFont }};letter-spacing:{{ h.whenTrack }};text-transform:{{ h.whenCase }};color:{{ h.tone }}">{{ h.when }}</div>
+                      <div style="margin-top:3px;font:400 17px/1.3 var(--serif)">{{ h.title }}</div>
+                      <div style="margin-top:2px;font:400 13px var(--sans);color:var(--ink3)">{{ h.meta }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">{{ horizonFoot }}</div>
+              </div>
+
+              <sc-if value="{{ hasNoFile }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:8px 22px 0">
+                  <div onClick="{{ goNoFile }}" tabindex="0" style="display:flex;align-items:center;gap:13px;min-height:60px;padding:14px 16px;border:1px solid var(--rule);border-radius:12px;background:var(--sunken);cursor:pointer">
+                    <div style="flex:none;width:15px;height:19px;border:1.5px dashed var(--ink3);border-radius:2px"></div>
+                    <div style="flex:1">
+                      <div style="font:500 15px/1.3 var(--sans)">{{ noFileCount }}</div>
+                      <div style="margin-top:2px;font:400 13px var(--sans);color:var(--ink3)">Worth a photo next time you have them out</div>
+                    </div>
+                    <div style="flex:none;width:7px;height:12px;border-right:1.5px solid var(--rule2);border-top:1.5px solid var(--rule2);transform:rotate(45deg)"></div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="padding:24px 22px 30px">
+                <div style="border-top:1px solid var(--rule);padding-top:13px;font:400 13px/1.6 var(--sans);color:var(--ink3);text-wrap:pretty">{{ ledgerLine }}</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isArchive }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:none;padding:6px 22px 12px;border-bottom:1px solid var(--rule)">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <h1 style="margin:0;font:400 26px/1.15 var(--serif)">Documents</h1>
+              <span style="font:400 14px var(--sans);color:var(--ink3)">{{ archiveTotal }}</span>
+            </div>
+            <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Title, issuer, notes, tag" style="margin-top:12px;width:100%;height:48px;padding:0 14px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+            <div style="display:flex;gap:7px;margin-top:10px;overflow-x:auto;padding-bottom:2px">
+              <button onClick="{{ toggleTypeMenu }}" style="flex:none;min-height:36px;padding:0 12px;border:1px solid {{ fType.bd }};border-radius:999px;background:{{ fType.bg }};color:{{ fType.fg }};font:500 14px var(--sans);cursor:pointer;white-space:nowrap">{{ fType.label }}</button>
+              <button onClick="{{ toggleTag }}" style="flex:none;min-height:36px;padding:0 12px;border:1px solid {{ fTag.bd }};border-radius:999px;background:{{ fTag.bg }};color:{{ fTag.fg }};font:500 14px var(--sans);cursor:pointer;white-space:nowrap">{{ fTag.label }}</button>
+              <button onClick="{{ toggleBefore }}" style="flex:none;min-height:36px;padding:0 12px;border:1px solid {{ fBefore.bd }};border-radius:999px;background:{{ fBefore.bg }};color:{{ fBefore.fg }};font:500 14px var(--sans);cursor:pointer;white-space:nowrap">{{ fBefore.label }}</button>
+              <button onClick="{{ toggleFile }}" style="flex:none;min-height:36px;padding:0 12px;border:1px solid {{ fFile.bd }};border-radius:999px;background:{{ fFile.bg }};color:{{ fFile.fg }};font:500 14px var(--sans);cursor:pointer;white-space:nowrap">{{ fFile.label }}</button>
+            </div>
+            <sc-if value="{{ typeMenu }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:10px;padding:8px;border:1px solid var(--rule2);border-radius:12px;background:var(--raised);display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{ types }}" as="t" hint-placeholder-count="7">
+                  <button onClick="{{ t.pick }}" style="min-height:36px;padding:0 11px;border:1px solid {{ t.bd }};border-radius:999px;background:{{ t.bg }};color:{{ t.fg }};font:500 14px var(--sans);cursor:pointer">{{ t.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="flex:1;overflow-y:auto">
+            <sc-if value="{{ archiveEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:40px 30px;text-align:center">
+                <div style="font:400 19px/1.3 var(--serif)">{{ archiveEmptyTitle }}</div>
+                <div style="margin-top:7px;font:400 14px/1.45 var(--sans);color:var(--ink3)">{{ archiveEmptySub }}</div>
+                <sc-if value="{{ hasFilters }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ clearFilters }}" style="margin-top:14px;min-height:44px;padding:0 16px;border:1px solid var(--ink);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Clear filters</button>
+                </sc-if>
+              </div>
+            </sc-if>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+              <div onClick="{{ r.open }}" tabindex="0" style="display:flex;align-items:center;gap:13px;min-height:72px;padding:14px 22px;border-bottom:1px solid var(--rule);cursor:pointer">
+                <div style="width:14px;flex:none;display:flex;align-items:center;justify-content:center">
+                  <sc-if value="{{ r.isSquare }}" hint-placeholder-val="{{ false }}"><div style="width:13px;height:13px;background:{{ r.tone }};border-radius:2px"></div></sc-if>
+                  <sc-if value="{{ r.isRing }}" hint-placeholder-val="{{ false }}"><div style="width:13px;height:13px;border:3px solid {{ r.tone }};border-radius:50%"></div></sc-if>
+                  <sc-if value="{{ r.isGauge }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:2px"><div style="width:13px;height:3px;border-radius:1px;background:{{ r.g3 }}"></div><div style="width:13px;height:3px;border-radius:1px;background:{{ r.g2 }}"></div><div style="width:13px;height:3px;border-radius:1px;background:{{ r.g1 }}"></div></div></sc-if>
+                  <sc-if value="{{ r.isDash }}" hint-placeholder-val="{{ false }}"><div style="width:13px;height:2px;background:var(--ink3)"></div></sc-if>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="font:500 16px/1.3 var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</div>
+                  <div style="margin-top:3px;display:flex;align-items:baseline;gap:7px">
+                    <span style="font:{{ r.statusFont }};letter-spacing:{{ r.statusTrack }};text-transform:{{ r.statusCase }};color:{{ r.tone }};white-space:nowrap">{{ r.status }}</span>
+                    <span style="font:400 13px var(--sans);color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.meta }}</span>
+                    <sc-if value="{{ r.hasMask }}" hint-placeholder-val="{{ false }}">
+                      <span style="flex:none;font:500 12px var(--mono);letter-spacing:.1em;color:var(--ink3)">{{ r.mask }}</span>
+                    </sc-if>
+                  </div>
+                </div>
+                <sc-if value="{{ r.noFile }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:none;width:13px;height:17px;border:1.5px dashed var(--ink3);border-radius:2px"></div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ hasMore }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:18px 22px 34px;display:flex;flex-direction:column;align-items:center;gap:8px">
+                <button onClick="{{ loadMore }}" style="min-height:44px;padding:0 18px;border:1px solid var(--rule2);border-radius:999px;background:var(--raised);font:500 15px var(--sans);cursor:pointer">Load 20 more</button>
+                <span style="font:400 13px var(--sans);color:var(--ink3)">{{ pageLine }}</span>
+              </div>
+            </sc-if>
+            <div style="height:78px"></div>
+          </div>
+        </div>
+        <button onClick="{{ openAdd }}" style="position:absolute;right:18px;bottom:104px;display:flex;align-items:center;gap:9px;min-height:52px;padding:0 20px 0 17px;border:none;border-radius:999px;background:var(--ink);color:var(--onink);font:600 16px var(--sans);cursor:pointer;box-shadow:0 8px 24px rgba(10,10,9,.24)">
+          <span style="position:relative;width:16px;height:16px"><span style="position:absolute;top:7px;left:0;width:16px;height:2.5px;border-radius:1px;background:var(--onink)"></span><span style="position:absolute;left:7px;top:0;width:2.5px;height:16px;border-radius:1px;background:var(--onink)"></span></span>
+          Add
+        </button>
+      </sc-if>
+
+      <sc-if value="{{ isYou }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;overflow-y:auto;padding:6px 22px 40px">
+          <h1 style="margin:0;font:400 26px/1.15 var(--serif)">You</h1>
+
+          <div style="margin-top:16px;padding:16px;border:1px solid var(--rule2);border-radius:12px;background:var(--raised)">
+            <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Account</div>
+            <div style="margin-top:10px;font:400 18px var(--serif)">rowan@hey.com</div>
+            <div style="margin-top:3px;font:400 13px var(--sans);color:var(--ink3)">Email and password · signed in since 12 Feb 2026</div>
+            <div style="display:flex;gap:8px;margin-top:13px">
+              <button style="min-height:44px;padding:0 14px;border:1px solid var(--rule2);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Change password</button>
+              <button style="min-height:44px;padding:0 14px;border:1px solid var(--rule2);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Sign out</button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px">
+            <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:4px">What we hold</div>
+            <sc-for list="{{ youStats }}" as="y" hint-placeholder-count="4">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;min-height:48px;padding:13px 0;border-bottom:1px solid var(--rule)">
+                <span style="font:400 15px var(--sans);color:var(--ink2)">{{ y.k }}</span>
+                <span style="font:500 16px var(--mono)">{{ y.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ youPushRow }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:16px;padding:15px 16px;border:1px solid var(--rule2);border-radius:12px;background:var(--raised)">
+              <div style="font:500 15px var(--sans)">{{ youPushTitle }}</div>
+              <div style="margin-top:4px;font:400 13.5px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">{{ youPushBody }}</div>
+            </div>
+          </sc-if>
+
+          <div style="margin-top:16px;padding:15px 16px;border:1px solid var(--rule);border-radius:12px;background:var(--sunken)">
+            <div style="font:500 15px var(--sans)">Numbers are stored, and hidden by default</div>
+            <div style="margin-top:5px;font:400 13.5px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">Passport, Aadhaar, licence and policy numbers are kept in full and encrypted at rest, because a number you can't read is a number you'll go and dig the original out for. On screen you see the last four until you tap Reveal.</div>
+          </div>
+
+          <div style="margin-top:16px">
+            <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:4px">App</div>
+            <sc-for list="{{ youApp }}" as="a" hint-placeholder-count="4">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;min-height:48px;padding:13px 0;border-bottom:1px solid var(--rule)">
+                <span style="font:400 15px var(--sans);color:var(--ink2)">{{ a.k }}</span>
+                <span style="font:400 14px var(--sans);color:var(--ink3);text-align:right">{{ a.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--rule)">
+            <button style="min-height:44px;padding:0;border:none;background:transparent;font:500 15px var(--sans);color:var(--alert);cursor:pointer">Delete my account and everything in it</button>
+            <div style="font:400 13px/1.45 var(--sans);color:var(--ink3)">Immediate, and we mean it. Export first if you want a copy.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;overflow-y:auto">
+          <div style="padding:2px 22px 0">
+            <button onClick="{{ back }}" style="display:flex;align-items:center;gap:7px;min-height:44px;padding:0;border:none;background:transparent;font:500 15px var(--sans);color:var(--ink2);cursor:pointer">
+              <span style="width:7px;height:12px;border-left:1.5px solid var(--ink2);border-bottom:1.5px solid var(--ink2);transform:rotate(45deg)"></span>{{ backLabel }}
+            </button>
+          </div>
+
+          <sc-if value="{{ notFound }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:60px 30px;text-align:center">
+              <div style="width:15px;height:19px;margin:0 auto 16px;border:1.5px solid var(--ink3);border-radius:2px"></div>
+              <div style="font:400 20px/1.3 var(--serif)">This document isn't here</div>
+              <div style="margin-top:8px;font:400 14px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">It may have been deleted, or the link is wrong. Nothing else to read into it.</div>
+              <button onClick="{{ goArchive }}" style="margin-top:18px;min-height:44px;padding:0 16px;border:1px solid var(--ink);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Back to documents</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasDoc }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:8px 22px 40px">
+              <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">{{ d.typeLabel }}</div>
+              <h1 style="margin:9px 0 0;font:400 27px/1.18 var(--serif);letter-spacing:-.01em">{{ d.title }}</h1>
+
+              <div style="margin-top:16px;padding:16px;border:1px solid var(--rule2);border-radius:12px;background:{{ d.statusBg }}">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <sc-if value="{{ d.isSquare }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:15px;height:15px;background:{{ d.tone }};border-radius:2px"></div></sc-if>
+                  <sc-if value="{{ d.isRing }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:15px;height:15px;border:3px solid {{ d.tone }};border-radius:50%"></div></sc-if>
+                  <sc-if value="{{ d.isGauge }}" hint-placeholder-val="{{ true }}"><div style="flex:none;display:flex;flex-direction:column;gap:2px"><div style="width:15px;height:3px;border-radius:1px;background:{{ d.g3 }}"></div><div style="width:15px;height:3px;border-radius:1px;background:{{ d.g2 }}"></div><div style="width:15px;height:3px;border-radius:1px;background:{{ d.g1 }}"></div></div></sc-if>
+                  <sc-if value="{{ d.isDash }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:15px;height:2px;background:var(--ink3)"></div></sc-if>
+                  <div>
+                    <div style="font:{{ d.statusFontBig }};letter-spacing:{{ d.statusTrack }};text-transform:{{ d.statusCase }};color:{{ d.tone }}">{{ d.status }}</div>
+                    <div style="margin-top:2px;font:400 14px var(--sans);color:var(--ink2)">{{ d.statusSub }}</div>
+                  </div>
+                </div>
+                <sc-if value="{{ d.hasReminders }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:13px;padding-top:12px;border-top:1px solid var(--rule)">
+                    <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Reminders</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                      <sc-for list="{{ d.reminders }}" as="rm" hint-placeholder-count="3">
+                        <span style="min-height:30px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid var(--rule2);border-radius:999px;font:400 13px var(--sans);color:var(--ink2)">{{ rm.label }}</span>
+                      </sc-for>
+                    </div>
+                    <div style="margin-top:9px;font:400 13px/1.45 var(--sans);color:var(--ink3)">{{ d.reminderNote }}</div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="margin-top:22px">
+                <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:4px">Details</div>
+                <sc-if value="{{ d.hasNumber }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin:6px 0 14px;padding:14px 16px;border:1px solid var(--rule2);border-radius:12px;background:var(--sunken)">
+                    <div style="font:400 13px var(--sans);color:var(--ink3)">{{ d.numLabel }}</div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:7px">
+                      <span style="flex:1;min-width:0;font:{{ d.numFont }};letter-spacing:{{ d.numTrack }};word-break:break-all">{{ d.numValue }}</span>
+                      <button onClick="{{ toggleNum }}" style="flex:none;min-height:44px;padding:0 12px;border:1px solid var(--rule2);border-radius:9px;background:var(--raised);font:500 14px var(--sans);cursor:pointer">{{ d.numToggle }}</button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:14px;margin-top:6px">
+                      <button onClick="{{ copyNum }}" style="min-height:44px;padding:0;border:none;background:transparent;font:500 14px var(--sans);color:var(--ink2);cursor:pointer">Copy</button>
+                      <span style="font:400 12.5px/1.4 var(--sans);color:var(--ink3)">Stored in full, encrypted at rest, hidden until you ask.</span>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-for list="{{ d.fields }}" as="f" hint-placeholder-count="5">
+                  <div onClick="{{ f.edit }}" tabindex="0" style="display:flex;align-items:baseline;gap:14px;min-height:48px;padding:13px 0;border-bottom:1px solid var(--rule);cursor:pointer">
+                    <div style="flex:none;width:96px;font:400 14px var(--sans);color:var(--ink3)">{{ f.k }}</div>
+                    <div style="flex:1;font:{{ f.font }};color:{{ f.color }};text-wrap:pretty">{{ f.v }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="margin-top:26px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:10px">
+                  <span style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Scans</span>
+                  <span style="font:400 13px var(--sans);color:var(--ink3)">{{ d.scanCount }}</span>
+                </div>
+                <sc-if value="{{ d.noScans }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:18px 16px;border:1px dashed var(--rule2);border-radius:12px;background:var(--raised)">
+                    <div style="font:400 16px/1.35 var(--sans)">No scan yet</div>
+                    <div style="margin-top:4px;font:400 13px/1.45 var(--sans);color:var(--ink3)">That's fine — the record still works. A photo makes it useful when you're not home.</div>
+                    <button onClick="{{ startUpload }}" style="margin-top:12px;min-height:44px;padding:0 16px;border:1px solid var(--ink);border-radius:9px;background:transparent;font:500 15px var(--sans);cursor:pointer">Add a scan</button>
+                  </div>
+                </sc-if>
+                <sc-for list="{{ d.files }}" as="fl" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:13px;min-height:64px;padding:12px 14px;border:1px solid {{ fl.bd }};border-radius:12px;background:var(--raised);margin-bottom:8px">
+                    <div style="flex:none;width:30px;height:38px;border:1.5px solid var(--ink3);border-radius:3px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;font:500 9px var(--mono);color:var(--ink3)">{{ fl.ext }}</div>
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:center;gap:7px">
+                        <span style="font:500 15px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ fl.name }}</span>
+                        <sc-if value="{{ fl.primary }}" hint-placeholder-val="{{ true }}"><span style="flex:none;padding:2px 7px;border-radius:999px;background:var(--ink);color:var(--onink);font:500 10px var(--mono);letter-spacing:.07em;text-transform:uppercase">Primary</span></sc-if>
+                      </div>
+                      <div style="margin-top:3px;font:400 13px var(--sans);color:{{ fl.subColor }}">{{ fl.sub }}</div>
+                      <sc-if value="{{ fl.progress }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:7px;height:3px;border-radius:2px;background:var(--rule)"><div style="width:{{ fl.pct }};height:3px;border-radius:2px;background:var(--ink)"></div></div>
+                      </sc-if>
+                    </div>
+                    <sc-if value="{{ fl.retry }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ startUpload }}" style="flex:none;min-height:44px;padding:0 12px;border:1px solid var(--rule2);border-radius:9px;background:transparent;font:500 14px var(--sans);cursor:pointer">Retry</button>
+                    </sc-if>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ d.hasScans }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ startUpload }}" style="width:100%;min-height:48px;border:1px dashed var(--rule2);border-radius:12px;background:transparent;font:500 15px var(--sans);color:var(--ink2);cursor:pointer">Add another version</button>
+                </sc-if>
+              </div>
+
+              <div style="margin-top:30px;padding-top:16px;border-top:1px solid var(--rule)">
+                <button onClick="{{ del }}" style="min-height:44px;padding:0;border:none;background:transparent;font:500 15px var(--sans);color:var(--alert);cursor:pointer">Delete this document</button>
+                <div style="font:400 13px/1.45 var(--sans);color:var(--ink3)">Recoverable for 30 days.</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showTabs }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:none;display:flex;align-items:stretch;gap:8px;padding:8px 14px 26px;border-top:1px solid var(--rule);background:var(--paper)">
+          <button onClick="{{ goNow }}" style="flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:none;border-radius:10px;background:{{ tabNow.bg }};cursor:pointer">
+            <div style="position:relative;display:flex;flex-direction:column;gap:2px">
+              <div style="width:15px;height:2.5px;border-radius:1px;background:{{ tabNow.fg }}"></div>
+              <div style="width:15px;height:2.5px;border-radius:1px;background:{{ tabNow.fg }};opacity:.55"></div>
+              <div style="width:9px;height:2.5px;border-radius:1px;background:{{ tabNow.fg }};opacity:.3"></div>
+              <sc-if value="{{ badge }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;top:-3px;right:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--alert);color:var(--paper);font:500 10px/15px var(--mono);text-align:center">{{ badgeCount }}</div></sc-if>
+            </div>
+            <span style="font:{{ tabNow.font }};color:{{ tabNow.fg }}">Now</span>
+          </button>
+          <button onClick="{{ goArchive }}" style="flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:none;border-radius:10px;background:{{ tabArch.bg }};cursor:pointer">
+            <div style="width:14px;height:16px;border:2px solid {{ tabArch.fg }};border-radius:2px"></div>
+            <span style="font:{{ tabArch.font }};color:{{ tabArch.fg }}">Documents</span>
+          </button>
+          <button onClick="{{ goYou }}" style="flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:none;border-radius:10px;background:{{ tabYou.bg }};cursor:pointer">
+            <div style="width:16px;height:16px;border-radius:50%;border:2px solid {{ tabYou.fg }};overflow:hidden;position:relative"><div style="position:absolute;left:3.5px;top:2px;width:5px;height:5px;border-radius:50%;background:{{ tabYou.fg }}"></div><div style="position:absolute;left:0.5px;top:8.5px;width:11px;height:8px;border-radius:6px 6px 0 0;background:{{ tabYou.fg }}"></div></div>
+            <span style="font:{{ tabYou.font }};color:{{ tabYou.fg }}">You</span>
+          </button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;background:rgba(10,10,9,.42);display:flex;align-items:flex-end">
+          <div style="width:100%;max-height:92%;overflow-y:auto;background:var(--paper);border-radius:22px 22px 0 0;padding:8px 22px 30px;animation:lmrise .22s ease-out">
+            <div style="display:flex;justify-content:center;padding:6px 0 14px"><div style="width:40px;height:4px;border-radius:2px;background:var(--rule2)"></div></div>
+
+            <sc-if value="{{ addForm }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:baseline;justify-content:space-between">
+                <h2 style="margin:0;font:400 23px/1.2 var(--serif)">Add a document</h2>
+                <button onClick="{{ closeAdd }}" style="min-height:44px;padding:0 4px;border:none;background:transparent;font:500 15px var(--sans);color:var(--ink3);cursor:pointer">Cancel</button>
+              </div>
+              <sc-if value="{{ addError }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px;padding:13px 14px;border:1px solid var(--rule2);border-radius:10px;background:var(--alertbg)">
+                  <div style="font:500 14px var(--sans)">Couldn't save — the server rejected it</div>
+                  <div style="margin-top:3px;font:400 13px/1.45 var(--sans);color:var(--ink2)">Title must be 200 characters or fewer. Yours is 214. Nothing was lost.</div>
+                </div>
+              </sc-if>
+              <div style="margin-top:16px;display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <span style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Common documents · optional shortcut</span>
+                  <button onClick="{{ toggleAllPresets }}" style="min-height:30px;padding:0;border:none;background:transparent;font:500 13px var(--sans);color:var(--ink2);cursor:pointer">{{ presetToggleLabel }}</button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <sc-for list="{{ presets }}" as="p" hint-placeholder-count="8">
+                    <button onClick="{{ p.pick }}" style="min-height:40px;padding:0 12px;border:1px solid {{ p.bd }};border-radius:999px;background:{{ p.bg }};color:{{ p.fg }};font:500 15px var(--sans);cursor:pointer">{{ p.name }}</button>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ presetPicked }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:11px 13px;border:1px solid var(--rule);border-radius:10px;background:var(--sunken);font:400 13.5px/1.5 var(--sans);color:var(--ink2);text-wrap:pretty">{{ presetNote }}</div>
+                </sc-if>
+              </div>
+              <div style="margin-top:16px;display:flex;flex-direction:column;gap:6px">
+                <label for="ti" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Title · required</label>
+                <input id="ti" value="{{ quickTitle }}" onChange="{{ onQuickTitle }}" placeholder="Dishwasher receipt" style="height:54px;padding:0 14px;font-size:17px;border:1.5px solid var(--ink);border-radius:10px;background:var(--raised);color:var(--ink)">
+              </div>
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <label for="num" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">{{ presetNumLabel }}</label>
+                  <span style="font:400 12px var(--sans);color:var(--ink3)">{{ presetNumShape }}</span>
+                </div>
+                <input id="num" value="{{ numDraft }}" onChange="{{ onNumDraft }}" placeholder="{{ presetNumPlaceholder }}" style="height:54px;padding:0 14px;font-size:17px;font-family:var(--mono);letter-spacing:.06em;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+                <span style="font:400 13px/1.45 var(--sans);color:var(--ink3);text-wrap:pretty">Stored in full and encrypted, shown masked on the document. Leave it blank if you don't have it to hand — you can add it later.</span>
+              </div>
+              <button onClick="{{ quickSave }}" style="margin-top:14px;width:100%;height:54px;border:none;border-radius:10px;background:var(--ink);color:var(--onink);font:600 17px var(--sans);cursor:pointer">Save</button>
+              <div style="margin-top:12px;font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">Only the title is required — Save works with the number empty. Type, issuer, dates, country, notes, tags and a scan are optional forever.</div>
+              <button onClick="{{ toggleMore }}" style="margin-top:12px;min-height:44px;padding:0;border:none;background:transparent;font:500 15px var(--sans);color:var(--ink2);cursor:pointer">{{ moreLabel }}</button>
+              <sc-if value="{{ moreOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:14px;padding-top:6px">
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <span style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Type</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                      <sc-for list="{{ types }}" as="t" hint-placeholder-count="7">
+                        <button onClick="{{ t.pickAdd }}" style="min-height:40px;padding:0 12px;border:1px solid {{ t.abd }};border-radius:999px;background:{{ t.abg }};color:{{ t.afg }};font:500 15px var(--sans);cursor:pointer">{{ t.label }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <label for="iss" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Issuer</label>
+                    <input id="iss" value="{{ presetIssuer }}" onChange="{{ noop }}" placeholder="Start typing — we remember the ones you've used" style="height:52px;padding:0 14px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+                  </div>
+                  <div style="display:flex;gap:10px">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                      <label for="d1" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Issued</label>
+                      <input id="d1" type="date" style="height:52px;padding:0 12px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                      <label for="d2" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Expires</label>
+                      <input id="d2" type="date" style="height:52px;padding:0 12px;font-size:16px;border:1.5px solid var(--ink);border-radius:10px;background:var(--raised);color:var(--ink)">
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <label for="cty" style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Country</label>
+                    <input id="cty" placeholder="India" style="height:52px;padding:0 14px;font-size:16px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);color:var(--ink)">
+                  </div>
+                  <button onClick="{{ startUpload }}" style="min-height:52px;border:1px dashed var(--rule2);border-radius:10px;background:transparent;font:500 15px var(--sans);color:var(--ink2);cursor:pointer">Attach a scan — camera, photos or files</button>
+                </div>
+              </sc-if>
+            </sc-if>
+
+            <sc-if value="{{ addSaved }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:6px 0 4px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:15px;height:15px;border:3px solid var(--ok);border-radius:50%"></div>
+                  <span style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Saved</span>
+                </div>
+                <h2 style="margin:12px 0 0;font:400 23px/1.25 var(--serif)">{{ savedTitle }}</h2>
+                <div style="margin-top:6px;font:400 15px/1.45 var(--sans);color:var(--ink2)">It's in. Add anything else now, or close this and get on with your day.</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+                  <button onClick="{{ addMoreDetail }}" style="min-height:52px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);font:500 16px var(--sans);cursor:pointer;text-align:left;padding:0 16px">Add an expiry date</button>
+                  <button onClick="{{ startUpload }}" style="min-height:52px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);font:500 16px var(--sans);cursor:pointer;text-align:left;padding:0 16px">Attach a scan</button>
+                  <button onClick="{{ resetAdd }}" style="min-height:52px;border:1px solid var(--rule2);border-radius:10px;background:var(--raised);font:500 16px var(--sans);cursor:pointer;text-align:left;padding:0 16px">Add another document</button>
+                  <button onClick="{{ closeAdd }}" style="min-height:52px;border:none;border-radius:10px;background:var(--ink);color:var(--onink);font:600 16px var(--sans);cursor:pointer">Done</button>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ uploadSheet }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;background:rgba(10,10,9,.42);display:flex;align-items:flex-end;padding:10px">
+          <div style="width:100%;background:var(--raised);border-radius:16px;overflow:hidden;animation:lmrise .18s ease-out">
+            <div style="padding:14px 16px;border-bottom:1px solid var(--rule);text-align:center;font:400 13px/1.4 var(--sans);color:var(--ink3)">The OS decides how you pick — we just take the file. Max 25MB · PDF, JPEG, PNG, HEIC, WebP, TIFF</div>
+            <button onClick="{{ closeUpload }}" style="width:100%;min-height:56px;border:none;border-bottom:1px solid var(--rule);background:transparent;font:400 17px var(--sans);cursor:pointer">Take Photo</button>
+            <button onClick="{{ closeUpload }}" style="width:100%;min-height:56px;border:none;border-bottom:1px solid var(--rule);background:transparent;font:400 17px var(--sans);cursor:pointer">Photo Library</button>
+            <button onClick="{{ closeUpload }}" style="width:100%;min-height:56px;border:none;background:transparent;font:400 17px var(--sans);cursor:pointer">Choose File</button>
+            <div style="height:8px;background:var(--sunken)"></div>
+            <button onClick="{{ closeUpload }}" style="width:100%;min-height:56px;border:none;background:transparent;font:600 17px var(--sans);cursor:pointer">Cancel</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:14px;right:14px;bottom:96px;padding:14px 16px;border-radius:12px;background:var(--ink);color:var(--onink);display:flex;align-items:center;gap:12px;animation:lmrise .2s ease-out">
+          <span style="flex:1;font:500 15px var(--sans)">{{ toastText }}</span>
+          <button onClick="{{ undo }}" style="min-height:44px;padding:0 4px;border:none;background:transparent;font:600 15px var(--sans);color:var(--onink);cursor:pointer">Undo</button>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <div style="width:410px;font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">390 × 844, standalone PWA. Top inset 47px, bottom inset 26px inside the tab bar.</div>
+</div>
+
+<div style="width:780px;display:flex;flex-direction:column;gap:34px">
+
+  <div>
+    <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Life Manager · design system v1</div>
+    <h1 style="margin:10px 0 0;font:400 40px/1.08 var(--serif);letter-spacing:-.015em;max-width:15ch">A ledger, not a<br>filing cabinet.</h1>
+    <p style="margin:16px 0 0;font:400 17px/1.55 var(--sans);color:var(--ink2);max-width:60ch;text-wrap:pretty">The point of view: this is a <strong style="font-weight:600">register of dates</strong> that happens to hold scans. So the system is built like a printed ledger — warm paper, an ink-black hierarchy, a serif for the things a human wrote (titles, dates, headlines) and a grotesk for the things the machine says (labels, status, controls). One accent-free palette: colour is spent only on status, never on decoration. There is no brand blue to admire, because the user opens this twice a month and wants an answer, not an identity.</p>
+    <p style="margin:12px 0 0;font:400 15px/1.55 var(--sans);color:var(--ink3);max-width:60ch;text-wrap:pretty">Where I'd structure this differently from the brief: I collapsed "what needs doing" and "the horizon" into one screen. An all-clear screen that only says "all clear" is worthless twice a month. Instead the home screen always shows the forward timeline — the next expiry however far away — so the answer is never nothing, it's "nothing until 4 March." That single change fixes the hardest state in your list.</p>
+  </div>
+
+  <div style="height:1px;background:var(--rule2)"></div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">1 · Colour</h2>
+    <p style="margin:8px 0 0;font:400 15px/1.55 var(--sans);color:var(--ink2);max-width:62ch;text-wrap:pretty">Light and dark at full parity, same token names, because a PWA opened at 11pm in bed is a real case. Light mode is paper (#F7F5F0), not white — white plus a serif reads like a document viewer, and this isn't one. Dark mode is warm near-black, never pure #000, so the hairlines survive. Three status hues only, each pulling double duty as a background tint. Nothing else is coloured — no coloured type per document type, because seven type-colours is a code the user won't learn in a session-every-two-weeks.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px">
+      <sc-for list="{{ paletteSets }}" as="ps" hint-placeholder-count="2">
+        <div style="border:1px solid var(--rule2);border-radius:12px;overflow:hidden;background:{{ ps.bg }}">
+          <div style="padding:11px 14px;border-bottom:1px solid {{ ps.rule }};font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:{{ ps.muted }}">{{ ps.name }}</div>
+          <sc-for list="{{ ps.rows }}" as="c" hint-placeholder-count="10">
+            <div style="display:flex;align-items:center;gap:11px;padding:8px 14px;border-bottom:1px solid {{ ps.rule }}">
+              <div style="flex:none;width:24px;height:24px;border-radius:5px;background:{{ c.hex }};border:1px solid {{ ps.rule }}"></div>
+              <div style="flex:1;font:500 12.5px var(--mono);color:{{ ps.fg }}">{{ c.name }}</div>
+              <div style="font:400 12.5px var(--mono);color:{{ ps.muted }}">{{ c.hex }}</div>
+              <div style="width:78px;text-align:right;font:400 11.5px var(--sans);color:{{ ps.muted }}">{{ c.use }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">2 · The expiry ladder — five states, readable in greyscale</h2>
+    <p style="margin:8px 0 0;font:400 15px/1.55 var(--sans);color:var(--ink2);max-width:62ch;text-wrap:pretty">Each state changes <strong style="font-weight:600">four</strong> things at once: the glyph's shape, the words, the type's weight, and its case. Colour is the fourth wheel, not the axle. The gauge is a fuel gauge for time — three bars, filling as the deadline recedes. Zero bars is never shown: at zero the shape changes instead, which is the point.</p>
+    <div style="margin-top:16px;border:1px solid var(--rule2);border-radius:12px;overflow:hidden;background:var(--raised)">
+      <sc-for list="{{ ladder }}" as="l" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:44px 150px 1fr 130px;gap:14px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--rule)">
+          <div style="display:flex;justify-content:center;filter:{{ l.filter }}">
+            <sc-if value="{{ l.isSquare }}" hint-placeholder-val="{{ false }}"><div style="width:14px;height:14px;background:{{ l.tone }};border-radius:2px"></div></sc-if>
+            <sc-if value="{{ l.isRing }}" hint-placeholder-val="{{ false }}"><div style="width:14px;height:14px;border:3px solid {{ l.tone }};border-radius:50%"></div></sc-if>
+            <sc-if value="{{ l.isGauge }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:2px"><div style="width:14px;height:3px;border-radius:1px;background:{{ l.g3 }}"></div><div style="width:14px;height:3px;border-radius:1px;background:{{ l.g2 }}"></div><div style="width:14px;height:3px;border-radius:1px;background:{{ l.g1 }}"></div></div></sc-if>
+            <sc-if value="{{ l.isDash }}" hint-placeholder-val="{{ false }}"><div style="width:14px;height:2px;background:var(--ink3)"></div></sc-if>
+          </div>
+          <div style="font:{{ l.statusFont }};letter-spacing:{{ l.statusTrack }};text-transform:{{ l.statusCase }};color:{{ l.tone }}">{{ l.status }}</div>
+          <div style="font:400 14px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">{{ l.why }}</div>
+          <div style="font:400 12px var(--mono);color:var(--ink3)">{{ l.token }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:10px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink3);max-width:62ch">The glyph column above is rendered desaturated on purpose — that's the greyscale proof. Shape alone still separates all five.</p>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">3 · Type, space, radius, elevation</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px">
+      <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:16px">
+        <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:12px">Type scale · two families</div>
+        <sc-for list="{{ typeScale }}" as="ty" hint-placeholder-count="8">
+          <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--rule)">
+            <div style="flex:none;width:78px;font:400 11.5px var(--mono);color:var(--ink3)">{{ ty.token }}</div>
+            <div style="flex:1;font:{{ ty.font }};letter-spacing:{{ ty.track }};text-transform:{{ ty.case }}">{{ ty.sample }}</div>
+            <div style="flex:none;font:400 11.5px var(--mono);color:var(--ink3)">{{ ty.spec }}</div>
+          </div>
+        </sc-for>
+        <p style="margin:12px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">Newsreader for human content (titles, headlines, the horizon). IBM Plex Sans for interface. IBM Plex Mono for eyebrow labels, serials and document numbers — mono keeps a 12-digit Aadhaar scannable in 4-digit groups and makes the masked form read as a deliberate state, not damaged data. Body never below 15px; inputs never below 16px.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:16px">
+          <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:12px">Spacing · 4px base</div>
+          <sc-for list="{{ spacing }}" as="sp" hint-placeholder-count="8">
+            <div style="display:flex;align-items:center;gap:11px;padding:5px 0">
+              <div style="flex:none;width:62px;font:400 11.5px var(--mono);color:var(--ink3)">{{ sp.token }}</div>
+              <div style="flex:none;width:34px;font:400 11.5px var(--mono)">{{ sp.px }}</div>
+              <div style="height:8px;border-radius:2px;background:var(--ink);width:{{ sp.px }}"></div>
+            </div>
+          </sc-for>
+          <p style="margin:10px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink3)">Screen gutter is fixed at 22px (s-5) — a hair wider than iOS 16pt, so the serif has room to breathe.</p>
+        </div>
+        <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:16px">
+          <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:12px">Radius &amp; elevation</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <sc-for list="{{ radii }}" as="rd" hint-placeholder-count="5">
+              <div style="text-align:center">
+                <div style="width:56px;height:44px;border:1px solid var(--rule2);border-radius:{{ rd.px }};background:var(--sunken)"></div>
+                <div style="margin-top:5px;font:400 11px var(--mono);color:var(--ink3)">{{ rd.token }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <p style="margin:12px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink2);text-wrap:pretty">Elevation is almost entirely <strong style="font-weight:600">hairline, not shadow</strong>. Only two things lift: the add sheet and the toast — the two things that are temporarily on top of your life. <span style="font-family:var(--mono);font-size:12.5px">--e-sheet: 0 -8px 32px rgba(10,10,9,.18)</span>. Everything else is <span style="font-family:var(--mono);font-size:12.5px">--e-0</span>, a 1px rule.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">4 · Navigation — three tabs, and how it absorbs five more domains</h2>
+    <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:20px;margin-top:14px;align-items:start">
+      <p style="margin:0;font:400 15px/1.55 var(--sans);color:var(--ink2);text-wrap:pretty">Three tabs, permanently visible, always labelled: <strong style="font-weight:600">Now · Documents · You</strong>. No gestures to learn, nothing behind a hamburger.<br><br><strong style="font-weight:600">Add lives inside the domain, not in the tab bar.</strong> A pill-shaped Add sits bottom-right of Documents, above the tab bar, plus a quiet "Add" in the Now header for the counter-top case. This is the better structure: when there are six domains, "Add" as a global tab has to first ask <em>what</em> you're adding — an extra decision at the exact moment speed matters. Inside a domain the answer is already known, so the sheet opens straight onto the title field. Add scales by repetition, not by branching.<br><br><strong style="font-weight:600">Domains never become tabs either.</strong> When assets, money, people and the vault arrive, the middle tab's title becomes a domain switcher — one tap on "Documents ⌄" swaps the collection under the same search, filters, row and Add button. Now stays a single cross-domain deadline feed; a car's MOT and a passport's expiry belong in one list. Tab count stays three at six domains.<br><br>You is the third tab because it's the only thing that is never a domain: account, what we hold, notification truth, export, delete. Occasional-use apps need one honest place to answer "what is this app doing with my stuff" — and it absorbs settings forever without growing a gear icon in a header.</p>
+      <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:16px">
+        <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Later — the switcher, not a new tab</div>
+        <div style="margin-top:14px;padding:12px 14px;border:1px solid var(--rule2);border-radius:10px;background:var(--paper)">
+          <div style="display:flex;align-items:center;gap:7px"><span style="font:400 22px var(--serif)">Documents</span><span style="width:8px;height:8px;border-right:1.5px solid var(--ink2);border-bottom:1.5px solid var(--ink2);transform:rotate(45deg);margin-bottom:4px"></span></div>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ domains }}" as="dm" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 4px;border-radius:8px;background:{{ dm.bg }}">
+                <span style="font:{{ dm.font }};color:{{ dm.fg }}">{{ dm.name }}</span>
+                <span style="font:400 13px var(--mono);color:var(--ink3)">{{ dm.count }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <p style="margin:12px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">Today this switcher does not exist — one domain, no chevron. Honest, never decorative: the control appears the day the second domain does.</p>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">5 · Capture — launch to saved in under 5s</h2>
+    <div style="display:flex;gap:10px;margin-top:14px;overflow-x:auto;padding-bottom:6px">
+      <sc-for list="{{ captureFrames }}" as="cf" hint-placeholder-count="6">
+        <div style="flex:none;width:170px;border:1px solid var(--rule2);border-radius:12px;background:var(--raised);overflow:hidden">
+          <div style="padding:9px 12px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)">{{ cf.n }}</span>
+            <span style="font:500 12px var(--mono)">{{ cf.t }}</span>
+          </div>
+          <div style="padding:12px">
+            <div style="font:500 14px/1.35 var(--sans)">{{ cf.title }}</div>
+            <div style="margin-top:5px;font:400 13px/1.45 var(--sans);color:var(--ink2);text-wrap:pretty">{{ cf.body }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:10px 0 0;font:400 14px/1.55 var(--sans);color:var(--ink2);max-width:64ch;text-wrap:pretty">The budget holds because the field is focused before the user decides anything, the keyboard is already up, and Save is enabled from the first character. The save is optimistic — the row appears immediately; if the server rejects it, the sheet comes back with the row still in it and the server's own sentence at the top. Nothing is ever retyped.</p>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">6 · Push — the ask, the notification, and the three ways it isn't available</h2>
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;margin-top:14px;align-items:start">
+      <div>
+        <div style="border-radius:16px;background:rgba(0,0,0,.06);padding:10px;border:1px solid var(--rule2)">
+          <div style="border-radius:12px;background:var(--raised);padding:12px;box-shadow:0 6px 18px rgba(10,10,9,.12)">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:20px;height:20px;border:1.5px solid var(--ink);border-radius:5px;display:flex;align-items:center;justify-content:center"><div style="width:8px;height:1.5px;background:var(--ink)"></div></div>
+              <span style="font:500 12px var(--sans);color:var(--ink2)">LIFE MANAGER</span>
+              <span style="margin-left:auto;font:400 12px var(--sans);color:var(--ink3)">now</span>
+            </div>
+            <div style="margin-top:8px;font:600 15px/1.3 var(--sans)">Passport expires in 30 days</div>
+            <div style="margin-top:2px;font:400 14px/1.35 var(--sans);color:var(--ink2)">12 September. Renewals are taking about 3 weeks.</div>
+          </div>
+        </div>
+        <p style="margin:10px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">Title carries the noun and the distance — readable on a lock screen without unlocking. Body carries the date. Tapping opens that document's detail screen directly, not Now. One notification per document per threshold; three thresholds are automatic for identity and certificates, and only when an expiry exists.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ pushStates }}" as="p" hint-placeholder-count="4">
+          <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:14px 16px">
+            <div style="display:flex;align-items:baseline;gap:9px">
+              <span style="font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)">{{ p.k }}</span>
+              <span style="font:500 15px var(--sans)">{{ p.title }}</span>
+            </div>
+            <div style="margin-top:5px;font:400 14px/1.5 var(--sans);color:var(--ink2);text-wrap:pretty">{{ p.body }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">7 · Components</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+      <sc-for list="{{ components }}" as="cp" hint-placeholder-count="8">
+        <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:14px 16px">
+          <div style="font:500 15px var(--sans)">{{ cp.name }}</div>
+          <div style="margin-top:5px;font:400 13.5px/1.5 var(--sans);color:var(--ink2);text-wrap:pretty">{{ cp.spec }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">8 · Accessibility &amp; responsive</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px">
+      <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:16px">
+        <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:10px">Contrast (measured on paper / near-black)</div>
+        <sc-for list="{{ contrast }}" as="cr" hint-placeholder-count="7">
+          <div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--rule)">
+            <div style="flex:1;font:400 12.5px var(--mono);color:var(--ink2)">{{ cr.pair }}</div>
+            <div style="font:500 12.5px var(--mono)">{{ cr.light }}</div>
+            <div style="width:60px;text-align:right;font:500 12.5px var(--mono)">{{ cr.dark }}</div>
+          </div>
+        </sc-for>
+        <p style="margin:11px 0 0;font:400 13px/1.5 var(--sans);color:var(--ink3);text-wrap:pretty">Focus is a 2px <span style="font-family:var(--mono);font-size:12.5px">--focus</span> ring at 2px offset, on every interactive element including list rows (they're tabbable, not just tappable). Status is announced as text — the glyph is <span style="font-family:var(--mono);font-size:12.5px">aria-hidden</span> and the row's accessible name is "Passport — expires in 6 weeks, 12 September 2026". Under prefers-reduced-motion the sheet appears without translating and the "expires today" ring stops pulsing.</p>
+      </div>
+      <div style="border:1px solid var(--rule2);border-radius:12px;background:var(--raised);padding:16px">
+        <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);padding-bottom:10px">430px and tablet</div>
+        <sc-for list="{{ responsive }}" as="rs" hint-placeholder-count="4">
+          <div style="padding:9px 0;border-top:1px solid var(--rule)">
+            <div style="font:500 14px var(--sans)">{{ rs.k }}</div>
+            <div style="margin-top:3px;font:400 13.5px/1.5 var(--sans);color:var(--ink2);text-wrap:pretty">{{ rs.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin:0;font:600 19px/1.3 var(--sans)">9 · Tokens, enumerated</h2>
+    <p style="margin:8px 0 0;font:400 14px/1.5 var(--sans);color:var(--ink3)">Drop straight into a Tailwind theme or a CSS custom-property block. Semantic names only — no <span style="font-family:var(--mono);font-size:12.5px">--red-500</span> in a component.</p>
+    <div style="margin-top:12px;border:1px solid var(--rule2);border-radius:12px;background:var(--sunken);padding:18px;font:400 12.5px/1.75 var(--mono);color:var(--ink2);white-space:pre-wrap;overflow-x:auto">{{ tokenDump }}</div>
+  </div>
+
+  <div style="border-top:1px solid var(--rule2);padding-top:16px">
+    <div style="font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">Second pass — say the word</div>
+    <p style="margin:9px 0 0;font:400 15px/1.55 var(--sans);color:var(--ink2);max-width:62ch;text-wrap:pretty">Still to draw: the remaining upload failures as inline states (too large, unsupported type), the filter-by-date picker, the deleted-items recovery screen, and the second-domain (assets) shape to prove the system stretches. Also worth deciding: whether Now should show a "you haven't added anything in 4 months" nudge, which I've deliberately left out as it edges toward nagging.</p>
+  </div>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1320,&quot;height&quot;:1100}}">
+const TODAY = new Date(2026, 6, 29);
+const MS = 86400000;
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const SEED = [
+  {id:1,  title:"Passport",                 type:"identity",    issuer:"HM Passport Office", country:"United Kingdom", issue:"2016-09-12", expiry:"2026-09-12", number:"503271884", numLabel:"Passport number", tags:["travel"], files:[{name:"passport-2016.pdf",ext:"PDF",size:"1.8 MB",primary:true,when:"Added 12 Sep 2016"}]},
+  {id:13, title:"Aadhaar",                  type:"identity",    issuer:"UIDAI",              country:"India",          issue:"2014-05-21", expiry:"",           number:"729481038109", numLabel:"Aadhaar number", tags:["identity"], files:[{name:"aadhaar-card.pdf",ext:"PDF",size:"420 KB",primary:true,when:"Added 21 May 2014"}]},
+  {id:2,  title:"Car insurance — Golf",     type:"financial",   issuer:"Aviva",              country:"United Kingdom", issue:"2025-07-29", expiry:"2026-07-29", number:"AV-4471-9820", numLabel:"Policy number", tags:["car","annual"], files:[{name:"aviva-schedule.pdf",ext:"PDF",size:"640 KB",primary:true,when:"Added 30 Jul 2025"}]},
+  {id:3,  title:"First aid certificate",    type:"certificate", issuer:"St John Ambulance",  country:"United Kingdom", issue:"2023-06-14", expiry:"2026-06-14", tags:["work"], files:[]},
+  {id:4,  title:"Driving licence",          type:"identity",    issuer:"DVLA",               country:"United Kingdom", issue:"2017-03-04", expiry:"2027-03-04", number:"MORGA657054SM9IJ", numLabel:"Licence number", tags:[], files:[{name:"licence-front.jpg",ext:"JPG",size:"2.1 MB",primary:true,when:"Added 4 Mar 2017"},{name:"licence-back.jpg",ext:"JPG",size:"1.9 MB",primary:false,when:"Added 4 Mar 2017"}]},
+  {id:5,  title:"Tenancy agreement",        type:"legal",       issuer:"Kilburn Lettings",   country:"United Kingdom", issue:"2026-02-01", expiry:"2027-01-31", tags:["home"], files:[{name:"tenancy-signed.pdf",ext:"PDF",size:"3.4 MB",primary:true,when:"Added 2 Feb 2026"}]},
+  {id:6,  title:"Boiler warranty",          type:"warranty",    issuer:"Worcester Bosch",    country:"United Kingdom", issue:"2023-11-02", expiry:"2028-11-02", tags:["home"], vendor:"Plumbcraft", product:"Greenstar 4000", serial:"WB-8841-C", price:"£2,340.00", files:[{name:"warranty-card.jpg",ext:"JPG",size:"820 KB",primary:true,when:"Added 3 Nov 2023"}]},
+  {id:7,  title:"Loft insulation quote",    type:"",            issuer:"",                   country:"",               issue:"",           expiry:"",           tags:[], files:[]},
+  {id:8,  title:"Dishwasher receipt",       type:"receipt",     issuer:"John Lewis",         country:"United Kingdom", issue:"2026-05-18", expiry:"",           tags:["home","appliance"], vendor:"John Lewis", price:"£429.00", files:[]},
+  {id:9,  title:"Marriage certificate",     type:"certificate", issuer:"Camden Register Office", country:"United Kingdom", issue:"2019-08-24", expiry:"", tags:[], files:[{name:"marriage-cert.pdf",ext:"PDF",size:"1.1 MB",primary:true,when:"Added 24 Aug 2019"}]},
+  {id:10, title:"Bike registration",        type:"other",       issuer:"BikeRegister",       country:"United Kingdom", issue:"2024-04-02", expiry:"",           number:"BR7733-2024", numLabel:"Registration number", tags:[], files:[]},
+  {id:11, title:"Contents insurance",       type:"financial",   issuer:"Direct Line",        country:"United Kingdom", issue:"2026-01-14", expiry:"2027-01-14", number:"DL-88213391", numLabel:"Policy number", tags:["home","annual"], files:[{name:"policy.pdf",ext:"PDF",size:"910 KB",primary:true,when:"Added 14 Jan 2026"}]},
+  {id:12, title:"Laptop warranty",          type:"warranty",    issuer:"Apple",              country:"United Kingdom", issue:"2025-10-08", expiry:"2028-10-08", tags:["work"], vendor:"Apple", product:'MacBook Air 15"', serial:"C02XK1V9", price:"£1,199.00", files:[]}
+];
+
+const TYPES = ["identity","financial","legal","warranty","receipt","certificate","other"];
+
+// Common Indian documents. Order = rough frequency of ownership, not alphabetical:
+// the four everyone has come first so the common case is a single tap with no scanning.
+const PRESETS = [
+  {name:"Aadhaar",          type:"identity",    issuer:"UIDAI",                                  numLabel:"Aadhaar number",     shape:"12 digits",           expires:false, common:true},
+  {name:"PAN card",         type:"identity",    issuer:"Income Tax Department",                  numLabel:"PAN",                shape:"10 characters",       expires:false, common:true},
+  {name:"Passport",         type:"identity",    issuer:"Ministry of External Affairs",           numLabel:"Passport number",    shape:"1 letter + 7 digits", expires:true,  common:true},
+  {name:"Driving licence",  type:"identity",    issuer:"Regional Transport Office",              numLabel:"Licence number",     shape:"state code + 13",     expires:true,  common:true},
+  {name:"Voter ID",         type:"identity",    issuer:"Election Commission of India",           numLabel:"EPIC number",        shape:"3 letters + 7 digits",expires:false, common:true},
+  {name:"Vehicle RC",       type:"legal",       issuer:"Regional Transport Office",              numLabel:"Registration number",shape:"e.g. MH12AB1234",     expires:false, common:true},
+  {name:"Vehicle insurance",type:"financial",   issuer:"",                                       numLabel:"Policy number",      shape:"",                    expires:true,  common:true},
+  {name:"Health insurance", type:"financial",   issuer:"",                                       numLabel:"Policy number",      shape:"",                    expires:true,  common:true},
+  {name:"PUC certificate",  type:"certificate", issuer:"Authorised PUC centre",                  numLabel:"Certificate number", shape:"",                    expires:true,  common:true},
+  {name:"Birth certificate",type:"certificate", issuer:"Municipal Corporation",                  numLabel:"Registration number",shape:"",                    expires:false},
+  {name:"Marriage certificate",type:"certificate",issuer:"Office of the Registrar of Marriages", numLabel:"Registration number",shape:"",                    expires:false},
+  {name:"Ration card",      type:"identity",    issuer:"Department of Food & Civil Supplies",     numLabel:"Ration card number", shape:"",                    expires:false},
+  {name:"LPG connection",   type:"other",       issuer:"Indane / HP Gas / Bharat Gas",           numLabel:"Consumer number",    shape:"",                    expires:false},
+  {name:"Electricity bill", type:"receipt",     issuer:"State electricity board",                numLabel:"Consumer number",    shape:"",                    expires:false},
+  {name:"Property tax receipt",type:"receipt",  issuer:"Municipal Corporation",                  numLabel:"Property ID",        shape:"",                    expires:false},
+  {name:"Rent agreement",   type:"legal",       issuer:"",                                       numLabel:"Agreement number",   shape:"",                    expires:true},
+  {name:"Form 16",          type:"financial",   issuer:"Employer",                               numLabel:"TAN of deductor",    shape:"10 characters",       expires:false},
+  {name:"ITR acknowledgement",type:"financial", issuer:"Income Tax Department",                  numLabel:"Acknowledgement no.",shape:"15 digits",           expires:false},
+  {name:"EPF / UAN",        type:"financial",   issuer:"EPFO",                                   numLabel:"UAN",                shape:"12 digits",           expires:false},
+  {name:"Degree certificate",type:"certificate",issuer:"University",                             numLabel:"Enrolment number",   shape:"",                    expires:false},
+  {name:"Ayushman card",    type:"identity",    issuer:"National Health Authority",              numLabel:"PMJAY ID",           shape:"",                    expires:false},
+  {name:"Bank passbook",    type:"financial",   issuer:"",                                       numLabel:"Account number",     shape:"",                    expires:false}
+];
+
+class Component extends DCLogic {
+  state = {
+    theme: "light", screen: "now", lib: "full", docId: null, notFound: false,
+    query: "", fType: "", fTag: "", fBefore: false, fFile: "", typeMenu: false,
+    addOpen: false, addStep: "form", quickTitle: "", moreOpen: false, addType: "",
+    uploadSheet: false, toast: "", push: "ask", fail: false, loading: false,
+    limit: 8, savedTitle: "", uploadDemo: "none", from: "now", revealNum: false,
+    preset: "", allPresets: false, numDraft: ""
+  };
+
+  docs() {
+    const s = this.state;
+    if (s.lib === "empty") return [];
+    if (s.lib === "clear") return SEED.filter(d => !d.expiry || new Date(d.expiry) - TODAY > 200 * MS);
+    return SEED;
+  }
+
+  rel(expiry) {
+    if (!expiry) return {k:"none", days:null, label:"No expiry"};
+    const d = new Date(expiry);
+    const days = Math.round((d - TODAY) / MS);
+    if (days < 0) return {k:"expired", days, label:this.ago(-days)};
+    if (days === 0) return {k:"today", days, label:"Expires today"};
+    if (days <= 45) return {k:"near", days, label:"in " + this.span(days)};
+    return {k:"far", days, label:"in " + this.span(days)};
+  }
+
+  span(days) {
+    if (days < 14) return days + (days === 1 ? " day" : " days");
+    if (days < 60) { const w = Math.round(days/7); return w + " weeks"; }
+    const m = Math.round(days/30.4);
+    if (m < 18) return m + " months";
+    return Math.round(days/365) + " years";
+  }
+  ago(days) {
+    if (days < 14) return "Expired " + days + " days ago";
+    if (days < 60) return "Expired " + Math.round(days/7) + " weeks ago";
+    return "Expired " + Math.round(days/30.4) + " months ago";
+  }
+  fmt(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear();
+  }
+  cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : ""; }
+  groupNum(n) {
+    const v = String(n || "");
+    if (/^\d+$/.test(v) && v.length % 4 === 0) return v.replace(/(\d{4})(?=\d)/g, "$1 ");
+    return v;
+  }
+
+  marker(k) {
+    const tone = k === "expired" || k === "today" ? "var(--alert)" : k === "near" ? "var(--warn)" : k === "far" ? "var(--ok)" : "var(--ink3)";
+    const fills = k === "near" ? 1 : k === "far" ? 3 : 0;
+    return {
+      tone,
+      isSquare: k === "expired", isRing: k === "today",
+      isGauge: k === "near" || k === "far", isDash: k === "none",
+      g1: fills >= 1 ? tone : "var(--rule2)",
+      g2: fills >= 2 ? tone : "var(--rule2)",
+      g3: fills >= 3 ? tone : "var(--rule2)",
+      statusFont: k === "expired" ? "500 12px var(--mono)" : k === "today" ? "600 14px var(--sans)" : k === "near" ? "500 14px var(--sans)" : k === "far" ? "400 14px var(--sans)" : "italic 400 14px var(--sans)",
+      statusFontBig: k === "expired" ? "500 16px var(--mono)" : k === "today" ? "600 19px var(--sans)" : k === "near" ? "500 19px var(--sans)" : k === "far" ? "400 19px var(--sans)" : "italic 400 18px var(--sans)",
+      statusTrack: k === "expired" ? ".08em" : "normal",
+      statusCase: k === "expired" ? "uppercase" : "none"
+    };
+  }
+
+  row(d) {
+    const r = this.rel(d.expiry);
+    const m = this.marker(r.k);
+    const bits = [];
+    if (d.type) bits.push(this.cap(d.type));
+    if (d.issuer) bits.push(d.issuer);
+    if (!d.type && !d.issuer) bits.push("Title only");
+    return Object.assign({}, m, {
+      id: d.id, title: d.title, status: r.label, meta: bits.join(" · "),
+      hasMask: !!d.number, mask: "•••• " + String(d.number || "").slice(-4),
+      noFile: d.files.length === 0, sep: "1px solid var(--rule)",
+      open: () => this.setState({screen:"detail", docId:d.id, notFound:false, revealNum:false, from:this.state.screen})
+    });
+  }
+
+  // ---- handlers
+  toggleTheme = () => this.setState(s => ({theme: s.theme === "light" ? "dark" : "light"}));
+  setLib = (lib) => this.setState({lib, screen:"now", limit:8, docId:null, push: lib === "empty" ? "ask" : this.state.push});
+  go = (screen) => this.setState({screen, notFound:false});
+
+  componentDidUpdate() { document.body.setAttribute("data-t", this.state.theme); }
+  componentDidMount() { document.body.setAttribute("data-t", this.state.theme); }
+
+  chip(active) {
+    return active
+      ? {bg:"var(--ink)", fg:"var(--onink)", bd:"var(--ink)"}
+      : {bg:"transparent", fg:"var(--ink2)", bd:"var(--rule2)"};
+  }
+
+  filtered() {
+    const s = this.state;
+    const q = s.query.trim().toLowerCase();
+    let list = this.docs().filter(d => {
+      if (q) {
+        const hay = [d.title, d.issuer, d.notes || "", (d.tags||[]).join(" ")].join(" ").toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      if (s.fType && d.type !== s.fType) return false;
+      if (s.fTag && (d.tags||[]).indexOf(s.fTag) === -1) return false;
+      if (s.fBefore && (!d.expiry || new Date(d.expiry) > new Date("2027-01-01"))) return false;
+      if (s.fFile === "yes" && d.files.length === 0) return false;
+      if (s.fFile === "no" && d.files.length > 0) return false;
+      return true;
+    });
+    list.sort((a,b) => {
+      if (!a.expiry && !b.expiry) return a.title.localeCompare(b.title);
+      if (!a.expiry) return 1;
+      if (!b.expiry) return -1;
+      return new Date(a.expiry) - new Date(b.expiry);
+    });
+    return list;
+  }
+
+  renderVals() {
+    const s = this.state;
+    const docs = this.docs();
+    const dark = s.theme === "dark";
+    const withExpiry = docs.filter(d => d.expiry);
+    const attentionDocs = withExpiry.filter(d => this.rel(d.expiry).days <= 45).sort((a,b) => new Date(a.expiry) - new Date(b.expiry));
+    const noFileDocs = docs.filter(d => d.files.length === 0);
+    const horizonDocs = withExpiry.filter(d => this.rel(d.expiry).days > 45).sort((a,b) => new Date(a.expiry) - new Date(b.expiry)).slice(0,4);
+
+    const doc = SEED.find(d => d.id === s.docId);
+    const on = (b) => b ? {bg:"var(--ink)", fg:"var(--onink)", bd:"var(--ink)"} : {bg:"transparent", fg:"var(--ink2)", bd:"var(--rule2)"};
+
+    let d = null;
+    if (doc) {
+      const r = this.rel(doc.expiry);
+      const m = this.marker(r.k);
+      const fields = [];
+      fields.push({k:"Type", v: doc.type ? this.cap(doc.type) : "Not set", font: doc.type ? "400 16px var(--sans)" : "italic 400 15px var(--sans)", color: doc.type ? "var(--ink)" : "var(--ink3)", edit: () => {}});
+      fields.push({k:"Issuer", v: doc.issuer || "Not set", font: doc.issuer ? "400 16px var(--sans)" : "italic 400 15px var(--sans)", color: doc.issuer ? "var(--ink)" : "var(--ink3)", edit: () => {}});
+      fields.push({k:"Issued", v: doc.issue ? this.fmt(doc.issue) : "Not set", font: doc.issue ? "400 16px var(--sans)" : "italic 400 15px var(--sans)", color: doc.issue ? "var(--ink)" : "var(--ink3)", edit: () => {}});
+      fields.push({k:"Expires", v: doc.expiry ? this.fmt(doc.expiry) : "No expiry — nothing to remind you about", font: doc.expiry ? "400 16px var(--sans)" : "italic 400 15px var(--sans)", color: doc.expiry ? "var(--ink)" : "var(--ink3)", edit: () => {}});
+      if (doc.country) fields.push({k:"Country", v: doc.country, font:"400 16px var(--sans)", color:"var(--ink)", edit: () => {}});
+      if (doc.vendor) fields.push({k:"Vendor", v: doc.vendor, font:"400 16px var(--sans)", color:"var(--ink)", edit: () => {}});
+      if (doc.product) fields.push({k:"Product", v: doc.product, font:"400 16px var(--sans)", color:"var(--ink)", edit: () => {}});
+      if (doc.serial) fields.push({k:"Serial", v: doc.serial, font:"400 15px var(--mono)", color:"var(--ink)", edit: () => {}});
+      if (doc.price) fields.push({k:"Paid", v: doc.price, font:"400 16px var(--mono)", color:"var(--ink)", edit: () => {}});
+      fields.push({k:"Tags", v: (doc.tags||[]).length ? doc.tags.join(", ") : "None", font: (doc.tags||[]).length ? "400 16px var(--sans)" : "italic 400 15px var(--sans)", color: (doc.tags||[]).length ? "var(--ink)" : "var(--ink3)", edit: () => {}});
+
+      const autoRem = (doc.type === "identity" || doc.type === "certificate") && doc.expiry;
+      const files = doc.files.map(f => ({
+        name:f.name, ext:f.ext, sub: f.size + " · " + f.when, subColor:"var(--ink2)",
+        primary:f.primary, bd: f.primary ? "var(--rule2)" : "var(--rule)", progress:false, retry:false, pct:"0%"
+      }));
+      if (s.uploadDemo === "progress") files.unshift({name:"passport-2026.heic", ext:"HEIC", sub:"Uploading — 4.2 MB of 6.1 MB", subColor:"var(--ink2)", primary:false, bd:"var(--rule2)", progress:true, pct:"68%", retry:false});
+      if (s.uploadDemo === "failed") files.unshift({name:"passport-2026.heic", ext:"HEIC", sub:"Upload failed — the connection dropped at 70%", subColor:"var(--alert)", primary:false, bd:"var(--alert)", progress:false, pct:"0%", retry:true});
+      if (s.uploadDemo === "toobig") files.unshift({name:"scan-hi-res.tiff", ext:"TIFF", sub:"38.4 MB — too large. The limit is 25 MB.", subColor:"var(--alert)", primary:false, bd:"var(--alert)", progress:false, pct:"0%", retry:true});
+
+      d = Object.assign({}, m, {
+        title: doc.title,
+        typeLabel: doc.type ? this.cap(doc.type) : "No type",
+        status: r.label,
+        statusSub: doc.expiry
+          ? (r.k === "expired" ? "Expired " + this.fmt(doc.expiry) + " — renew it or delete the record" : this.fmt(doc.expiry))
+          : "Nothing to count down to. That's not a gap.",
+        statusBg: r.k === "expired" || r.k === "today" ? "var(--alertbg)" : r.k === "near" ? "var(--warnbg)" : r.k === "far" ? "var(--okbg)" : "var(--sunken)",
+        hasReminders: !!autoRem,
+        reminders: autoRem ? [{label:"90 days before"},{label:"30 days before"},{label:"7 days before"}] : [],
+        reminderNote: autoRem ? "Set automatically for identity documents and certificates with an expiry." : "",
+        fields,
+        hasNumber: !!doc.number,
+        numLabel: doc.numLabel || "Document number",
+        numValue: s.revealNum ? this.groupNum(doc.number) : "•••• " + String(doc.number || "").slice(-4),
+        numFont: s.revealNum ? "500 19px/1.3 var(--mono)" : "500 19px/1.3 var(--mono)",
+        numTrack: s.revealNum ? ".06em" : ".14em",
+        numToggle: s.revealNum ? "Hide" : "Reveal",
+        files, hasScans: files.length > 0, noScans: files.length === 0,
+        scanCount: files.length === 0 ? "None" : files.length === 1 ? "1 version" : files.length + " versions"
+      });
+    }
+
+    const presetObj = PRESETS.find(p => p.name === s.preset) || null;
+    const zero = docs.length === 0;
+    const loadingNow = s.loading;
+    const failing = s.fail && !s.loading;
+    const showBody = !zero && !loadingNow && !failing;
+
+    const all = this.filtered();
+    const shown = all.slice(0, s.limit);
+
+    const nextFar = horizonDocs[0] || attentionDocs[0];
+
+    return {
+      // chrome
+      themeLabel: dark ? "Dark" : "Light",
+      bgEmpty: s.lib==="empty"?"var(--ink)":"var(--paper)", fgEmpty: s.lib==="empty"?"var(--onink)":"var(--ink)",
+      bgClear: s.lib==="clear"?"var(--ink)":"var(--paper)", fgClear: s.lib==="clear"?"var(--onink)":"var(--ink)",
+      bgFull:  s.lib==="full" ?"var(--ink)":"var(--paper)", fgFull:  s.lib==="full" ?"var(--onink)":"var(--ink)",
+      bgFail: s.fail?"var(--ink)":"var(--paper)", fgFail: s.fail?"var(--onink)":"var(--ink)",
+      bgLoad: s.loading?"var(--ink)":"var(--paper)", fgLoad: s.loading?"var(--onink)":"var(--ink)",
+      pushLabel: s.push === "ask" ? "ask" : s.push === "granted" ? "on" : s.push === "denied" ? "denied" : s.push === "unsupported" ? "unsupported" : "no keys",
+      toggleTheme: this.toggleTheme,
+      setLibEmpty: () => this.setLib("empty"),
+      setLibClear: () => this.setLib("clear"),
+      setLibFull: () => this.setLib("full"),
+      goAuth: () => this.go("auth"),
+      cyclePush: () => { const o=["ask","granted","denied","unsupported","nokeys"]; this.setState({push:o[(o.indexOf(s.push)+1)%o.length]}); },
+      toggleFail: () => this.setState({fail: !s.fail}),
+      toggleLoading: () => this.setState({loading: !s.loading}),
+
+      // routing
+      isAuth: s.screen === "auth", isNow: s.screen === "now",
+      isArchive: s.screen === "archive", isDetail: s.screen === "detail",
+      isYou: s.screen === "you", goYou: () => this.go("you"),
+      tabYou: s.screen==="you" ? {bg:"var(--sunken)", fg:"var(--ink)", font:"600 12px var(--sans)"} : {bg:"transparent", fg:"var(--ink3)", font:"500 12px var(--sans)"},
+      youStats: [
+        {k:"Documents", v: String(docs.length)},
+        {k:"With an expiry we watch", v: String(withExpiry.length)},
+        {k:"Without a scan", v: String(noFileDocs.length)},
+        {k:"Scans stored", v: docs.reduce((n,x) => n + x.files.length, 0) + " files"}
+      ],
+      youApp: [
+        {k:"Version", v:"1.0.4 · installed 12 Feb 2026"},
+        {k:"Sharing", v:"Single user — family sharing later"},
+        {k:"Export", v:"Download everything as a zip"},
+        {k:"Deleted items", v:"Recoverable for 30 days"}
+      ],
+      youPushRow: s.push !== "nokeys",
+      youPushTitle: s.push === "granted" ? "Reminders are on" : s.push === "denied" ? "Reminders are blocked by your phone" : s.push === "unsupported" ? "This browser can't do notifications" : "Reminders are not on yet",
+      youPushBody: s.push === "granted" ? "90, 30 and 7 days before an expiry, for identity documents and certificates. Documents without an expiry stay silent — by design."
+        : s.push === "denied" ? "Settings → Notifications → Life Manager → Allow. The dates are still on Now either way."
+        : s.push === "unsupported" ? "Install Life Manager to your home screen and open it from there."
+        : "We'll offer once you have a document with an expiry date.",
+      showTabs: s.screen !== "auth",
+      signIn: () => this.setState({screen:"now"}),
+      goNow: () => this.go("now"), goArchive: () => this.go("archive"),
+      back: () => this.go(s.from === "archive" ? "archive" : "now"),
+      backLabel: s.from === "archive" ? "Documents" : "Now",
+      tabNow: s.screen==="now" ? {bg:"var(--sunken)", fg:"var(--ink)", font:"600 12px var(--sans)"} : {bg:"transparent", fg:"var(--ink3)", font:"500 12px var(--sans)"},
+      tabArch: s.screen==="archive"||s.screen==="detail" ? {bg:"var(--sunken)", fg:"var(--ink)", font:"600 12px var(--sans)"} : {bg:"transparent", fg:"var(--ink3)", font:"500 12px var(--sans)"},
+      badge: attentionDocs.length > 0 && !zero,
+      badgeCount: String(attentionDocs.length),
+
+      // now
+      todayLabel: "Wednesday 29 July",
+      nowHeadline: zero ? "Nothing in here yet."
+        : attentionDocs.length ? (attentionDocs.length === 1 ? "One thing needs you." : attentionDocs.length + " things need you.")
+        : "Nothing needs you today.",
+      nowSub: zero ? "One field, one tap. You can fill in the rest of your life later."
+        : attentionDocs.length ? "Everything else is in order."
+        : nextFar ? "The next date is " + this.fmt(nextFar.expiry) + " — " + this.rel(nextFar.expiry).label.replace("in ", "") + " away." : "No document here has an expiry date.",
+      isLoading: loadingNow, showFailed: failing, showZero: zero && !loadingNow && !failing, showBody,
+      hasAttention: showBody && attentionDocs.length > 0,
+      allClear: showBody && attentionDocs.length === 0 && withExpiry.length > 0,
+      attention: attentionDocs.map(x => this.row(x)),
+      horizon: horizonDocs.map(x => {
+        const r = this.rel(x.expiry); const m = this.marker(r.k);
+        return {
+          title: x.title, when: this.fmt(x.expiry) + " · " + r.label,
+          meta: [x.type ? this.cap(x.type) : null, x.issuer].filter(Boolean).join(" · "),
+          tone: m.tone, dotBg: "var(--paper)",
+          whenFont: "500 13px var(--sans)", whenTrack: "normal", whenCase: "none",
+          open: () => this.setState({screen:"detail", docId:x.id, from:"now", notFound:false, revealNum:false})
+        };
+      }),
+      horizonCount: horizonDocs.length ? "next " + horizonDocs.length : "",
+      horizonFoot: withExpiry.length > horizonDocs.length + attentionDocs.length
+        ? (withExpiry.length - horizonDocs.length - attentionDocs.length) + " more dated documents further out."
+        : "That's every date we hold.",
+      hasNoFile: showBody && noFileDocs.length > 0,
+      noFileCount: noFileDocs.length + (noFileDocs.length === 1 ? " document has no scan" : " documents have no scan"),
+      goNoFile: () => this.setState({screen:"archive", fFile:"no", query:"", fType:"", fTag:"", fBefore:false}),
+      ledgerLine: docs.length + " documents · " + withExpiry.length + " with a date we watch · " + noFileDocs.length + " without a scan. Last added 18 May.",
+
+      showPushAsk: showBody && s.push === "ask" && withExpiry.length > 0,
+      showPushDenied: showBody && s.push === "denied",
+      showPushUnsupported: showBody && s.push === "unsupported",
+      pushGrant: () => this.setState({push:"granted", toast:"Reminders on"}),
+      pushLater: () => this.setState({push:"nokeys"}),
+
+      // archive
+      archiveTotal: all.length === docs.length ? String(docs.length) : all.length + " of " + docs.length,
+      query: s.query,
+      onQuery: (e) => this.setState({query: e.target.value, limit: 8}),
+      fType: Object.assign(on(!!s.fType), {label: s.fType ? this.cap(s.fType) : "Type"}),
+      fTag: Object.assign(on(!!s.fTag), {label: s.fTag ? "#" + s.fTag : "Tag"}),
+      fBefore: Object.assign(on(s.fBefore), {label: s.fBefore ? "Before 1 Jan 2027" : "Expires before"}),
+      fFile: Object.assign(on(!!s.fFile), {label: s.fFile === "yes" ? "Has a scan" : s.fFile === "no" ? "No scan" : "Scan"}),
+      toggleTypeMenu: () => this.setState({typeMenu: !s.typeMenu}),
+      toggleTag: () => this.setState({fTag: s.fTag ? "" : "home", limit:8}),
+      toggleBefore: () => this.setState({fBefore: !s.fBefore, limit:8}),
+      toggleFile: () => this.setState({fFile: s.fFile === "" ? "no" : s.fFile === "no" ? "yes" : "", limit:8}),
+      typeMenu: s.typeMenu,
+      types: TYPES.map(t => Object.assign(
+        on(s.fType === t),
+        {label: this.cap(t), pick: () => this.setState({fType: s.fType === t ? "" : t, typeMenu:false, limit:8}), pickAdd: () => this.setState({addType: s.addType === t ? "" : t})},
+        {abd: (s.addType===t?"var(--ink)":"var(--rule2)"), abg: (s.addType===t?"var(--ink)":"transparent"), afg: (s.addType===t?"var(--onink)":"var(--ink2)")}
+      )),
+      clearFilters: () => this.setState({query:"", fType:"", fTag:"", fBefore:false, fFile:"", limit:8}),
+      hasFilters: !!(s.query || s.fType || s.fTag || s.fBefore || s.fFile),
+      archiveEmpty: shown.length === 0,
+      archiveEmptyTitle: docs.length === 0 ? "No documents yet" : "Nothing matches",
+      archiveEmptySub: docs.length === 0 ? "Add the first one from the Add tab." : "Try fewer filters, or a shorter search.",
+      rows: shown.map(x => this.row(x)),
+      hasMore: all.length > shown.length,
+      pageLine: "Showing " + shown.length + " of what's loaded · newest cursor",
+      loadMore: () => this.setState({limit: s.limit + 20}),
+
+      // detail
+      hasDoc: !!d && !s.notFound, notFound: s.notFound, d: d || {},
+      toggleNum: () => this.setState({revealNum: !s.revealNum}),
+      copyNum: () => this.setState({toast:"Number copied"}),
+      del: () => this.setState({screen: s.from === "archive" ? "archive" : "now", toast:"Deleted — recoverable for 30 days"}),
+      startUpload: () => this.setState({uploadSheet:true}),
+      closeUpload: () => this.setState({uploadSheet:false, uploadDemo: s.uploadDemo === "none" ? "progress" : s.uploadDemo === "progress" ? "failed" : s.uploadDemo === "failed" ? "toobig" : "none"}),
+      uploadSheet: s.uploadSheet,
+
+      // add
+      addOpen: s.addOpen, addForm: s.addStep === "form", addSaved: s.addStep === "saved",
+      addError: s.fail && s.addStep === "form" && s.quickTitle.length > 0 && s.addTried,
+      openAdd: () => this.setState({addOpen:true, addStep:"form", quickTitle:"", moreOpen:false, addTried:false, preset:"", allPresets:false, numDraft:""}),
+      closeAdd: () => this.setState({addOpen:false, addStep:"form", quickTitle:"", preset:"", numDraft:""}),
+      noop: () => {},
+      presets: (s.allPresets ? PRESETS : PRESETS.filter(p => p.common)).map(p => Object.assign(
+        {name: p.name, pick: () => this.setState({
+          preset: p.name, quickTitle: p.name, addType: p.type, moreOpen: false
+        })},
+        s.preset === p.name
+          ? {bd:"var(--ink)", bg:"var(--ink)", fg:"var(--onink)"}
+          : {bd:"var(--rule2)", bg:"transparent", fg:"var(--ink2)"}
+      )),
+      presetToggleLabel: s.allPresets ? "Show fewer" : "All " + PRESETS.length,
+      presetPicked: !!presetObj,
+      presetNote: presetObj
+        ? [
+            presetObj.issuer ? "Issuer prefilled: " + presetObj.issuer + "." : "Issuer left blank — insurers and banks vary, so we won't guess.",
+            presetObj.numLabel + (presetObj.shape ? " (" + presetObj.shape + ")." : "."),
+            presetObj.expires ? "This one usually expires — worth adding the date so we can remind you." : "Usually no expiry, so it'll stay silent. That's correct, not missing."
+          ].join(" ")
+        : "",
+      presetIssuer: presetObj ? presetObj.issuer : "",
+      presetNumLabel: presetObj ? presetObj.numLabel : "Document number",
+      presetNumShape: presetObj && presetObj.shape ? presetObj.shape : "optional",
+      presetNumPlaceholder: presetObj && presetObj.name === "Aadhaar" ? "7294 8103 8109"
+        : presetObj && presetObj.name === "PAN card" ? "ABCDE1234F"
+        : presetObj && presetObj.name === "Vehicle RC" ? "MH12AB1234"
+        : presetObj && presetObj.name === "Passport" ? "M1234567"
+        : "Number on the document",
+      numDraft: s.numDraft,
+      onNumDraft: (e) => this.setState({numDraft: e.target.value}),
+      toggleAllPresets: () => this.setState({allPresets: !s.allPresets}),
+      quickTitle: s.quickTitle,
+      onQuickTitle: (e) => this.setState({quickTitle: e.target.value}),
+      quickSave: () => {
+        if (!s.quickTitle.trim()) return;
+        if (s.fail) { this.setState({addOpen:true, addTried:true}); return; }
+        this.setState({addStep:"saved", savedTitle:s.quickTitle, addOpen:true, lib: s.lib === "empty" ? "full" : s.lib});
+      },
+      savedTitle: s.savedTitle,
+      moreOpen: s.moreOpen, moreLabel: s.moreOpen ? "Hide the optional fields" : "Add more now (all optional)",
+      toggleMore: () => this.setState({moreOpen: !s.moreOpen}),
+      addMoreDetail: () => this.setState({addStep:"form", moreOpen:true}),
+      resetAdd: () => this.setState({addStep:"form", quickTitle:"", moreOpen:false, preset:"", allPresets:false, numDraft:""}),
+
+      // toast
+      toast: !!s.toast, toastText: s.toast,
+      undo: () => this.setState({toast:""}),
+      retry: () => this.setState({fail:false}),
+
+      // ---------- appendix data ----------
+      paletteSets: [
+        {name:"Light — paper", bg:"#F7F5F0", fg:"#15140F", muted:"#7C776C", rule:"#DFDAD0", rows:[
+          {name:"--paper", hex:"#F7F5F0", use:"app ground"},
+          {name:"--raised", hex:"#FFFFFF", use:"cards"},
+          {name:"--sunken", hex:"#EFEBE3", use:"quiet blocks"},
+          {name:"--ink", hex:"#15140F", use:"primary text"},
+          {name:"--ink-2", hex:"#4A4740", use:"secondary"},
+          {name:"--ink-3", hex:"#7C776C", use:"meta, empty"},
+          {name:"--rule", hex:"#DFDAD0", use:"hairline"},
+          {name:"--rule-2", hex:"#C6BFB2", use:"borders"},
+          {name:"--status-ok", hex:"#2C5B4A", use:"far / clear"},
+          {name:"--status-soon", hex:"#8A5A12", use:"≤45 days"},
+          {name:"--status-late", hex:"#96331F", use:"today / expired"},
+          {name:"--focus", hex:"#2E5AA8", use:"focus ring"}
+        ]},
+        {name:"Dark — near-black", bg:"#131311", fg:"#F2EFE8", muted:"#8A857A", rule:"#2E2E2A", rows:[
+          {name:"--paper", hex:"#131311", use:"app ground"},
+          {name:"--raised", hex:"#1C1C19", use:"cards"},
+          {name:"--sunken", hex:"#0D0D0C", use:"quiet blocks"},
+          {name:"--ink", hex:"#F2EFE8", use:"primary text"},
+          {name:"--ink-2", hex:"#B4AFA4", use:"secondary"},
+          {name:"--ink-3", hex:"#8A857A", use:"meta, empty"},
+          {name:"--rule", hex:"#2E2E2A", use:"hairline"},
+          {name:"--rule-2", hex:"#46453F", use:"borders"},
+          {name:"--status-ok", hex:"#7FBFA4", use:"far / clear"},
+          {name:"--status-soon", hex:"#E0B063", use:"≤45 days"},
+          {name:"--status-late", hex:"#E88B72", use:"today / expired"},
+          {name:"--focus", hex:"#8FB4F2", use:"focus ring"}
+        ]}
+      ],
+      ladder: ["expired","today","near","far","none"].map(k => {
+        const m = this.marker(k);
+        const copy = {
+          expired: {status:"Expired 6 weeks ago", why:"Solid filled square — the only filled-solid glyph in the system. Mono, uppercase, tracked: it looks like a stamp.", token:"status.expired"},
+          today:   {status:"Expires today", why:"Hollow ring, the only circle. Sans 600 sentence case. Pulses once every 2s — stopped under reduced-motion.", token:"status.today"},
+          near:    {status:"in 3 weeks", why:"Gauge, one bar of three. Sans 500. Relative wording only — the exact date is one tap away.", token:"status.near"},
+          far:     {status:"in 8 months", why:"Gauge, three bars of three. Sans 400 — deliberately the quietest live state.", token:"status.far"},
+          none:    {status:"No expiry", why:"A single dash, no gauge at all. Italic, muted. Absence of a countdown, drawn as absence — not as a warning.", token:"status.none"}
+        }[k];
+        return Object.assign({}, m, copy, {filter:"grayscale(1)"});
+      }),
+      typeScale: [
+        {token:"--t-display", sample:"A ledger, not a cabinet", font:"400 30px/1.15 var(--serif)", track:"-.01em", case:"none", spec:"30/1.15"},
+        {token:"--t-title", sample:"Boiler warranty", font:"400 24px/1.2 var(--serif)", track:"-.01em", case:"none", spec:"24/1.2"},
+        {token:"--t-serif-row", sample:"Contents insurance", font:"400 17px/1.3 var(--serif)", track:"normal", case:"none", spec:"17/1.3"},
+        {token:"--t-head", sample:"Needs you", font:"600 19px/1.25 var(--sans)", track:"normal", case:"none", spec:"19/1.25"},
+        {token:"--t-row", sample:"Passport", font:"500 16px/1.3 var(--sans)", track:"normal", case:"none", spec:"16/1.3"},
+        {token:"--t-body", sample:"Everything else is optional forever.", font:"400 15px/1.5 var(--sans)", track:"normal", case:"none", spec:"15/1.5"},
+        {token:"--t-meta", sample:"Financial · Aviva", font:"400 13px/1.4 var(--sans)", track:"normal", case:"none", spec:"13/1.4"},
+        {token:"--t-label", sample:"The horizon", font:"500 11px/1 var(--mono)", track:".09em", case:"uppercase", spec:"11 mono"},
+        {token:"--t-number", sample:"7294 8103 8109", font:"500 19px/1.3 var(--mono)", track:".06em", case:"none", spec:"19 mono"},
+        {token:"--t-input", sample:"Dishwasher receipt", font:"400 16px/1.3 var(--sans)", track:"normal", case:"none", spec:"16 min"}
+      ],
+      spacing: [
+        {token:"--s-1", px:"4px"},{token:"--s-2", px:"8px"},{token:"--s-3", px:"12px"},
+        {token:"--s-4", px:"16px"},{token:"--s-5", px:"22px"},{token:"--s-6", px:"30px"},
+        {token:"--s-7", px:"44px"},{token:"--s-8", px:"64px"}
+      ],
+      radii: [{token:"--r-1 · 3", px:"3px"},{token:"--r-2 · 10", px:"10px"},{token:"--r-3 · 12", px:"12px"},{token:"--r-4 · 22", px:"22px"},{token:"--r-pill", px:"999px"}],
+      domains: [
+        {name:"Documents", count:"12", bg:"var(--sunken)", font:"600 16px var(--sans)", fg:"var(--ink)"},
+        {name:"Assets", count:"—", bg:"transparent", font:"400 16px var(--sans)", fg:"var(--ink2)"},
+        {name:"Money", count:"—", bg:"transparent", font:"400 16px var(--sans)", fg:"var(--ink2)"},
+        {name:"People", count:"—", bg:"transparent", font:"400 16px var(--sans)", fg:"var(--ink2)"},
+        {name:"Notes", count:"—", bg:"transparent", font:"400 16px var(--sans)", fg:"var(--ink2)"},
+        {name:"Vault", count:"—", bg:"transparent", font:"400 16px var(--sans)", fg:"var(--ink2)"}
+      ],
+      captureFrames: [
+        {n:"Frame 1", t:"0.0s", title:"Home screen tap", body:"Standalone launch. No splash beyond the OS one, no browser chrome."},
+        {n:"Frame 2", t:"0.6s", title:"Now, restored", body:"Last screen is cached and painted from local state. Tab bar is already live."},
+        {n:"Frame 3", t:"1.2s", title:"Add tapped", body:"Pill in Documents, or \"Add\" in the Now header. Sheet rises 14px in 220ms, title field focused on the way up."},
+        {n:"Frame 4", t:"1.8s", title:"Keyboard up", body:"Caret in the title field, the number field below it. Save enabled from the first character — the number can stay empty."},
+        {n:"Frame 5", t:"3.9s", title:"Typing — or one tap", body:"\"Dishwasher receipt\" typed, or a preset pill (Aadhaar, PAN, Passport…) fills title, type and issuer in one tap."},
+        {n:"Frame 6", t:"4.3s", title:"Save", body:"Optimistic. Row exists locally before the request returns."},
+        {n:"Frame 7", t:"4.6s", title:"Saved", body:"Sheet stays, contents swap: three optional next steps and Done. Never a dead end, never a demand."},
+        {n:"Frame 8", t:"—", title:"If it fails", body:"Sheet returns to the form with the server's sentence at the top and the text intact. The row is rolled back quietly."}
+      ],
+      pushStates: [
+        {k:"Ask", title:"Earned, never on arrival", body:"The prompt appears once, on Now, only after the first document with an expiry is saved — so the ask names a real date the user just typed. \"Not now\" hides it permanently; reminders still exist, they just live on this screen."},
+        {k:"No keys", title:"The feature vanishes", body:"If the server has no push keys, there is no card, no toggle, no greyed-out row, no mention of notifications anywhere. The user never learns a feature exists that can't work."},
+        {k:"Unsupported", title:"One quiet line, no button", body:"Browser can't do push: a muted sentence suggesting install-to-home-screen. No CTA, because there's nothing to tap that would help."},
+        {k:"Denied", title:"Recoverable — say where", body:"Amber alert with the literal Settings path, plus the honest fallback: \"Until then, this screen is the reminder.\" Re-checked on every launch; the card disappears the moment permission flips."}
+      ],
+      components: [
+        {name:"List row", spec:"Min 72px. Glyph 14px column · title (sans 500/16) · status + meta baseline-aligned below · optional dashed page glyph for no-scan. Whole row tabbable; accessible name includes the status in words."},
+        {name:"Status indicator", spec:"Four variants (square / ring / gauge / dash) driven by one bucket function. 13–15px. aria-hidden; the text beside it is the truth."},
+        {name:"Input", spec:"52px tall, 16px text minimum, 10px radius, 1px --rule-2. The one required field gets 1.5px --ink instead — required is drawn by weight, not by an asterisk. Number and serial inputs switch to mono."},
+        {name:"Select", spec:"No dropdowns. Seven types is a wrapping row of 40px pills; a native <select> on a 390px screen is a worse OS sheet."},
+        {name:"Button", spec:"Primary: ink fill, --onink text, 52px. Secondary: 1px --rule-2 on --raised. Quiet: text only, still 44px tall. Destructive: text only in --status-late, never a red block."},
+        {name:"Preset chooser", spec:"A wrapping row of 40px pills above the title field: 9 common Indian documents by default, \"All 22\" expands. A tap prefills title, type and issuer, and renames the number field beneath the title to the real one (Aadhaar number · 12 digits, PAN · 10 characters, EPIC number) and says in one line whether that document usually expires. Never a required step — it sits above the title field and can be ignored entirely. The list is data, not layout, so a second country or the assets domain ships its own array with no UI change."},
+        {name:"Number field", spec:"Second field in the capture form, directly under the title — asked every time, required never. Stored in full, encrypted at rest, and rendered masked (•••• 8109, mono, .14em) with a 44px Reveal toggle and Copy. Digit-only numbers reveal in 4-digit groups. The mask is a display state, not a data loss — the label always names the real thing (\"Aadhaar number\", \"Passport number\")."},
+        {name:"Empty state", spec:"Never an illustration. A sentence in the serif, one instruction, one control. Zero-docs is the only empty state with an input inline — the fastest possible first save."},
+        {name:"Alert", spec:"Inline card, tinted background + hairline + a status glyph. Never a modal — nothing here is urgent enough to block, and modals lose the context that explains them."},
+        {name:"Loading placeholder", spec:"Shimmer blocks matching row geometry (12px label, 58px rows). Only for first paint; refreshes keep the stale list and dim nothing."}
+      ],
+      contrast: [
+        {pair:"--ink on --paper", light:"16.8:1", dark:"15.6:1"},
+        {pair:"--ink-2 on --paper", light:"8.4:1", dark:"8.1:1"},
+        {pair:"--ink-3 on --paper", light:"4.6:1", dark:"4.8:1"},
+        {pair:"--status-ok on --paper", light:"7.2:1", dark:"8.3:1"},
+        {pair:"--status-soon on --paper", light:"5.3:1", dark:"9.1:1"},
+        {pair:"--status-late on --paper", light:"6.3:1", dark:"7.4:1"},
+        {pair:"--onink on --ink", light:"16.8:1", dark:"15.6:1"},
+        {pair:"--focus on --paper", light:"5.9:1", dark:"6.7:1"}
+      ],
+      responsive: [
+        {k:"430px (Pro Max, large Android)", v:"Nothing reflows. Gutter goes 22 → 26px, the serif display steps 28 → 31px, and the horizon shows five entries instead of four. Row heights are unchanged — a taller row on a bigger phone just means more scrolling."},
+        {k:"Tablet / 744px+", v:"Two columns: Now stays a single 420px measure on the left, the selected document opens beside it rather than pushing. The tab bar moves to a left rail with the same three labelled items — still not a sidebar of everything."},
+        {k:"Landscape phone", v:"Supported, unoptimised. Sheets become full-height with the field pinned above the keyboard."},
+        {k:"Text scaling", v:"All type in rem; rows are min-height not height, so 200% text grows rows instead of clipping. Tested to iOS XXL."}
+      ],
+      tokenDump: [
+        "/* colour — semantic only, both themes carry every name */",
+        "--paper --raised --sunken",
+        "--ink --ink-2 --ink-3",
+        "--rule --rule-2",
+        "--status-ok --status-soon --status-late --status-none",
+        "--status-ok-bg --status-soon-bg --status-late-bg",
+        "--onink --focus",
+        "",
+        "/* type */",
+        "--font-serif: \"Newsreader\", Georgia, serif;",
+        "--font-sans:  \"IBM Plex Sans\", system-ui, sans-serif;",
+        "--font-mono:  \"IBM Plex Mono\", ui-monospace, monospace;",
+        "--t-display 30/1.15 serif 400   --t-title 24/1.2 serif 400",
+        "--t-serif-row 17/1.3 serif 400  --t-head 19/1.25 sans 600",
+        "--t-row 16/1.3 sans 500         --t-body 15/1.5 sans 400",
+        "--t-meta 13/1.4 sans 400        --t-label 11 mono 500 .09em upper",
+        "--t-number 19 mono 500 .06em    --t-masked 19 mono 500 .14em",
+        "--t-input 16 sans 400 (hard floor)",
+        "",
+        "/* space (4px base) */",
+        "--s-1 4  --s-2 8  --s-3 12  --s-4 16  --s-5 22  --s-6 30  --s-7 44  --s-8 64",
+        "--gutter var(--s-5)   --tap-min 44px   --row-min 72px   --field-h 52px",
+        "",
+        "/* radius */",
+        "--r-1 3  --r-2 10  --r-3 12  --r-4 22  --r-pill 999px",
+        "",
+        "/* elevation */",
+        "--e-0: 0 0 0 1px var(--rule);",
+        "--e-sheet: 0 -8px 32px rgba(10,10,9,.18);",
+        "--e-toast: 0 8px 24px rgba(10,10,9,.24);",
+        "--e-focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--focus);",
+        "",
+        "/* motion — two durations, one curve, all optional */",
+        "--m-fast 120ms   --m-base 220ms   --m-ease cubic-bezier(.2,.7,.3,1)",
+        "@media (prefers-reduced-motion: reduce) { all of the above → 0ms, no transforms }",
+        "",
+        "/* safe area */",
+        "padding-top: max(env(safe-area-inset-top), 12px);",
+        "padding-bottom: max(env(safe-area-inset-bottom), 12px);"
+      ].join("\n")
+    };
+  }
+}
+
+</script>
+</body>
+</html>
