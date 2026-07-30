@@ -78,13 +78,15 @@ browser pass at phone width.
    replaying an `Idempotency-Key`, and confirming a typo'd filter 400s. **This deploy needed
    [ADR-0023](decisions/0023-migrate-on-boot.md) first** — nothing was applying migrations, and it
    would have shipped an API reporting healthy with five missing tables.
-2. **Provision R2** — four `R2_*` variables. Confirmed answering `503` on production right now,
-   which is the deliberate honest state but not a shippable one for a document archive.
-3. **Provision VAPID** — `node scripts/generate-vapid-keys.mjs`, three variables. Confirmed
-   `public_key: null` on production, so the notification card hides itself and reminders have
-   nowhere to go.
-4. **Rotate the Neon credential (D18).** Its trigger is "before the first real document is stored",
-   and step 5 is exactly that. Do not skip it.
+2. ✅ **R2 provisioned — 2026-07-30.** Bucket `life-manager-documents`, an Object Read & Write token
+   scoped to it, and the bucket CORS policy set — that last one has no error message when missing,
+   because the browser PUTs straight to R2 and the failure never reaches our code.
+3. ✅ **VAPID provisioned — 2026-07-30.** Generated with `scripts/generate-vapid-keys.mjs` and bound;
+   `provision.ps1 preflight` reports all three set.
+4. ✅ **Neon credential rotated — 2026-07-30.** Reset in the Neon console and rebound via
+   `./scripts/provision.ps1 neon`, ahead of the first real document exactly as D18's trigger
+   required. Revision `life-manager-api-00016-wgs` came up healthy on the new credential, which is
+   also proof that migrate-on-boot reconnected.
 5. **Put your real documents in**, then leave it a week.
 6. **Switch `ENABLE_SCHEDULED_JOBS=true`** so the daily scan actually runs unattended — and note
    that this fires **D8**: measure Neon compute hours that month.

@@ -129,7 +129,7 @@ before "fixing" one.
 it prompts, so no secret reaches a transcript. Full list in [roadmap.md](docs/roadmap.md) § Next
 actions §4. In order: provision R2 (**and its bucket CORS policy**, README § Provisioning R2 — the
 browser PUTs straight to R2, so without it every upload fails while the API looks healthy) · provision
-VAPID · **rotate the Neon credential (D18)** · put real documents in · switch
+VAPID · ~~rotate the Neon credential (D18)~~ **done 2026-07-30** · put real documents in · switch
 `ENABLE_SCHEDULED_JOBS=true` (this fires D8) · redo lens 4 of the M1 review.
 
 **To iterate without any cloud account:** `docker compose -f docker-compose.dev.yml up -d` gives a
