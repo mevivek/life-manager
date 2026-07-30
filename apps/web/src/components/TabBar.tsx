@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
  * The bottom tab bar — persistent app chrome. ADR-0025 §4.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
- *  Three tabs, permanently visible, always labelled: Now · Documents · Add.
+ *  Three tabs, permanently visible, always labelled: Now · Documents · You.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
  * ── This replaces a plan to grow the bar one tab per domain ──
@@ -25,12 +25,19 @@ import { cn } from '@/lib/utils'
  * **The switcher does not exist yet, and must not be drawn yet** — one domain, no chevron. Honest,
  * never decorative: the control appears the day the second domain does.
  *
- * ── Add is a tab, not a floating button ──
+ * ── Add used to be the third tab, and is not any more ──
  *
- * It is the third item rather than a FAB so it cannot be mistaken for decoration, and it carries the
- * ink fill because it is the one action available from every screen. It **opens a sheet rather than
- * navigating**: capture is a thing you do on top of what you were looking at, not a place you go.
- * `/documents/new` still exists as a real route for deep links.
+ * The design revision replaces it with **You**, and moves Add to two places that are *about* the
+ * thing being added: a text button in the Now header, and a floating pill on Documents. The argument
+ * for that swap is not aesthetic. A tab bar is for **places**, and Add was never a place — it opened
+ * a sheet and left you where you were, which is why it needed a callback prop while its two
+ * neighbours needed a route. Meanwhile the app had nowhere to put an account, a sign-out, what it
+ * holds, or a delete: those were squatting as quiet text in the Now header (see `home.tsx`) because
+ * ADR-0025 §10 had no better home for them.
+ *
+ * A tab bar of three places, with the action attached to the surfaces it acts on, is the shape that
+ * survives a fourth domain. Add is still a sheet, not a navigation — capture happens on top of what
+ * you were looking at — and `/documents/new` still exists as a real route for deep links.
  */
 
 type Tab = {
@@ -73,9 +80,28 @@ const TABS: Tab[] = [
       />
     ),
   },
+  {
+    to: '/you',
+    label: 'You',
+    match: '/you',
+    /*
+      A head and shoulders, drawn from two blocks inside a ring — the one glyph here that depicts
+      something, because "you" has no geometry. Kept to the same 16px box and 2px stroke as the
+      other two so it reads as a sibling rather than an icon from a different set.
+    */
+    icon: () => (
+      <span
+        aria-hidden="true"
+        className="relative block size-4 overflow-hidden rounded-full border-2 border-current"
+      >
+        <span className="absolute top-[2px] left-[3.5px] block size-[5px] rounded-full bg-current" />
+        <span className="absolute top-[8.5px] left-[0.5px] block h-2 w-[11px] rounded-t-[6px] bg-current" />
+      </span>
+    ),
+  },
 ]
 
-export function TabBar({ onAdd }: { onAdd: () => void }) {
+export function TabBar() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
 
   /**
@@ -151,18 +177,6 @@ export function TabBar({ onAdd }: { onAdd: () => void }) {
             </Link>
           )
         })}
-
-        <button
-          type="button"
-          onClick={onAdd}
-          className="flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-[5px] rounded-2 bg-ink text-onink active:opacity-90"
-        >
-          <span aria-hidden="true" className="relative block size-4">
-            <span className="absolute top-[7px] left-0 h-[2.5px] w-4 rounded-[1px] bg-current" />
-            <span className="absolute top-0 left-[7px] h-4 w-[2.5px] rounded-[1px] bg-current" />
-          </span>
-          <span className="text-[12px] font-semibold">Add</span>
-        </button>
       </div>
     </nav>
   )

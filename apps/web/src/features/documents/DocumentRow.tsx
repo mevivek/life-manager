@@ -96,9 +96,16 @@ export function DocumentRow({
 
       <span className="min-w-0 flex-1">
         <span className="block truncate text-row font-medium leading-snug">{document.title}</span>
+        {/*
+          The status must never shrink; the meta must always be the thing that truncates.
+          `whitespace-nowrap` alone does not achieve that — a flex item still shrinks below its
+          content, so a long issuer squeezed "EXPIRED 7 WEEKS AGO" until it overflowed its own box
+          rather than shortening "Regional Transport Office" beside it. The status is the fact; the
+          issuer is the gloss, so `shrink-0` on one and `min-w-0 flex-1` on the other.
+        */}
         <span className="mt-0.5 flex items-baseline gap-[7px]">
-          <ExpiryWords expiry={expiry} className="whitespace-nowrap" />
-          <span className="truncate text-meta text-ink-3">{meta}</span>
+          <ExpiryWords expiry={expiry} className="shrink-0 whitespace-nowrap" />
+          <span className="min-w-0 flex-1 truncate text-meta text-ink-3">{meta}</span>
         </span>
       </span>
 

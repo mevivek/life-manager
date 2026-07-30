@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AuthedHomeRouteImport } from './routes/_authed/home'
 import { Route as AuthedOutboxRouteImport } from './routes/_authed/outbox'
+import { Route as AuthedYouRouteImport } from './routes/_authed/you'
 import { Route as AuthedDocumentsIndexRouteImport } from './routes/_authed/documents.index'
 import { Route as AuthedDocumentsDocumentIdRouteImport } from './routes/_authed/documents.$documentId'
 import { Route as AuthedDocumentsNewRouteImport } from './routes/_authed/documents.new'
@@ -48,6 +49,11 @@ const AuthedOutboxRoute = AuthedOutboxRouteImport.update({
   path: '/outbox',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedYouRoute = AuthedYouRouteImport.update({
+  id: '/you',
+  path: '/you',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedDocumentsIndexRoute = AuthedDocumentsIndexRouteImport.update({
   id: '/documents/',
   path: '/documents/',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/home': typeof AuthedHomeRoute
   '/outbox': typeof AuthedOutboxRoute
+  '/you': typeof AuthedYouRoute
   '/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
   '/documents/new': typeof AuthedDocumentsNewRoute
   '/documents/': typeof AuthedDocumentsIndexRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/home': typeof AuthedHomeRoute
   '/outbox': typeof AuthedOutboxRoute
+  '/you': typeof AuthedYouRoute
   '/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
   '/documents/new': typeof AuthedDocumentsNewRoute
   '/documents': typeof AuthedDocumentsIndexRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_authed/home': typeof AuthedHomeRoute
   '/_authed/outbox': typeof AuthedOutboxRoute
+  '/_authed/you': typeof AuthedYouRoute
   '/_authed/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
   '/_authed/documents/new': typeof AuthedDocumentsNewRoute
   '/_authed/documents/': typeof AuthedDocumentsIndexRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/home'
     | '/outbox'
+    | '/you'
     | '/documents/$documentId'
     | '/documents/new'
     | '/documents/'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/home'
     | '/outbox'
+    | '/you'
     | '/documents/$documentId'
     | '/documents/new'
     | '/documents'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_authed/home'
     | '/_authed/outbox'
+    | '/_authed/you'
     | '/_authed/documents/$documentId'
     | '/_authed/documents/new'
     | '/_authed/documents/'
@@ -182,6 +194,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOutboxRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/you': {
+      id: '/_authed/you'
+      path: '/you'
+      fullPath: '/you'
+      preLoaderRoute: typeof AuthedYouRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/documents/': {
       id: '/_authed/documents/'
       path: '/documents'
@@ -209,6 +228,7 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedHomeRoute: typeof AuthedHomeRoute
   AuthedOutboxRoute: typeof AuthedOutboxRoute
+  AuthedYouRoute: typeof AuthedYouRoute
   AuthedDocumentsDocumentIdRoute: typeof AuthedDocumentsDocumentIdRoute
   AuthedDocumentsNewRoute: typeof AuthedDocumentsNewRoute
   AuthedDocumentsIndexRoute: typeof AuthedDocumentsIndexRoute
@@ -217,6 +237,7 @@ interface AuthedRouteChildren {
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHomeRoute: AuthedHomeRoute,
   AuthedOutboxRoute: AuthedOutboxRoute,
+  AuthedYouRoute: AuthedYouRoute,
   AuthedDocumentsDocumentIdRoute: AuthedDocumentsDocumentIdRoute,
   AuthedDocumentsNewRoute: AuthedDocumentsNewRoute,
   AuthedDocumentsIndexRoute: AuthedDocumentsIndexRoute,
