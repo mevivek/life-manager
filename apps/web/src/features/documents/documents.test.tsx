@@ -283,6 +283,20 @@ describe('the identifier card', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
+  it('survives a document cached by an older build, where the field is absent entirely', () => {
+    /**
+     * The regression. This crashed the app at its root error boundary on a real phone —
+     * *"undefined is not an object (evaluating 'e.length')"* — and no type could have caught it,
+     * because `documentDetailResponseSchema` says `identifier` is `string | null`.
+     *
+     * The lie comes from the persisted Query cache: a detail fetched by an older build has no
+     * `identifier` key, and TanStack Query **rehydrates without re-running Zod**. So the first render
+     * after a deploy is handed an object the schema says cannot exist. `undefined`, not `null`.
+     */
+    const { container } = render(<IdentifierCard identifier={undefined} last4={undefined} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
   it('never claims the value is encrypted, because it is not', () => {
     // The comp's copy is "Stored in full, encrypted at rest, hidden until you ask." Nothing here is
     // encrypted — invariant 7 and ADR-0009 keep application-level encryption for the vault — and this
@@ -573,6 +587,16 @@ describe('DocumentForm', () => {
       doc_type: 'financial',
       issuer: null,
     })
+  })
+
+  it('survives a document cached by an older build, where the number field is absent', () => {
+    // The same shape drift that crashed `IdentifierCard`. This form reads `initial?.identifier ?? ''`,
+    // so it was already safe — the test is here so it stays that way, since a `?? ''` is exactly the
+    // sort of thing a later refactor "simplifies" to `initial.identifier`.
+    const { identifier: _dropped, ...stale } = detailFixture
+    renderWithQuery(<DocumentForm initial={stale as typeof detailFixture} onSubmit={vi.fn()} />)
+    expect(screen.getByLabelText('Title')).toHaveValue('Passport')
+    expect(screen.getByLabelText('Passport number')).toHaveValue('')
   })
 
   it('offers no presets when editing, where a tap would overwrite a real title', async () => {

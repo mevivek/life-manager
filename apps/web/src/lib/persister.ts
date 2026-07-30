@@ -43,7 +43,33 @@ const CACHE_KEY = 'life-manager-query-cache'
 
 /**
  * Bumped by the build, so a deploy that changes a response shape discards the old cache instead of
- * rehydrating data the new code cannot read. `__APP_VERSION__` is defined in `vite.config.ts`.
+ * rehydrating data the new code cannot read.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  This did not work, and the failure was silent until it crashed a real phone.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `__APP_VERSION__` is `process.env.VITE_APP_VERSION ?? 'dev'` (`vite.config.ts`), and
+ * **`VITE_APP_VERSION` was set nowhere** — not in `cloudbuild.deploy.yaml`, not in the Pages build.
+ * So the buster was the literal string `'dev'` on every deploy, for every build, and therefore never
+ * busted anything. A cache written weeks earlier rehydrated into whatever code shipped next.
+ *
+ * ADR-0026 then added a field to the document detail response. The old cached detail had no
+ * `identifier` key, rehydration does **not** re-run Zod (validation is at the fetch boundary), and
+ * `IdentifierCard` read `.length` off it: *"undefined is not an object"* at the root error boundary,
+ * app unusable, on the maintainer's phone within an hour of the deploy.
+ *
+ * `CF_PAGES_COMMIT_SHA` is what Cloudflare Pages sets on every build, so it changes exactly when the
+ * code does. `VITE_APP_VERSION` stays as an override for other hosts, and `'dev'` remains the local
+ * fallback — a dev server rebuilding constantly does not want its cache dropped every reload.
+ *
+ * **A cache buster that cannot be observed to change is not a cache buster**, and nothing checks that
+ * this one does — a unit test cannot, because the value is injected at build time and Vitest injects
+ * its own. Debt **D46**: the check belongs in `scripts/verify-deployment.mjs`, which already greps the
+ * shipped bundle for `VITE_API_URL` for exactly this class of "configured wrong, looks fine" bug.
+ *
+ * Until then the second line of defence is that **components must tolerate a stale shape** — see the
+ * prop note on `IdentifierCard`, and the tests named "survives a document cached by an older build".
  */
 const CACHE_BUSTER = __APP_VERSION__
 
