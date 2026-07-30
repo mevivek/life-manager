@@ -101,8 +101,16 @@ export const STEP_COPY: Record<CaptureStep, { heading: string; sub: string }> = 
   },
   purchase: { heading: 'When did you buy it?', sub: '' },
   warranty: {
+    /*
+      The sub-line must not promise the length chips, because the step only draws them when a purchase
+      date exists to count from — without one it asks for the end date directly. The comp's wording
+      ("Pick a length and we'll work out the date") therefore contradicted its own body on exactly the
+      path a skipped purchase step produces, which a render of the step made obvious.
+
+      Said generically instead, so it is true either way. The step itself explains which form it is in.
+    */
     heading: 'How long is it covered?',
-    sub: 'Pick a length and we’ll work out the date. Skip it if there’s no cover.',
+    sub: 'Skip it if there’s no cover — plenty of things have none, and that is not a gap.',
   },
   photo: { heading: 'Add a photo', sub: '' },
 }

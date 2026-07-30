@@ -2,6 +2,7 @@ import type { Document, DocumentListQuery } from '@life-manager/shared'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { z } from 'zod'
+import { DomainSwitcher } from '@/components/DomainSwitcher'
 import { Button } from '@/components/ui/button'
 import { Toast } from '@/components/ui/toast'
 import { useOpenAdd } from '@/features/documents/AddSheetProvider'
@@ -149,8 +150,8 @@ function DocumentsPage() {
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-baseline gap-2">
             {/*
-              No chevron beside "Documents". ADR-0025 §4: the domain switcher appears the day the second
-              domain does, and drawing it now would be a control that does nothing.
+              No chevron beside "Documents" — the switcher is a row of pills below the title, not a
+              dropdown on it. design.md §8 and `DomainSwitcher`'s own note.
             */}
             <h1 className="font-heading text-title font-face-h leading-tight">Documents</h1>
             <span className="text-body text-ink-3">
@@ -198,6 +199,15 @@ function DocumentsPage() {
             </Button>
           )}
         </div>
+
+        {/*
+          The domain switcher. design.md §8 says the pills sit beneath the title on **both** list
+          screens, and `things.index.tsx` had it while this one did not — which made `/things`
+          unreachable by navigation, because the tab bar is Now · Documents · You and the only other
+          route in was a thing event on the Now horizon (absent entirely while the Things API 404s).
+          Found by rendering the screen, not by a test: every assertion about this file passed.
+        */}
+        <DomainSwitcher current="documents" className="mt-3" />
 
         <DocumentFilters
           filters={filters}

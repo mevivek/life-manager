@@ -119,9 +119,22 @@ cover gets four states, its own shape, and a boundary of its own:
 
 Four rules, each with a failure mode:
 
-1. **The bar is proportional and continuous; the expiry gauge is three discrete bars.** That is the
-   whole visual distinction and it must survive greyscale like everything else: a warranty is a span
-   with a start and an end, an expiry is a countdown to a cliff.
+1. **The bar is proportional and continuous; the expiry gauge is three discrete bars.** A warranty is a
+   span with a start and an end; an expiry is a countdown to a cliff.
+
+   ⚠ **This ladder does NOT fully survive greyscale, and that is a measured limitation rather than a
+   claim.** A greyscale render of all four states shows `active` (a part-filled track) and `none` (a
+   dotted rule, italic words) as unmistakable — but **`ending` and `ended` are near-identical**. The
+   bar is proportional over the *whole* span, so a car bought in 2019 whose cover ends in 38 days
+   draws **1.4% — a four-pixel dot** against `ended`'s empty track, and both sentences are the same
+   weight and size. Only the words separate them.
+
+   Read strictly, that is what rule 2 asks for ("the *words* are what carry the difference"), and the
+   §2 expiry ladder's stronger promise — *shape alone separates all five* — is deliberately **not**
+   made here. But do not repeat the stronger claim about cover: it is not true, and on the Things list
+   two rows in different states can look the same. If this needs fixing, the fix is a **minimum
+   floor** on the rendered bar for `ending` (so it can never approach zero) or a different shape for
+   `ended` — not a hue, which is what greyscale is testing for in the first place.
 2. **`ended` never says "Expired" and never pulses.** It states a date. `--status-late` is the palette's
    "past its date" hue and is correct; the *words* are what carry the difference.
 3. **`COVER_ENDING_DAYS` is 60, `NEEDS_YOU_DAYS` is 45, and service urgency is 45.** Three numbers,

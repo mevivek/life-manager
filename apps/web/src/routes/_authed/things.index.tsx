@@ -128,7 +128,16 @@ function ThingsPage() {
         <div className="flex items-baseline gap-2">
           <h1 className="font-heading text-title font-face-h leading-tight">Things</h1>
           <span className="text-body text-ink-3">
-            {all.isPending
+            {/*
+              `isError` as well as `isPending`, and the reason was found by looking at the screen.
+
+              Branching on `isPending` alone meant a failed request fell through to the loaded case
+              with `total` at 0 and `complete` false, so the header read **"Things 0+"** directly above
+              "Couldn't load your things" — two claims about the same failed request, one of them
+              invented. A count is a fact about data we hold; when the request failed we hold none, so
+              the honest rendering is nothing at all rather than a zero that looks measured.
+            */}
+            {all.isPending || all.isError
               ? ''
               : hasAnyFilter(filters)
                 ? // Both numbers are knowable here — unlike the archive, where a filtered count has no
