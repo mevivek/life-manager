@@ -44,6 +44,26 @@ export class ForbiddenError extends AppError {
   }
 }
 
+/**
+ * 400 — the request itself is malformed, so no business rule was even reached.
+ *
+ * **Distinct from `ValidationError` (422) on purpose**, per conventions/api.md §3's table: 400 is
+ * "malformed request, Zod rejected it" and 422 is "well-formed but violates a business rule". The
+ * slug is the same one `problem.ts` already maps a bare Fastify 400 to, so a rejection raised here
+ * and one raised by the route's own querystring schema look identical to a client.
+ *
+ * Raised by `lib/cursor.ts` for a cursor that is not one of ours: a garbage cursor is not a
+ * business-rule violation, it is a request that does not parse.
+ */
+export class BadRequestError extends AppError {
+  readonly status = 400
+  readonly slug = 'validation-failed'
+
+  constructor(message = 'The request was not valid.') {
+    super(message)
+  }
+}
+
 /** 404 — not found, or not visible to this actor. Both, deliberately indistinguishable. */
 export class NotFoundError extends AppError {
   readonly status = 404

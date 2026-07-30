@@ -1154,6 +1154,47 @@ describeDb('documents', () => {
     expect(new Set(seen).size).toBe(4)
   })
 
+  it('paginates every sort option, including the timestamptz one — page 2 follows page 1', async () => {
+    const user = await seedUserWithSpace(app)
+    for (const title of ['A', 'B', 'C']) {
+      await createDocument(app, user, { title, expires_on: '2030-01-01' })
+    }
+
+    /**
+     * `created_at` is the reason this test exists. It is a `timestamptz` with Drizzle `mode: 'date'`,
+     * so its mapper calls `.toISOString()` on whatever it is handed — and a cursor's sort value is a
+     * *string*, because it has to survive JSON. Page two of `?sort=created_at` was therefore a **500
+     * on a completely legitimate cursor**, and no test noticed because every cursor test used the
+     * default sort. `lib/cursor.ts`'s `boundSortValue` converts it back.
+     */
+    for (const sort of ['expires_on', 'created_at', 'title'] as const) {
+      const first = await app.inject({
+        method: 'GET',
+        url: `/api/v1/documents?limit=2&sort=${sort}`,
+        ...authAs(user),
+      })
+      expect(first.statusCode, sort).toBe(200)
+      const page1 = first.json() as { data: { title: string }[]; next_cursor: string | null }
+      expect(page1.data.length, sort).toBe(2)
+      expect(page1.next_cursor, `${sort} must offer a page two`).not.toBeNull()
+      if (page1.next_cursor === null) continue
+
+      const second = await app.inject({
+        method: 'GET',
+        url: `/api/v1/documents?limit=2&sort=${sort}&cursor=${encodeURIComponent(page1.next_cursor)}`,
+        ...authAs(user),
+      })
+      expect(second.statusCode, `${sort} page 2`).toBe(200)
+      const page2 = second.json() as { data: { title: string }[]; next_cursor: string | null }
+      expect(page2.data.length, sort).toBe(1)
+      expect(page2.next_cursor, `${sort} must be the last page`).toBeNull()
+
+      const seen = [...page1.data, ...page2.data].map((row) => row.title)
+      expect(seen.length, sort).toBe(3)
+      expect([...seen].sort(), sort).toEqual(['A', 'B', 'C'])
+    }
+  })
+
   it('rejects a malformed cursor rather than silently serving page one', async () => {
     const user = await seedUserWithSpace(app)
     const response = await app.inject({
@@ -1161,9 +1202,58 @@ describeDb('documents', () => {
       url: '/api/v1/documents?cursor=not-a-real-cursor',
       ...authAs(user),
     })
-    // 422: a cursor the client did not get from us is a bug worth surfacing. Serving page one
-    // would look like the list randomly resetting.
-    expect(response.statusCode).toBe(422)
+    // 400: a cursor the client did not get from us is a malformed request worth surfacing. Serving
+    // page one would look like the list randomly resetting. Was 422 until 2026-07-30 — see
+    // `lib/cursor.ts` and conventions/api.md §4, corrected together.
+    expect(response.statusCode).toBe(400)
+    expect(response.json().type).toBe('https://life-manager.app/problems/validation-failed')
+  })
+
+  it('rejects a WELL-FORMED cursor carrying garbage with a 400, never a 500', async () => {
+    const user = await seedUserWithSpace(app)
+    for (const title of ['A', 'B', 'C']) {
+      await createDocument(app, user, { title, expires_on: '2030-01-01' })
+    }
+
+    // Non-zero, so a 400 below cannot be an empty archive dressed up as validation (debt D33).
+    const all = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
+    expect(all.statusCode).toBe(200)
+    expect((all.json().data as unknown[]).length).toBe(3)
+
+    /**
+     * The same three rejections `things.test.ts` asserts, against a second domain **on purpose**: the
+     * validation lives in `lib/cursor.ts` and is shared, and a fix that only held for Things would be
+     * a fix in the wrong place. `22P02` reached the client as a 500 here too.
+     */
+    const garbage: { label: string; query: string; payload: unknown }[] = [
+      { label: 'id is not a uuid', query: '', payload: { v: 1, s: null, i: 'not-a-uuid' } },
+      {
+        label: 'sort value is not a date, but the column is',
+        query: '&sort=expires_on',
+        payload: { v: 1, s: 'nope', i: '3f1a9b5e-7c2d-4e8a-9b0f-1d2c3e4f5a6b' },
+      },
+      {
+        // A calendar date where the column is an instant. Close enough to look right, wrong enough
+        // that Postgres would take it — which is why the check follows the column, not a guess.
+        label: 'a date where the timestamptz column needs an instant',
+        query: '&sort=created_at',
+        payload: { v: 1, s: '2026-07-30', i: '3f1a9b5e-7c2d-4e8a-9b0f-1d2c3e4f5a6b' },
+      },
+    ]
+
+    for (const { label, query, payload } of garbage) {
+      const cursor = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/v1/documents?limit=2${query}&cursor=${encodeURIComponent(cursor)}`,
+        ...authAs(user),
+      })
+      expect(response.statusCode, label).toBe(400)
+      expect(response.json().type, label).toBe(
+        'https://life-manager.app/problems/validation-failed',
+      )
+      expect(response.json().detail, label).toBe('That pagination cursor is not valid.')
+    }
   })
 
   // ── custom_attrs ─────────────────────────────────────────────────────────

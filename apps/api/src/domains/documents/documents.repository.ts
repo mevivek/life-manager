@@ -22,7 +22,13 @@ import {
 import type { ActorContext } from '../../auth/actor.js'
 import { type Db, db } from '../../db/client.js'
 import { scoped } from '../../db/scoped.js'
-import { afterCursor, type Cursor, orderByCursor } from '../../lib/cursor.js'
+import {
+  afterCursor,
+  type Cursor,
+  type CursorSortKind,
+  orderByCursor,
+  sortValueKind,
+} from '../../lib/cursor.js'
 import { documentFiles, documents } from './documents.schema.js'
 
 /**
@@ -92,6 +98,18 @@ const SORT_COLUMNS = {
   created_at: documents.createdAt,
   title: documents.title,
 } as const satisfies Record<DocumentSort, unknown>
+
+/**
+ * The shape a cursor's sort value must have for a given sort option, read off the column itself.
+ *
+ * Exported because the service decodes the cursor and must validate `s` against the column it will
+ * be compared with — a non-date string bound into `WHERE expires_on > $1` is a 500. Only the *kind*
+ * crosses the layer boundary, never the column, so the service still touches no SQL
+ * (conventions/code.md §1).
+ */
+export function cursorSortKind(sort: DocumentSort): CursorSortKind {
+  return sortValueKind(SORT_COLUMNS[sort])
+}
 
 function select(executor: Executor) {
   // `searchVector` is excluded by listing columns explicitly: it is a large generated tsvector

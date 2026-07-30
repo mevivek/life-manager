@@ -140,7 +140,11 @@ export async function list(
   actor: ActorContext,
   query: DocumentListQuery,
 ): Promise<DocumentListResponse> {
-  const cursor: Cursor | null = query.cursor === undefined ? null : decodeCursor(query.cursor)
+  // The sort option decides how the cursor's sort value is validated, so the two are read together.
+  const cursor: Cursor | null =
+    query.cursor === undefined
+      ? null
+      : decodeCursor(query.cursor, repository.cursorSortKind(query.sort))
   const rows = await repository.list(actor, query, cursor)
 
   const page = toPage(rows, query.limit, (row) => ({
