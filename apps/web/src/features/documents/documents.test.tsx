@@ -1,5 +1,5 @@
 import type { DocumentDetailResponse } from '@life-manager/shared'
-import { QueryClientProvider } from '@tanstack/react-query'
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   createMemoryHistory,
   createRootRoute,
@@ -7,11 +7,12 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
+import { DocumentDetailPage } from '@/routes/_authed/documents.$documentId'
 import { server } from '@/test/msw'
 import { useOpenAdd } from './AddSheetProvider'
 import { DocumentForm } from './DocumentForm'
@@ -30,6 +31,23 @@ import {
 import { GettingStarted } from './GettingStarted'
 import { IdentifierCard } from './IdentifierCard'
 import { COMMON_PRESETS, numberLabelFor, PRESETS } from './presets'
+import { documentDetailKey } from './useDocuments'
+
+/**
+ * `lib/outbox.ts` persists through `idb-keyval`, and jsdom has no IndexedDB — so the offline branch of
+ * `useUpdateDocument` would throw here rather than queue. Same mock as `BelongsTo.test.tsx` and
+ * `outbox.test.ts`. Nothing else in this file touches the outbox.
+ */
+const outboxStore = new Map<string, unknown>()
+vi.mock('idb-keyval', () => ({
+  get: async (key: string) => outboxStore.get(key),
+  set: async (key: string, value: unknown) => {
+    outboxStore.set(key, structuredClone(value))
+  },
+  del: async (key: string) => {
+    outboxStore.delete(key)
+  },
+}))
 
 /**
  * Web tests for Documents.
@@ -1093,5 +1111,202 @@ describe('DocumentForm', () => {
     await waitFor(() =>
       expect(document.querySelector('option[value="HM Passport Office"]')).not.toBeNull(),
     )
+  })
+})
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  The detail screen's WRITE PRECONDITIONS. ADR-0024, and the one bug class that loses data
+ *  without anything going red.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Every one of these drives the same scenario, because it is the scenario that was shipped:
+ *
+ *  1. the screen loads a document at version 7,
+ *  2. the user opens the edit form (or raises the delete confirmation),
+ *  3. **the query advances underneath them** — `useDocument` inherits `refetchOnWindowFocus: true`,
+ *     so backgrounding a phone and coming back is enough, and a real edit on another device is what
+ *     makes the version move,
+ *  4. they submit.
+ *
+ * The write must carry **7**, so the server's `where version = :expected` fails and the other device's
+ * edit survives as a 409. Reading the version at submit time instead sends the *new* number with the
+ * *old* values, the update matches, and the other edit is gone with nothing shown to anybody. That is
+ * ADR-0024's "silent data loss from a bad merge", which it calls "the single worst failure mode this
+ * app could have".
+ *
+ * `7` rather than `1` throughout, deliberately: `1` is what a defaulted-or-invented version would
+ * coincidentally be, so a fixture at 1 would pass whether the code read the version or made it up.
+ */
+describe('the detail screen’s version preconditions', () => {
+  const DOC_ID = '00000001-0000-4000-8000-000000000000'
+  /** The document as the screen first read it. */
+  const atSeven: DocumentDetailResponse = { ...detailFixture, version: 7 }
+  /**
+   * The same document after somebody else edited it. A different title as well as a different version,
+   * so a test can *see* that the refetch landed rather than trusting that it did.
+   */
+  const atNine: DocumentDetailResponse = {
+    ...atSeven,
+    version: 9,
+    title: 'Renamed on the other device',
+  }
+
+  /**
+   * A router, because this screen draws a back `<Link>` and calls `useNavigate` after a delete.
+   *
+   * The two child paths are declared for the same reason `Horizon.test.tsx` declares them: a `<Link>`
+   * to a route the router has never heard of throws instead of rendering.
+   */
+  async function renderDetail(queryClient: QueryClient) {
+    const rootRoute = createRootRoute({
+      component: () => (
+        <QueryClientProvider client={queryClient}>
+          <DocumentDetailPage documentId={DOC_ID} />
+        </QueryClientProvider>
+      ),
+    })
+    const archive = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/documents',
+      component: () => null,
+    })
+    const thingDetail = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/things/$thingId',
+      component: () => null,
+    })
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([archive, thingDetail]),
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+    })
+    await router.load()
+    return render(<RouterProvider router={router as never} />)
+  }
+
+  /** The reads the screen makes that are irrelevant here, so an unhandled request cannot masquerade. */
+  function stubTheQuietReads() {
+    server.use(
+      http.get('*/api/v1/documents/issuers', () => HttpResponse.json({ data: [] })),
+      http.get('*/api/v1/documents/holders', () => HttpResponse.json({ data: [] })),
+    )
+  }
+
+  /**
+   * The window-focus refetch, landing.
+   *
+   * Written straight into the cache rather than by swapping the MSW handler and waiting: this is the
+   * *effect* of a refetch, it is synchronous, and it leaves nothing for a `waitFor` to race with.
+   */
+  function theQueryAdvances(queryClient: QueryClient) {
+    act(() => {
+      queryClient.setQueryData(documentDetailKey(DOC_ID), atNine)
+    })
+  }
+
+  beforeEach(() => outboxStore.clear())
+
+  it('PATCHes the version the form was POPULATED from, not the one the query has now', async () => {
+    const queryClient = createQueryClient()
+    const patched: unknown[] = []
+    stubTheQuietReads()
+    server.use(
+      http.get(`*/api/v1/documents/${DOC_ID}`, () => HttpResponse.json(atSeven)),
+      http.patch(`*/api/v1/documents/${DOC_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json({ ...atSeven, version: 8 })
+      }),
+    )
+
+    await renderDetail(queryClient)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Passport'),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('Title')).toHaveValue('Passport')
+
+    theQueryAdvances(queryClient)
+    // Proof the two halves have genuinely diverged: the heading is redrawn from the new document while
+    // the form still holds the old one. Without this the test could pass against a cache that never moved.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Renamed on the other device',
+      ),
+    )
+    expect(screen.getByLabelText('Title')).toHaveValue('Passport')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(patched).toHaveLength(1))
+
+    /**
+     * `7`, with version-7 values. This is the assertion the whole file is for: sending `9` here would
+     * satisfy the server's precondition and overwrite "Renamed on the other device" with "Passport",
+     * silently. Sending `7` makes the server able to answer 409, which is the only safe outcome.
+     */
+    expect(patched[0]).toMatchObject({ version: 7, title: 'Passport' })
+  })
+
+  it('DELETEs with the version the confirmation was raised at, not the one it closed on', async () => {
+    const queryClient = createQueryClient()
+    const deleted: string[] = []
+    stubTheQuietReads()
+    server.use(
+      http.get(`*/api/v1/documents/${DOC_ID}`, () => HttpResponse.json(atSeven)),
+      http.delete(`*/api/v1/documents/${DOC_ID}`, ({ request }) => {
+        deleted.push(new URL(request.url).search)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    await renderDetail(queryClient)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Passport'),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete this document' }))
+    theQueryAdvances(queryClient)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Renamed on the other device',
+      ),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }))
+
+    await waitFor(() => expect(deleted).toHaveLength(1))
+    // Debt D41. A delete is the one write this app cannot undo — there is no restore endpoint — so it is
+    // the write where carrying a version nobody looked at matters most, not least.
+    expect(deleted[0]).toBe('?version=7')
+  })
+
+  it('says an offline edit is only on this device, instead of closing on the pre-edit values', async () => {
+    const queryClient = createQueryClient()
+    stubTheQuietReads()
+    server.use(
+      http.get(`*/api/v1/documents/${DOC_ID}`, () => HttpResponse.json(atSeven)),
+      // A network-level failure, so `lib/api` throws `OfflineError` and `writeOrQueue` enqueues rather
+      // than rethrowing — the branch where `mutateAsync` resolves `{ queued: true }` (ADR-0024).
+      http.patch(`*/api/v1/documents/${DOC_ID}`, () => HttpResponse.error()),
+    )
+
+    await renderDetail(queryClient)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Passport'),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Title'))
+    await userEvent.type(screen.getByLabelText('Title'), 'Passport renewed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    /**
+     * The form closes and the detail rows redraw from the UNCHANGED cache, so without this notice the
+     * screen reads as a save that reverted — the user's new title replaced by the old one, with no
+     * explanation anywhere. Same words as `BelongsTo`'s queued link, deliberately.
+     */
+    await waitFor(() => expect(screen.getByText(/saved on this device/i)).toBeInTheDocument())
+    expect(screen.getByText(/still the last ones the server has/i)).toBeInTheDocument()
+    // And it really did queue rather than merely fail.
+    expect(outboxStore.size).toBeGreaterThan(0)
   })
 })

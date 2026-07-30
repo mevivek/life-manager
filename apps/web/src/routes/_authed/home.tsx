@@ -198,7 +198,12 @@ export function NowPage() {
           </Card>
         </div>
       ) : ledger !== null ? (
-        <NowBody ledger={ledger} entries={entries} horizonComplete={horizonComplete} />
+        <NowBody
+          ledger={ledger}
+          entries={entries}
+          thingCount={thingList.length}
+          horizonComplete={horizonComplete}
+        />
       ) : null}
     </div>
   )
@@ -207,17 +212,51 @@ export function NowPage() {
 function NowBody({
   ledger,
   entries,
+  thingCount,
   horizonComplete,
 }: {
   ledger: Ledger
   /** The merged cross-domain timeline. `ledger.horizon` is only the documents half of it. */
   entries: HorizonEntry[]
+  /**
+   * How many things loaded — `0` when the Things request has not succeeded, exactly as `entries`
+   * treats it. Read **only** by the zero-state test below; every number this screen prints is a
+   * document count, and the sentences that print them are documents-only by design (see `next`).
+   */
+  thingCount: number
   horizonComplete: boolean
 }) {
   const { needsYou, horizon, withoutScan, datedCount, loadedCount, complete } = ledger
   const { copy } = useFeel()
 
-  if (loadedCount === 0) return <ZeroState />
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  The zero state is CROSS-DOMAIN, because everything below it is.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * This was `loadedCount === 0`, a **document** count — so a household with three things and no
+   * documents got "Nothing in here yet." and an invitation to add a document, while a warranty ended in
+   * three weeks. The cross-domain `entries` had already been computed by the caller and were thrown
+   * away one line before `<Horizon>` could draw them.
+   *
+   * All three clauses are needed, and each rules out a different non-empty space:
+   *
+   *  - `loadedCount` — a document archive, however undated.
+   *  - `entries` — a forward date on the timeline, from **either** domain. This is the clause that was
+   *    missing, and it is the one that matters most: a date the app can warn you about is the whole
+   *    product.
+   *  - `thingCount` — things the user owns that happen to carry no forward date (no warranty, no
+   *    service due, or `gone`). They are still a filled archive, and telling their owner the app is
+   *    empty is a lie about their own data. `entries` alone would not catch them.
+   *
+   * So `ZeroState` is now reached only by a space that genuinely holds nothing, which is what keeps its
+   * copy and its `/documents/new` link honest — see the note on it.
+   *
+   * `Horizon.test.tsx` already asserted the `entries` half one level too low: it renders `<Horizon>`
+   * directly, so it passed throughout while this screen swallowed the timeline. The test for this lives
+   * beside it, at the `NowPage` level.
+   */
+  if (loadedCount === 0 && entries.length === 0 && thingCount === 0) return <ZeroState />
 
   /**
    * The soonest dated **document**, for the all-clear headline's "the next date is…".
@@ -260,8 +299,24 @@ function NowBody({
         "the next date is 4 March" / "Next expiry 4 Mar 2026" — because "nothing" is the one answer
         this screen exists to avoid.
       */}
+      {/*
+        ═══════════════════════════════════════════════════════════════════════════════════
+         The headline's total is CROSS-DOMAIN; the sub's is documents only. Not an oversight.
+        ═══════════════════════════════════════════════════════════════════════════════════
+
+        `nowHeadline` uses `total` for one thing: whether the ledger is empty at all
+        (`total === 0` ⇒ "Nothing in here yet."). With a document count there, a household that owned
+        three things and no paperwork was told the app was empty *above a timeline listing its
+        warranties* — the second half of the same bug the zero-state test above fixes. Anything the
+        archive holds counts, so both domains do.
+
+        `nowSub` keeps the **document** count, because it spends `total` on arithmetic that names the
+        thing it counts: `total - attention` becomes "4 other documents, no action due." Feeding things
+        into that would print a wrong number in a sentence that calls them documents. Same reasoning as
+        `next` below — a screen may be cross-domain without every sentence on it being.
+      */}
       <h1 className="mt-2.5 font-heading text-display font-face-h leading-[1.15] tracking-heading">
-        {copy.nowHeadline(needsYou.length, loadedCount)}
+        {copy.nowHeadline(needsYou.length, loadedCount + thingCount)}
       </h1>
       <p className="mt-1.5 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">
         {copy.nowSub({
@@ -401,6 +456,23 @@ function NowBody({
  * would be a second thing to keep in step with `documentCreateSchema`, and the tap it saves is paid
  * exactly once in the app's lifetime — on the first document ever added. One create path is worth
  * more than one tap.
+ *
+ * ── Why `/documents/new` is still right, now that the screen is cross-domain ──
+ *
+ * It is reached only by a space holding **no documents, no things and no dates** (see the guard in
+ * `NowBody`), so there is no user for whom "Add the first one" points at the wrong domain: nothing has
+ * been started in either. A space with things but no documents no longer lands here at all — it gets
+ * the ordinary body, with its timeline and `GettingStarted`. If this screen ever has to serve a
+ * half-empty space, the answer is two invitations rather than a guessed destination, and the copy is a
+ * new pair of sentences in `lib/voice.ts` in both registers (design.md §12).
+ *
+ * ── And why it has no footer and no `mt-auto` ──
+ *
+ * design.md §7 names this case explicitly: `mt-auto` is for "a page with a **foot**", and "a list that
+ * simply runs out (Documents, an empty state) is meant to end where it ends, and stretching it would be
+ * worse". The same section's next rule is why — "a screen with too little content gets more content,
+ * not more stretch. Pinning a footer to the foot relocates a void; it does not remove one." This screen
+ * already answers with content: the Start-here card, then the three suggested first documents.
  */
 function ZeroState() {
   const { copy } = useFeel()

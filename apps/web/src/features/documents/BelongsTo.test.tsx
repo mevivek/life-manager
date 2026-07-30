@@ -10,6 +10,7 @@ import {
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
@@ -103,14 +104,30 @@ const thing = (overrides: Partial<Thing> & { id: string; name: string }): Thing 
   ...overrides,
 })
 
-/** A router, because the linked card is a `<Link>` to the thing's screen. */
-async function renderBelongsTo(document: DocumentDetailResponse) {
+/**
+ * A router, because the linked card is a `<Link>` to the thing's screen.
+ *
+ * Deliberately **not** `async`: an `async` wrapper that returns another function's promise types as a
+ * nested one, and `noFloatingPromises` then reads every `await renderBelongsTo(...)` below as unhandled.
+ */
+function renderBelongsTo(document: DocumentDetailResponse) {
+  return renderWithDocument(() => <BelongsTo document={document} />)
+}
+
+/**
+ * The same router, around whatever the caller wants to render.
+ *
+ * Split out so one test can put a **state-holding wrapper** between the router and `BelongsTo`, which is
+ * the only way to make the `document` prop change after mount — which is what a window-focus refetch of
+ * `useDocument` does on the real screen.
+ */
+async function renderWithDocument(ui: () => React.ReactElement) {
+  // One client for the whole render, not one per render pass. It used to be constructed inline in the
+  // JSX below, which was harmless only because nothing re-rendered the root — a wrapper that holds state
+  // does, and a fresh `QueryClient` mid-mutation would throw the mutation away.
+  const queryClient = createQueryClient()
   const rootRoute = createRootRoute({
-    component: () => (
-      <QueryClientProvider client={createQueryClient()}>
-        <BelongsTo document={document} />
-      </QueryClientProvider>
-    ),
+    component: () => <QueryClientProvider client={queryClient}>{ui()}</QueryClientProvider>,
   })
   const thingDetail = createRoute({
     getParentRoute: () => rootRoute,
@@ -190,6 +207,36 @@ describe('BelongsTo, unlinked', () => {
     ).toBeInTheDocument()
   })
 
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  Debt D46: `thing_id` ABSENT is not `thing_id` set. `!== null` said it was.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   */
+  it('treats a document cached by an older build, with `thing_id` absent, as unlinked', async () => {
+    /**
+     * The persisted Query cache is rehydrated **without** re-running Zod (`lib/persister.ts`), so
+     * `.nullish().default(null)` in `packages/shared` does not fire on that path — a default only applies
+     * when the schema RUNS. A document cached before `thing_id` existed therefore arrives with the key
+     * missing, and `undefined !== null` is `true`.
+     *
+     * What that shipped: **"Something you own — couldn't load its details"** under *Belongs to*, on a
+     * document linked to nothing, plus a `<Link>` with an undefined param. And because this test registers
+     * no handler for a thing detail, `onUnhandledRequest: 'error'` means the request the broken branch
+     * fires (`/api/v1/things/undefined`) would fail here too.
+     */
+    const { thing_id: _absent, ...stale } = detail()
+    await renderBelongsTo(stale as DocumentDetailResponse)
+
+    expect(
+      screen.getByRole('button', { name: /link this to something you own/i }),
+    ).toBeInTheDocument()
+    // Exact, not a regex: the invitation's own label ends "…something you own", so a case-insensitive
+    // pattern would match the very button that proves the fix.
+    expect(screen.queryByText('Something you own')).toBeNull()
+    expect(screen.queryByText(/couldn’t load its details/i)).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
   it('sends `thing_id` with the version the screen was READ at, not a fresh one', async () => {
     const patched: { body: unknown; url: string }[] = []
     server.use(
@@ -219,6 +266,68 @@ describe('BelongsTo, unlinked', () => {
      * silently overwrite whatever else had changed. A fixture at `version: 1` would not have caught it.
      */
     expect(patched[0]?.body).toEqual({ thing_id: THING_ID, version: 7 })
+  })
+
+  it('keeps that version when the document advances AFTER the picker was opened', async () => {
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  The test above passes against a document that never moves. This is the one that bites.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * `useDocument` inherits `refetchOnWindowFocus: true` and a 30s `staleTime`, so on a phone the
+     * `document` prop is re-read constantly: open the picker, glance at something else, come back, tap.
+     * If the version is read from the live prop at the moment of the tap, the write carries a number
+     * nobody looked at — the server's `where version = :expected` matches, and whatever the other device
+     * changed is overwritten with no 409 and nothing shown. So the precondition is taken when the picker
+     * OPENS and held.
+     *
+     * The wrapper is what makes the prop move mid-test; on the real screen the refetch does it.
+     */
+    const patched: unknown[] = []
+    server.use(
+      http.get('*/api/v1/things', () =>
+        HttpResponse.json({
+          data: [thing({ id: THING_ID, name: 'Vaillant boiler' })],
+          next_cursor: null,
+        }),
+      ),
+      http.patch(`*/api/v1/documents/${DOC_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json({ ...detail({ thing_id: THING_ID }), version: 12 })
+      }),
+    )
+
+    function Harness() {
+      const [document, setDocument] = useState(detail())
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setDocument((previous) => ({
+                ...previous,
+                version: 11,
+                title: 'Renamed on the other device',
+              }))
+            }
+          >
+            simulate the focus refetch
+          </button>
+          <BelongsTo document={document} />
+        </>
+      )
+    }
+
+    await renderWithDocument(() => <Harness />)
+    await userEvent.click(screen.getByRole('button', { name: /link this to something you own/i }))
+    await waitFor(() => expect(screen.getByText('Vaillant boiler')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /simulate the focus refetch/i }))
+    await userEvent.click(screen.getByRole('button', { name: /vaillant boiler/i }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    // `7`, the version the picker was opened at — not `11`, which arrived while it was open.
+    expect(patched[0]).toEqual({ thing_id: THING_ID, version: 7 })
   })
 
   it('says the link is queued when the write could not reach the server', async () => {

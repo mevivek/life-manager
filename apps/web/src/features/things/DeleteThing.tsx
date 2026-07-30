@@ -28,11 +28,18 @@ import { useDeleteThing } from './useThings'
  * design.md §4. A red button would make "delete" the loudest thing on a screen whose subject is
  * somebody's car — and colour in this system is spent on *status*, not on consequences.
  *
- * ── The version is the precondition, and it is the RENDERED one ──
+ * ── The version is the precondition, and it is taken when the CONFIRMATION IS RAISED ──
  *
  * ADR-0024 and debt D41: a delete built against stale data is refused with 409 rather than destroying an
  * edit made elsewhere while this confirmation sat open. `useDeleteThing` takes it in its signature, so a
  * call site that forgets is a type error rather than a lost record.
+ *
+ * **Which version, though, is the part that was wrong.** `thing.version` read at the moment of the final
+ * tap is the live one: `useThing` refetches on window focus, so a confirmation left open while the app
+ * was backgrounded comes back holding the version of an edit the user has never seen — and the delete
+ * then carries a precondition it was just handed rather than the one it was built against, so the
+ * server's `where version = :expected` matches and that edit is destroyed. So `confirming` **is** the
+ * version, snapshotted when the user raised the question.
  */
 export function DeleteThing({
   thing,
@@ -42,14 +49,20 @@ export function DeleteThing({
   thing: Pick<Thing, 'id' | 'version'>
   onDeleted: () => void
 }) {
-  const [confirming, setConfirming] = useState(false)
+  /**
+   * The version the screen was showing when the confirmation was raised, or `null` while it is not.
+   *
+   * One piece of state rather than a boolean beside a version, so the two cannot disagree and `confirm`
+   * has nothing live to reach for. See the block comment.
+   */
+  const [confirming, setConfirming] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const remove = useDeleteThing()
 
-  async function confirm() {
+  async function confirm(versionRead: number) {
     setError(null)
     try {
-      await remove.mutateAsync({ id: thing.id, version: thing.version })
+      await remove.mutateAsync({ id: thing.id, version: versionRead })
       onDeleted()
     } catch (caught) {
       /**
@@ -74,7 +87,7 @@ export function DeleteThing({
     <section className="mt-6 border-t border-rule pt-4">
       {error !== null && <Alert className="mb-2.5">{error}</Alert>}
 
-      {confirming ? (
+      {confirming !== null ? (
         <div className="flex flex-col gap-2">
           <p className="text-body text-ink-2 [text-wrap:pretty]">
             Deleting hides this thing and stops its reminders. Its documents stay in Documents —
@@ -86,11 +99,11 @@ export function DeleteThing({
               size="sm"
               className="border border-status-late"
               disabled={remove.isPending}
-              onClick={() => void confirm()}
+              onClick={() => void confirm(confirming)}
             >
               {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>
+            <Button variant="secondary" size="sm" onClick={() => setConfirming(null)}>
               Keep it
             </Button>
           </div>
@@ -100,7 +113,8 @@ export function DeleteThing({
           variant="destructive"
           size="bare"
           className="px-0"
-          onClick={() => setConfirming(true)}
+          // Snapshots the version the user is deciding against. See the note on `confirming`.
+          onClick={() => setConfirming(thing.version)}
         >
           Delete this thing
         </Button>
