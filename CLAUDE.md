@@ -80,8 +80,9 @@ or the precondition it exists to enforce is defeated.
 
 **The whole web client now wears the Ledger design system
 ([ADR-0025](docs/decisions/0025-ledger-design-system.md), 2026-07-29)** — warm paper light + dark at
-parity, Newsreader + IBM Plex self-hosted, and colour spent *only* on expiry status. Read that ADR
-before touching anything visual. Four things in it will bite a session that does not:
+parity, Newsreader + IBM Plex self-hosted, and colour spent *only* on expiry status. **The practical
+rules live in [conventions/design.md](docs/conventions/design.md)** — read that before touching
+anything visual; the ADR is there for *why*. Five things will bite a session that reads neither:
 
 1. **`cn()` must be told about every new `--text-*`, `--radius-*` or `--spacing-*` token**
    (`apps/web/src/lib/utils.ts`). `tailwind-merge` cannot tell a colour from a size, and getting this
@@ -93,6 +94,9 @@ before touching anything visual. Four things in it will bite a session that does
    still fire at 90/30/7 server-side; the two are allowed to disagree.
 4. **Three tabs, forever.** ADR-0025 §4 reverses the old one-tab-per-domain plan: domains become a
    switcher on the Documents title, and that switcher **must not be drawn until domain two exists**.
+5. **A screen whose content can be short needs `flex-1` and a footer with `mt-auto`.** The shell is
+   `min-h-dvh`, so without it a sparse archive leaves a screen of dead space above the tab bar —
+   reported from a real phone, invisible to every twelve-document fixture.
 
 What still does **not** exist: OCR and previews (M2), offline *download* of files, password reset,
 Playwright, R2 object deletion, and **any way for a user to undo a delete** (soft-delete sets
@@ -139,7 +143,7 @@ Four things worth knowing before you touch anything:
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
-| **Anything visual — a screen, a component, a colour, a size** | [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) **in full**, then the token block in `apps/web/src/styles.css` and `apps/web/src/lib/utils.ts`. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
+| **Anything visual — a screen, a component, a colour, a size** | [`conventions/design.md`](docs/conventions/design.md) — the practical rules; [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) for why they exist. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0025 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it |
@@ -274,6 +278,7 @@ not re-exported there does not exist** as far as migrations are concerned.
 | `tsconfig.base.json` | `strict` + `noUncheckedIndexedAccess`, monorepo-wide |
 | `turbo.json` | `pnpm typecheck`, `pnpm build` — ordered so `packages/shared` builds first |
 | `vitest.config.ts` (root) | `pnpm test` runs all three packages |
+| `apps/web/src/lib/utils.test.ts` | The design system's token/`cn()` coupling — a new `--text-*` or `--radius-*` token not declared in `utils.ts` fails here rather than shipping an invisible button ([conventions/design.md](docs/conventions/design.md) §1) |
 | `cloudbuild.deploy.yaml` | typecheck → lint → test → build → deploy on push, no secrets. **The real pipeline.** `.github/workflows/ci.yml` describes the same steps and enforces *nothing* — Actions never runs here (debt D24) |
 
 Two traps worth knowing before you edit tooling config:

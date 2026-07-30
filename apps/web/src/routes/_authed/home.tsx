@@ -52,7 +52,20 @@ function NowPage() {
   const { resolved, toggle } = useTheme()
 
   return (
-    <div>
+    /**
+     * `flex-1` and a column, so the ledger footer can be pushed to the FOOT of the page.
+     *
+     * Without it this was a plain `<div>`: the shell is `min-h-dvh`, so on a sparse archive the
+     * content stopped a third of the way down and left a screen's worth of dead space between the
+     * footer and the tab bar. Reported from a real phone with one undated document — the emptiest
+     * real state there is, and the one the stub fixtures never showed because they always had twelve
+     * documents in them.
+     *
+     * The footer is a page-foot summary; in a printed ledger the totals line sits at the bottom of the
+     * sheet, not wherever the entries happen to run out. `mt-auto` on it does nothing when the page is
+     * long, so this costs the populated case nothing.
+     */
+    <div className="flex flex-1 flex-col">
       {/*
         ═══════════════════════════════════════════════════════════════════════════════════
          Sign out and the theme toggle live on this row, which the comp did not draw.
@@ -269,7 +282,12 @@ function NowBody({ ledger }: { ledger: Ledger }) {
         what keeps it honest — see `useLedger`. The API has no count endpoint, so an exact total is
         only claimable when the whole archive fitted in one page.
       */}
-      <p className="mt-6 mb-2 border-t border-rule pt-3 text-meta leading-loose text-ink-3 [text-wrap:pretty]">
+      {/* `mt-auto` is what pushes this to the foot of a sparse page — see the note on the root
+          element. On a full page there is no slack to take up and it behaves as a normal margin.
+          It works because `NowBody` returns a FRAGMENT, so this `<p>` is a direct child of that
+          root flex column. Wrapping this component's output in a `<div>` silently restores the
+          gap: `mt-auto` would then take up slack in a box that has none. */}
+      <p className="mt-auto mb-2 border-t border-rule pt-6 text-meta leading-loose text-ink-3 [text-wrap:pretty]">
         {complete ? loadedCount : `${loadedCount}+`} {loadedCount === 1 ? 'document' : 'documents'}{' '}
         · {datedCount} with a date we watch · {withoutScan.length} without a scan.
       </p>
