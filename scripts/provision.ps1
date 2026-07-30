@@ -64,6 +64,19 @@ function Resolve-Gcloud {
 function Invoke-Gcloud {
   param([string[]]$GcArgs, [switch]$Quiet)
   $exe = Resolve-Gcloud
+
+  <#
+    Native stderr must NOT be treated as a terminating error.
+
+    With this script's `$ErrorActionPreference = 'Stop'`, `2>&1` converts gcloud's stderr into
+    ErrorRecords and PowerShell throws on them. That broke `Set-Secret`'s "does this secret exist?"
+    probe in exactly the case where the answer is *no* — a NOT_FOUND on stderr — which is every first
+    run. The exit code is the real signal; stderr is just gcloud talking.
+
+    Assigning here shadows the script-level preference for this function only.
+  #>
+  $ErrorActionPreference = 'Continue'
+
   if ($Quiet) { & $exe @GcArgs 2>&1 | Out-Null }
   else { & $exe @GcArgs 2>&1 | ForEach-Object { Write-Host $_ } }
   return $LASTEXITCODE -eq 0
@@ -72,6 +85,8 @@ function Invoke-Gcloud {
 function Get-GcloudValue {
   param([string[]]$GcArgs)
   $exe = Resolve-Gcloud
+  # Same reasoning as above: a non-zero exit is reported by the return value, not by throwing.
+  $ErrorActionPreference = 'Continue'
   $out = & $exe @GcArgs 2>$null
   if ($LASTEXITCODE -ne 0) { return $null }
   return ($out | Out-String).Trim()
