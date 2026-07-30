@@ -20,6 +20,7 @@ import {
   autoCapitalizeFor,
   caretForSignificant,
   carryNumber,
+  fitsShape,
   formatNumber,
   inputModeFor,
   numberHint,
@@ -28,9 +29,9 @@ import {
 import {
   COMMON_PRESETS,
   GENERIC_NUMBER_LABEL,
-  numberLabelFor,
   PRESETS,
   presetByName,
+  presetForTitle,
 } from './presets'
 import { useIssuers } from './useDocuments'
 
@@ -174,6 +175,30 @@ export function DocumentForm({
   const issuers = useIssuers()
 
   /**
+   * The preset a document being EDITED corresponds to, recovered from its saved title.
+   *
+   * Declared here rather than beside `numberPreset` below because `defaultValues` needs it: the stored
+   * value is formatted on the way *in*, so an Aadhaar number saved as `999988887777` shows as
+   * `9999 8888 7777` the moment the form opens rather than only after the first keystroke.
+   */
+  const editPreset = initial === undefined ? null : presetForTitle(initial.title)
+
+  /**
+   * The format actually applied — which is NOT simply the preset's, when editing.
+   *
+   * `fitsShape` refuses the preset's format for a stored value it would mangle. A document titled
+   * "Passport" whose number is `FAKEM1234471` reformats under `A#######` to `F1234471`: eight
+   * characters where there were twelve, on a value nobody touched, persisted by a Save that changed
+   * something else. Where the stored value does not fit, the field behaves as free text for that
+   * document — see the long note on `fitsShape`.
+   *
+   * The LABEL still comes from the preset (it is still a passport); only the reshaping is dropped.
+   */
+  const storedFormat = fitsShape(editPreset?.format, initial?.identifier)
+    ? editPreset?.format
+    : undefined
+
+  /**
    * Three generics, not one, and it is not optional.
    *
    * `documentCreateSchema` has defaults (`doc_type`, `tags`, `custom_attrs`), so its **input** type
@@ -206,7 +231,15 @@ export function DocumentForm({
        * edit form quietly destroying the field it was showing. `identifier` is on
        * `DocumentDetailResponse` and nowhere else, which is exactly the shape this prop has.
        */
-      identifier: initial?.identifier ?? '',
+      /**
+       * Formatted on load, not raw.
+       *
+       * Submitting the formatted string is consistent with create, which already stores what the field
+       * holds — and `identifier_last4` is derived from the END of the value, so grouping spaces cannot
+       * change the mask. What it avoids is an edit form that shows a saved number differently from the
+       * screen you just came from.
+       */
+      identifier: formatNumber(storedFormat, initial?.identifier ?? ''),
       country: initial?.country ?? '',
       notes: initial?.notes ?? '',
       tags: initial?.tags ?? [],
@@ -214,13 +247,37 @@ export function DocumentForm({
   })
 
   const activePreset = presetByName(preset)
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  The preset that governs the NUMBER FIELD — which is not always the one just picked.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * The chooser is hidden when editing (a tap would overwrite a real title), so `activePreset` is
+   * always null on an edit form. Everything hanging off it therefore fell away there: **an Aadhaar
+   * number typed into the edit screen got no grouping, no counter, no numeric keypad and no example**,
+   * while the same field on the Add sheet had all four. Only the *label* had a fallback, which made the
+   * gap look deliberate — the field said "Aadhaar number" and then behaved like free text.
+   *
+   * On an edit, the shape is recovered from the document's **saved title**, the same way its label
+   * always was.
+   *
+   * ── Deliberately the SAVED title, not the live one ──
+   *
+   * The title is editable on this form, so `watch('title')` would mean renaming a document to
+   * "Aadhaar" starts reshaping its number as you type — silently rewriting a stored policy number to
+   * digits-only. On create that boundary is protected by `carryNumber`, which clears rather than
+   * mangles; there is no equivalent safety for a value the user did not just type. So the shape is
+   * fixed at the shape the document was saved as.
+   */
+  const numberPreset = activePreset ?? editPreset
+  /** Create: whatever was picked. Edit: the preset's format only if the stored value fits it. */
+  const activeFormat = activePreset === null ? storedFormat : activePreset.format
   /**
    * The number field's label: the real name of the number when a preset is in play, and on an EDIT
    * form the name derived from the document's own title. "Identifier" is never shown to anyone.
    */
-  const numberLabel =
-    activePreset?.numLabel ??
-    (initial === undefined ? GENERIC_NUMBER_LABEL : numberLabelFor(initial.title, initial.doc_type))
+  const numberLabel = numberPreset?.numLabel ?? GENERIC_NUMBER_LABEL
 
   /**
    * `register('identifier')` split apart, so this field's `onChange` and `ref` can be wrapped.
@@ -238,7 +295,7 @@ export function DocumentForm({
   /** Caret position in SIGNIFICANT characters, pending a re-render. See the `onChange` note. */
   const pendingCaret = useRef<number | null>(null)
 
-  const numberProgress = numberHint(activePreset?.format, watch('identifier') ?? '')
+  const numberProgress = numberHint(activeFormat, watch('identifier') ?? '')
 
   /**
    * Restore the caret after the reformat re-rendered the field.
@@ -432,14 +489,14 @@ export function DocumentForm({
                 {numberProgress}
               </span>
             )}
-            {activePreset?.shape !== undefined && activePreset.shape !== '' && (
-              <span className="text-meta text-ink-3">{activePreset.shape}</span>
+            {numberPreset?.shape !== undefined && numberPreset.shape !== '' && (
+              <span className="text-meta text-ink-3">{numberPreset.shape}</span>
             )}
           </div>
         </div>
         <Input
           id="identifier"
-          placeholder={activePreset?.placeholder ?? activePreset?.shape ?? 'Number on the document'}
+          placeholder={numberPreset?.placeholder ?? numberPreset?.shape ?? 'Number on the document'}
           className="font-mono"
           /*
             Keyboard hints, per preset. `numeric` on a digits-only number saves a keyboard switch on
@@ -447,8 +504,8 @@ export function DocumentForm({
             Autocorrect and spellcheck are off on all of them — an identifier is not a word, and iOS
             will happily "correct" one.
           */
-          inputMode={inputModeFor(activePreset?.format)}
-          autoCapitalize={autoCapitalizeFor(activePreset?.format)}
+          inputMode={inputModeFor(activeFormat)}
+          autoCapitalize={autoCapitalizeFor(activeFormat)}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
@@ -470,7 +527,7 @@ export function DocumentForm({
             const caretBefore = significant(
               element.value.slice(0, element.selectionStart ?? element.value.length),
             ).length
-            const formatted = formatNumber(activePreset?.format, element.value)
+            const formatted = formatNumber(activeFormat, element.value)
             pendingCaret.current = caretBefore
             element.value = formatted
             // RHF's onChange returns a promise (it may run async validation). Nothing here depends on

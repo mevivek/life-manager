@@ -3,6 +3,7 @@ import {
   autoCapitalizeFor,
   caretForSignificant,
   carryNumber,
+  fitsShape,
   formatNumber,
   inputModeFor,
   numberHint,
@@ -143,6 +144,31 @@ describe('carryNumber', () => {
 
   it('leaves an empty draft empty', () => {
     expect(carryNumber(PAN, '')).toBe('')
+  })
+})
+
+describe('fitsShape', () => {
+  it('accepts a value the shape reproduces exactly', () => {
+    expect(fitsShape(PASSPORT, 'M1234567')).toBe(true)
+    expect(fitsShape(AADHAAR, '999988887777')).toBe(true)
+    // Already grouped — the spaces are not significant, so it still fits.
+    expect(fitsShape(AADHAAR, '9999 8888 7777')).toBe(true)
+  })
+
+  it('rejects a value the shape would silently shorten', () => {
+    // The hazard: this reformats to 'F1234471' — twelve characters down to eight, on a stored value.
+    expect(fitsShape(PASSPORT, 'FAKEM1234471')).toBe(false)
+    expect(fitsShape(AADHAAR, 'ABCDE1234F')).toBe(false)
+  })
+
+  it('treats absent and empty as fitting, since there is nothing to lose', () => {
+    expect(fitsShape(PASSPORT, null)).toBe(true)
+    expect(fitsShape(PASSPORT, undefined)).toBe(true)
+    expect(fitsShape(PASSPORT, '')).toBe(true)
+  })
+
+  it('accepts anything when there is no shape to fit', () => {
+    expect(fitsShape(undefined, 'AV-4471-9820')).toBe(true)
   })
 })
 
