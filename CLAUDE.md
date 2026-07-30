@@ -12,10 +12,12 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 224 tests: web 101 · shared 29 · api 94.** The last run against a real
-Postgres recorded **168/0**, before ADR-0025 added 56 web tests in a container with no Docker — so the
-2026-07-29 session measured **139 passed / 85 skipped** (all 85 the API's) and could not confirm 224/0.
-**Run it somewhere with a database before quoting a total.** Deployed
+build` are green. **The suite is 246 tests: web 121 · shared 29 · api 96.** A container with no Docker
+measures **159 passed / 87 skipped** — all 87 the API's. **246/0 was confirmed on 2026-07-30, not
+locally but by the Cloud Build pipeline**, which runs a real Postgres sidecar with `CI=true` (making
+the harness throw rather than skip) and only builds and deploys after `test` passes — so the API
+reporting commit `99aac06` on `/health` is the evidence the database-backed suites ran green.
+**Still run it somewhere with a database before quoting a total from your own machine.** Deployed
 2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
 **R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
 deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
@@ -127,8 +129,9 @@ Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   **224/0 is the target; 139/85 is what a container with no Docker shows you** — the 85 skipped are
-   all the API's, and 101 of the 139 that do run are web tests needing no database.
+   **246/0 is the target; 159/87 is what a container with no Docker shows you** — the 87 skipped are
+   all the API's, and 121 of the 159 that do run are web tests needing no database. A green deploy of
+   the API is the cheapest proof the other 87 ran: the pipeline gates it on them.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
    [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.
