@@ -62,8 +62,10 @@ function readEnvFile() {
 }
 
 const env = readEnvFile()
-// biome-ignore lint/suspicious/noUndeclaredEnvVars: this script is never a Turborepo task, so there
-// is no turbo.json cache key to declare it in. Same reasoning as scripts/generate-icons.mjs.
+// This script is never a Turborepo task, so there is no turbo.json cache key to declare this
+// variable in. The suppression below must stay on ONE line touching the code — a second comment line
+// between them detaches it, and Biome then reports the suppression itself as unused.
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: script-only, documented directly above
 const cleanupDatabaseUrl = process.env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL_UNPOOLED
 
 let pass = 0
@@ -320,9 +322,19 @@ console.log('\n[7] the Documents domain actually works — i.e. its tables exist
     const typo = await fetch(`${API}/api/v1/documents?expiring_befor=2030-01-01`, { headers })
     ok(typo.status === 400, 'unknown query parameter rejected', `${typo.status}`)
 
+    /**
+     * **No `content-type` on a DELETE**, which is why this does not reuse `headers`.
+     *
+     * `headers` carries `content-type: application/json` for the writes above. Sending it on a
+     * request with no body makes Fastify reject it at the body parser with a 400 — "Body cannot be
+     * empty when content-type is set to application/json" — before the route runs at all.
+     *
+     * That produced a FAILING check against a perfectly healthy production API, which is the worst
+     * kind of verifier bug: it accuses the deployment of something the deployment did not do.
+     */
     const deleted = await fetch(`${API}/api/v1/documents/${documentId}`, {
       method: 'DELETE',
-      headers,
+      headers: { cookie, origin: APP },
     })
     ok(deleted.status === 204, 'DELETE /documents/:id', `${deleted.status}`)
   }
