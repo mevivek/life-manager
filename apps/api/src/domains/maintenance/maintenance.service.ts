@@ -19,8 +19,12 @@ import { logger } from '../../lib/logger.js'
  * Advisory-lock key. Arbitrary but **fixed forever** — a changed number serialises nothing against
  * processes still using the old one. Deliberately distinct from `MIGRATION_LOCK_KEY` in `migrate.ts`;
  * two unrelated jobs sharing a key would block each other for no reason.
+ *
+ * Exported only so the test can take the lock itself and assert the skip path deterministically. Two
+ * concurrent `runDailyMaintenance()` calls race — whichever connects first can finish before the other
+ * even asks — and a test that depends on that ordering fails about one run in ten.
  */
-const MAINTENANCE_LOCK_KEY = 40172028
+export const MAINTENANCE_LOCK_KEY = 40172028
 
 /**
  * Constant-time secret comparison.
