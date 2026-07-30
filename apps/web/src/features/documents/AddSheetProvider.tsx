@@ -1,8 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
-import { AddDocumentSheet } from './AddDocumentSheet'
+import { CaptureSheet, type CaptureIntent } from './CaptureSheet'
 
 /**
- * Owns the Add sheet's open state and hands out the one function that opens it.
+ * Owns the capture sheet's open state and hands out the functions that open it.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  Why this is a context now, when a `useState` and one prop was right before
@@ -19,21 +19,60 @@ import { AddDocumentSheet } from './AddDocumentSheet'
  *
  * The sheet is still rendered **here**, above the shell, for the original reason: mounted inside the
  * fixed tab bar it would be clipped by it and stack below the content it is meant to cover.
+ *
+ * ── One sheet, three doors, and the shape of the API is deliberate ──
+ *
+ * [ADR-0030](../../../../docs/decisions/0030-capture-as-a-stepped-wizard.md) gives capture two tracks
+ * and one entry point, plus the *"filing against a thing"* variant from things.md §7. All three are
+ * the same component with a different `CaptureIntent`, so this exposes three zero-or-one-argument
+ * functions rather than one function taking a track.
+ *
+ * **`openAdd` stays argument-free on purpose.** Both existing call sites pass it straight to
+ * `onClick`, so widening it to `openAdd(options?)` would hand it a `MouseEvent` as its intent — which
+ * type-checks, does nothing visible, and would be a genuinely nasty thing to find later.
  */
 
-const AddSheetContext = createContext<{ openAdd: () => void } | null>(null)
+type AddSheetValue = {
+  /** The common case: a document, from step one. */
+  openAdd: () => void
+  /** The Things list's own Add — the track is known, so the sheet skips asking. */
+  openAddThing: () => void
+  /** A document filed against a thing, from a papers checklist. Drops the `type` step. */
+  openAddAgainst: (intent: {
+    thing: { id: string; name: string }
+    preset?: string
+    title?: string
+  }) => void
+}
+
+const AddSheetContext = createContext<AddSheetValue | null>(null)
 
 export function AddSheetProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const openAdd = useCallback(() => setOpen(true), [])
-  const close = useCallback(() => setOpen(false), [])
-  // Memoised so every consumer of `useOpenAdd` does not re-render each time this tree does.
-  const value = useMemo(() => ({ openAdd }), [openAdd])
+  /**
+   * `null` is closed. Holding the *intent* rather than a boolean plus three more pieces of state is
+   * what keeps "which track, against which thing" from being able to disagree with "is it open".
+   */
+  const [intent, setIntent] = useState<CaptureIntent | null>(null)
+
+  const openAdd = useCallback(() => setIntent({ track: 'document' }), [])
+  const openAddThing = useCallback(() => setIntent({ track: 'thing' }), [])
+  const openAddAgainst = useCallback<AddSheetValue['openAddAgainst']>(
+    ({ thing, preset, title }) =>
+      setIntent({ track: 'document', forThing: thing, preset, title }),
+    [],
+  )
+  const close = useCallback(() => setIntent(null), [])
+
+  // Memoised so every consumer does not re-render each time this tree does.
+  const value = useMemo<AddSheetValue>(
+    () => ({ openAdd, openAddThing, openAddAgainst }),
+    [openAdd, openAddThing, openAddAgainst],
+  )
 
   return (
     <AddSheetContext.Provider value={value}>
       {children}
-      <AddDocumentSheet open={open} onClose={close} />
+      <CaptureSheet open={intent !== null} onClose={close} intent={intent ?? undefined} />
     </AddSheetContext.Provider>
   )
 }
@@ -45,10 +84,20 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
  * tapped — the failure mode this codebase has already shipped twice in visual form. Failing at mount
  * makes it a crash in development instead of a dead control in production.
  */
-export function useOpenAdd(): () => void {
+export function useAddSheet(): AddSheetValue {
   const context = useContext(AddSheetContext)
   if (context === null) {
-    throw new Error('useOpenAdd must be used inside <AddSheetProvider>.')
+    throw new Error('useAddSheet must be used inside <AddSheetProvider>.')
   }
-  return context.openAdd
+  return context
+}
+
+/**
+ * The document-track opener on its own, which is what every existing Add control wants.
+ *
+ * Kept as its own hook rather than folded into `useAddSheet` because the call sites pass it directly
+ * to `onClick` — see the note on `openAdd` above.
+ */
+export function useOpenAdd(): () => void {
+  return useAddSheet().openAdd
 }

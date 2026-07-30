@@ -62,7 +62,7 @@ export function App({ queryClient, children }: { queryClient: QueryClient; child
         {/*
           Inside the persist provider, outside the router — the position this arrived in from the Feel
           work, kept verbatim in spirit: the voice register is read as a *value* by route components
-          (`home.tsx`, `login.tsx`, `you.tsx`, `AddDocumentSheet.tsx`), so the context has to sit above
+          (`home.tsx`, `login.tsx`, `you.tsx`, `CaptureSheet.tsx`), so the context has to sit above
           them, and above the router is the shallowest place that covers every screen.
 
           It lives HERE rather than in `main.tsx` for the same reason the persist provider does: a tree

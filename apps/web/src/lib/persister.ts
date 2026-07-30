@@ -104,7 +104,14 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
  * `components/OfflineNotice.tsx`, which derives the age it shows from the oldest `dataUpdatedAt` in
  * the restored cache.
  */
-const PERSISTED_KEY_ROOTS = new Set(['documents', 'reminders', 'me'])
+/**
+ * **`things` widens debt D47 rather than creating a new decision.** ADR-0029 §*Consequences* states
+ * it: a thing's `serial` is returned on every response including the list, exactly as a document's
+ * `identifier` is (ADR-0027), so a phone that has opened Things now holds every serial — an IMEI, a
+ * registration, a hallmark — in **plaintext** on disk. Same class of data, same accepted trade, one
+ * more domain of it. Nothing here is encrypted and no copy in the app may claim it is (debt D44).
+ */
+const PERSISTED_KEY_ROOTS = new Set(['documents', 'things', 'reminders', 'me'])
 
 export const queryCachePersister = createAsyncStoragePersister({
   storage: {

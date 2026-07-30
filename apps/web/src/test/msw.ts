@@ -35,6 +35,29 @@ export const handlers = [
       user: { id: '11111111-1111-4111-8111-111111111111', email: 'test@example.test' },
     }),
   ),
+
+  /**
+   * Things — ADR-0029.
+   *
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  These are the only place `/api/v1/things` answers anything at all today.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * things.md §10: the endpoints do not exist, so a Things screen 404s against the real API. That makes
+   * these handlers do more work than the document ones — they are not just avoiding the network, they
+   * are standing in for a server nobody has written. Two consequences:
+   *
+   *  - **They must match `thingListResponseSchema` exactly**, because `lib/api` parses them with the
+   *    real Zod schema. A field the contract requires and this handler omits is a red test rather than
+   *    a shape two sessions disagree about — which is the whole reason the contract came first
+   *    (invariant 9).
+   *  - **The default is EMPTY.** A default page of fixtures here would make every unrelated test that
+   *    happens to mount the shell assert against invented things. Tests that want rows call
+   *    `server.use(...)` with their own, so the fixture lives beside the assertion it serves.
+   */
+  http.get('*/api/v1/things', () => HttpResponse.json({ data: [], next_cursor: null })),
+
+  http.get('*/api/v1/things/holders', () => HttpResponse.json({ data: [] })),
 ]
 
 export const server = setupServer(...handlers)

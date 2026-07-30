@@ -48,6 +48,9 @@ describe('what may be written to disk', () => {
       dehydrateOptions.shouldDehydrateQuery({ queryKey: key, state: { status: 'success' } })
 
     expect(persisted(['documents', 'list', {}])).toBe(true)
+    // ADR-0029's second domain. Allowlisted deliberately, and it widens debt D47 — a thing's serial
+    // is plaintext on the wire and therefore plaintext on disk, same as a document's identifier.
+    expect(persisted(['things', 'list', {}])).toBe(true)
     expect(persisted(['reminders'])).toBe(true)
     // Load-bearing: routes/_authed.tsx guards on `me`, so without it an offline cold start lands on
     // the error screen and every other cached query is unreachable.

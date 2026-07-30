@@ -1,5 +1,5 @@
 import type { DocumentType } from '@life-manager/shared'
-import type { NumberFormat } from './numberFormat'
+import { type NumberFormat, PLATE_EXAMPLE, PLATE_SHAPE } from './numberFormat'
 
 /**
  * The documents a person in India actually owns, as data.
@@ -111,14 +111,27 @@ export const PRESETS: Preset[] = [
     format: { kind: 'mask', mask: 'AAA#######' },
   },
   {
+    /**
+     * ── The one preset whose shape is a CHOICE rather than a constant ──
+     *
+     * `{ kind: 'mask', mask: 'AA##AA####' }` is what this was, and it made a Bharat-series plate
+     * (`22 BH 1234 AA`) untypeable — the leading `22` found no letter slot and was eaten. See
+     * `PlateSeries` in `numberFormat.ts` and things.md §4 rule 9.
+     *
+     * `series: 'state'` here is the **default**, not the only option: the capture wizard offers both
+     * series as chips and rebuilds the format from the one chosen (`withPlateSeries`). The edit form
+     * has no chooser, so it formats a state plate and — via `fitsShape` — leaves a BH plate as free
+     * text rather than mangling it, which is the same protection every other stored value gets.
+     */
     name: 'Vehicle RC',
     type: 'legal',
     issuer: 'Regional Transport Office',
     numLabel: 'Registration number',
-    shape: 'MH12AB1234',
+    shape: PLATE_SHAPE.state,
+    placeholder: PLATE_EXAMPLE.state,
     expires: false,
     common: true,
-    format: { kind: 'mask', mask: 'AA##AA####' },
+    format: { kind: 'plate', series: 'state' },
   },
   {
     name: 'Vehicle insurance',

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toast } from '@/components/ui/toast'
+import { BelongsTo } from '@/features/documents/BelongsTo'
 import { DocumentFiles } from '@/features/documents/DocumentFiles'
 import { DocumentForm } from '@/features/documents/DocumentForm'
 import { DocumentReminders } from '@/features/documents/DocumentReminders'
@@ -37,8 +38,9 @@ export const Route = createFileRoute('/_authed/documents/$documentId')({
  *  1. **The status block** — is it still valid, when does it expire, and what will tell me. Tinted with
  *     the state's own background, so the answer is legible before any text is read.
  *  2. **Details** — the metadata, with unset fields shown as italic "Not set" rather than hidden.
- *  3. **Scans** — the versions.
- *  4. **Delete** — quiet, at the bottom, text-only.
+ *  3. **Scans** — the versions. Tapping an image opens the full-screen viewer.
+ *  4. **Belongs to** — the thing this paperwork proves, or an invitation to link one (ADR-0029).
+ *  5. **Delete** — quiet, at the bottom, text-only.
  *
  * That order is why the previous four-equal-`Card` stack is gone: it gave "Delete" the same visual
  * weight as the expiry date.
@@ -217,7 +219,13 @@ function DocumentDetailPage() {
         <DocumentFiles documentId={documentId} files={detail.files} />
       </section>
 
-      {/* ── 4. Delete ── */}
+      {/* ── 4. Belongs to ──
+          The cross-domain link, ADR-0029. Placed after the scans and before Delete, which is the
+          comp's own order (533–560): it is a fact about the document, so it belongs above the one
+          destructive control and below the thing you came here to look at. */}
+      <BelongsTo document={detail} />
+
+      {/* ── 5. Delete ── */}
       <section className="mt-7 border-t border-rule pt-4">
         {confirmingDelete ? (
           <div className="flex flex-col gap-2">

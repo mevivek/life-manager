@@ -86,9 +86,9 @@ function RootLayout() {
   /**
    * A sign-in screen gets no provider and no sheet.
    *
-   * Early-returning rather than rendering `AddSheetProvider` unconditionally keeps `AddDocumentSheet`
-   * — which reads the document mutations, and therefore the session — out of the tree on routes where
-   * nobody is signed in yet.
+   * Early-returning rather than rendering `AddSheetProvider` unconditionally keeps `CaptureSheet`
+   * — which reads the document and thing mutations, and therefore the session — out of the tree on
+   * routes where nobody is signed in yet.
    */
   if (!withChrome) {
     return (

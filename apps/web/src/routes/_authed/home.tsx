@@ -9,7 +9,14 @@ import { ExpiryGlyph, formatDate, NEEDS_YOU_DAYS } from '@/features/documents/Ex
 import { GettingStarted } from '@/features/documents/GettingStarted'
 import { Horizon } from '@/features/documents/Horizon'
 import { NotificationsCard } from '@/features/documents/NotificationsCard'
-import { type Ledger, toLedger, useLedger } from '@/features/documents/useLedger'
+import {
+  buildHorizon,
+  type HorizonEntry,
+  type Ledger,
+  toLedger,
+  useLedger,
+} from '@/features/documents/useLedger'
+import { useThings } from '@/features/things/useThings'
 import { useFeel } from '@/lib/useFeel'
 import { cn } from '@/lib/utils'
 
@@ -56,10 +63,64 @@ const GETTING_STARTED_MAX = 4
  * here and wrong almost everywhere else in the app.
  */
 
-function NowPage() {
+/**
+ * Exported for `features/documents/Horizon.test.tsx`, which renders the whole screen to prove it
+ * survives a failing Things request. The router reaches it through `Route`; nothing else imports it.
+ */
+export function NowPage() {
   const documents = useLedger()
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════
+   *  The second domain joins the horizon, and it must NEVER be able to take Now down.
+   * ═══════════════════════════════════════════════════════════════════════════════════
+   *
+   * There is no Things API yet (things.md §10), so this request **404s in production today** and will
+   * keep failing until another session builds the server half. Now is the app's home screen: it has to
+   * degrade to a documents-only horizon rather than showing an error, and above all it must not go
+   * blank.
+   *
+   * Three things deliver that, and none of them is optional:
+   *
+   *  - The result is read through `isSuccess` and nothing else. Neither `isError` nor `isPending` is
+   *    branched on for *rendering* — both simply contribute no thing events, which is the same code
+   *    path as a space that owns nothing.
+   *  - It is **not** awaited by a route guard, so it cannot hang the launch (the D49/D50 class of bug —
+   *    see `App.tsx`). It is an ordinary component query and the screen paints without it.
+   *  - The 404 is not retried: `query-client.ts` refuses to retry an `ApiError` under 500, so this
+   *    costs exactly one request per mount rather than a loop.
+   *
+   * The one thing that *does* change on failure is the footer's honesty — see `horizonComplete`.
+   */
+  const things = useThings()
   const openAdd = useOpenAdd()
   const { copy } = useFeel()
+
+  /**
+   * `null` until the documents request succeeds.
+   *
+   * The render below reaches `NowBody` only when this is non-null, which is unreachable-but-checked: the
+   * pending and error branches come first, so a successful query is all that is left. Written as a
+   * narrowing rather than asserted, because `noNonNullAssertion` is a lint error and rendering nothing
+   * is the safe failure for a state that cannot occur.
+   */
+  const ledger = documents.isSuccess
+    ? toLedger(documents.data.data, documents.data.next_cursor)
+    : null
+  /** `[]` when the Things request has not succeeded — pending or failed, same treatment. */
+  const thingList = things.isSuccess ? things.data.data : []
+  const entries = ledger === null ? [] : buildHorizon(ledger.horizon, thingList)
+  /**
+   * "That's every date we hold" is a strong claim, so it needs **both** domains fully accounted for:
+   * the archive fitted in one page AND the things list loaded completely.
+   *
+   * A Things failure therefore softens the footer to "there may be more further out", which is the
+   * honest sentence for "a whole domain is unreachable" as well as for "the archive spilled a page".
+   * Note what this costs and why it is worth it: while the things request is in flight the footer reads
+   * the hedged version and then firms up, so the last line of a long page can change once on load. A
+   * momentary hedge is a better failure than a confident total that is wrong.
+   */
+  const horizonComplete =
+    ledger !== null && ledger.complete && things.isSuccess && things.data.next_cursor === null
 
   return (
     /**
@@ -136,20 +197,42 @@ function NowPage() {
             </Button>
           </Card>
         </div>
-      ) : (
-        <NowBody ledger={toLedger(documents.data.data, documents.data.next_cursor)} />
-      )}
+      ) : ledger !== null ? (
+        <NowBody ledger={ledger} entries={entries} horizonComplete={horizonComplete} />
+      ) : null}
     </div>
   )
 }
 
-function NowBody({ ledger }: { ledger: Ledger }) {
+function NowBody({
+  ledger,
+  entries,
+  horizonComplete,
+}: {
+  ledger: Ledger
+  /** The merged cross-domain timeline. `ledger.horizon` is only the documents half of it. */
+  entries: HorizonEntry[]
+  horizonComplete: boolean
+}) {
   const { needsYou, horizon, withoutScan, datedCount, loadedCount, complete } = ledger
   const { copy } = useFeel()
 
   if (loadedCount === 0) return <ZeroState />
 
-  /** The soonest dated document, for the all-clear headline's "the next date is…". */
+  /**
+   * The soonest dated **document**, for the all-clear headline's "the next date is…".
+   *
+   * ── Deliberately not the soonest entry on the merged horizon ──
+   *
+   * `copy.nowSub` writes "Next expiry 4 Mar 2026" in the plain register, and a warranty end is **not
+   * an expiry** — that is the whole of ADR-0029 and design.md §2a. Feeding a thing's date into a
+   * sentence that names it an expiry would make the app say the one thing the two ladders exist to
+   * stop it saying, and in its loudest voice.
+   *
+   * So the headline stays documents-only and the *timeline* is where the cross-domain answer lives. If
+   * the headline should ever speak for both domains, that is a new sentence in `lib/voice.ts` in both
+   * registers (design.md §12), not a different argument passed to this one.
+   */
   const next = needsYou[0] ?? horizon[0] ?? null
 
   /**
@@ -243,7 +326,12 @@ function NowBody({ ledger }: { ledger: Ledger }) {
         />
       </div>
 
-      <Horizon rows={horizon} datedTotal={datedCount} complete={complete} />
+      {/*
+        The timeline, both domains. `datedDocuments` is the DOCUMENT count and is used only by the
+        empty branch — the "N more further out" arithmetic is computed inside `Horizon` from `entries`,
+        so it stays exact as domains join. See that file's footer note.
+      */}
+      <Horizon entries={entries} datedDocuments={datedCount} complete={horizonComplete} />
 
       {withoutScan.length > 0 && (
         <div className="pt-2">

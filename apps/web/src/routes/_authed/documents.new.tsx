@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { DocumentForm } from '@/features/documents/DocumentForm'
-import { useCreateDocument } from '@/features/documents/useDocuments'
+import { CaptureWizard } from '@/features/documents/CaptureSheet'
 
 export const Route = createFileRoute('/_authed/documents/new')({ component: NewDocumentPage })
 
@@ -9,22 +8,26 @@ export const Route = createFileRoute('/_authed/documents/new')({ component: NewD
  *
  * ── This is the sheet's twin, not its replacement ──
  *
- * The Add tab opens `AddDocumentSheet` over whatever you were looking at, and that is the path
+ * Every Add control opens `CaptureSheet` over whatever you were looking at, and that is the path
  * essentially every capture takes. **This route stays because a sheet has no URL**: a home-screen
- * shortcut, a shared link, and the Now screen's zero state all need somewhere to point. It renders the
- * same `DocumentForm` against the same mutation, so there is one create path with two doors.
+ * shortcut, a shared link, and the Now screen's zero state all need somewhere to point.
+ * [ADR-0030](../../../../docs/decisions/0030-capture-as-a-stepped-wizard.md) says so explicitly, and
+ * it renders the *same wizard* — same steps, same skips, same saved readback, same mutation — so there
+ * is one capture path with two doors rather than two implementations that drift.
  *
- * No `Card` wrapper and no "What is it?" sub-heading. Both were framing the form as *a form inside a
- * panel on a page*; ADR-0025 makes the screen itself the container, so the serif title sits directly
- * above the fields.
+ * No `Card` wrapper and no "What is it?" sub-heading. Both were framing capture as *a form inside a
+ * panel on a page*; ADR-0025 makes the screen itself the container.
  *
- * On success it navigates to the **detail** page rather than back to the list, because the next thing a
- * person wants after naming a document is to attach the scan — and a list would hide the thing they
- * just created among everything else.
+ * ── Why there is no `onSubmit` here any more ──
+ *
+ * The wizard owns the save and the saved step, because the readback is part of capture rather than part
+ * of whichever surface opened it. So this route supplies only the two ways *out*: Cancel, and Done.
+ * Both land on the archive, which is where the wizard's own "Add an expiry date" / "Attach a scan"
+ * actions have already navigated past by the time they are used — and, for a create that queued
+ * offline, the only honest destination, since there is no id to build a detail route from (ADR-0024).
  */
 function NewDocumentPage() {
   const navigate = useNavigate()
-  const create = useCreateDocument()
 
   return (
     <div>
@@ -43,31 +46,9 @@ function NewDocumentPage() {
         Add a document
       </h1>
 
-      <DocumentForm
-        submitLabel="Save"
+      <CaptureWizard
         onCancel={() => void navigate({ to: '/documents' })}
-        onSubmit={async (values) => {
-          const created = await create.mutateAsync(values)
-
-          /**
-           * A document created offline has no server id yet — it is sitting in the outbox waiting
-           * for a connection (ADR-0024), and its id is assigned when the create is replayed. So
-           * there is no detail page to navigate to, and inventing a route from a temporary id
-           * would 404.
-           *
-           * Back to the list instead, where the outbox banner accounts for it. TypeScript forces
-           * this branch to exist rather than letting `created.id` be `undefined` at runtime.
-           */
-          if ('queued' in created) {
-            await navigate({ to: '/documents' })
-            return
-          }
-
-          await navigate({
-            to: '/documents/$documentId',
-            params: { documentId: created.id },
-          })
-        }}
+        onDone={() => void navigate({ to: '/documents' })}
       />
     </div>
   )

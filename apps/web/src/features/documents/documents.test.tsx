@@ -28,7 +28,6 @@ import {
   span,
 } from './ExpiryStatus'
 import { GettingStarted } from './GettingStarted'
-import { Horizon } from './Horizon'
 import { IdentifierCard } from './IdentifierCard'
 import { COMMON_PRESETS, numberLabelFor, PRESETS } from './presets'
 
@@ -544,24 +543,11 @@ describe('useOpenAdd', () => {
   })
 })
 
-describe('the horizon with no entries', () => {
-  it('states that nothing else is dated when every dated document is already urgent', () => {
-    // The reported case: one passport expiring in 6 days, so `rows` is empty while `datedTotal` is 1.
-    render(<Horizon rows={[]} datedTotal={1} complete={true} />)
-    expect(screen.getByText(/nothing else has a date we watch\./i)).toBeInTheDocument()
-    expect(screen.getByText(/the horizon/i)).toBeInTheDocument()
-  })
-
-  it('renders nothing when the archive holds no dates at all, because the headline says it', () => {
-    const { container } = render(<Horizon rows={[]} datedTotal={0} complete={true} />)
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  it('does not claim a total it cannot know when the archive did not fit on one page', () => {
-    render(<Horizon rows={[]} datedTotal={2} complete={false} />)
-    expect(screen.getByText(/nothing else has a date we watch on this page\./i)).toBeInTheDocument()
-  })
-})
+/**
+ * The horizon's own tests moved to `Horizon.test.tsx` when it became cross-domain (ADR-0029) — the
+ * two-branch empty state, the merge, the round-versus-square dot, and the Now screen surviving a
+ * failing Things request all belong together rather than split between two files.
+ */
 
 describe('GettingStarted', () => {
   it('counts in words that agree with the number', () => {

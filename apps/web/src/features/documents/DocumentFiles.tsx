@@ -1,8 +1,11 @@
 import { ALLOWED_UPLOAD_MIMES, type DocumentFile, MAX_UPLOAD_BYTES } from '@life-manager/shared'
+import { useMutation } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
+import { PhotoViewer } from '@/components/PhotoViewer'
+import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ApiError } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { formatDateShort } from './ExpiryStatus'
 import { useDeleteFile, useDownloadFile, useMakeFilePrimary, useUploadFile } from './useDocuments'
@@ -28,6 +31,26 @@ import { useDeleteFile, useDownloadFile, useMakeFilePrimary, useUploadFile } fro
  * different fixes, and the design draws each one *on the row it belongs to* with the row's border in
  * `--status-late`. A single alert above the list cannot say which file it means once there is more
  * than one.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  The comp's THUMBNAIL STRIP is not built, and the reason is the presigned URL
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Handoff 4 draws a horizontal strip of 172×112 image previews above these rows (comp 495–509). Drawing
+ * it would mean an `<img src>` per image file **on render** — and a scan's bytes come from R2 behind a
+ * presigned URL, so that is one `POST …:presign-download` per file every time this screen paints, with
+ * every one of those signed URLs alive in the DOM and re-minted on each remount.
+ *
+ * The alternative — presign once and cache it — is worse, and it is the one thing that must not happen:
+ * a presign in a `useQuery` lands in the persisted Query cache and therefore in **IndexedDB**, which is
+ * exactly what `persister.ts`'s `shouldDehydrateMutation: () => false` exists to prevent
+ * (security-model.md §6). `useDownloadFile`'s note says the same thing from the other direction: the URL
+ * is short-lived, so a cached one is a dead link.
+ *
+ * So an image row opens the **full-screen viewer** on tap instead, and the URL is minted at that moment,
+ * held in this component's state for as long as the viewer is up, and dropped when it closes. One signed
+ * URL, one deliberate action, no storage. The cost is honest and small: you see a filename rather than a
+ * preview before you tap.
  */
 
 /** A local, not-yet-real row: something the user picked that failed before it became a version. */
@@ -52,6 +75,43 @@ export function DocumentFiles({
   const download = useDownloadFile(documentId)
   const makePrimary = useMakeFilePrimary(documentId)
   const remove = useDeleteFile(documentId)
+
+  /**
+   * What the viewer is showing, if anything. **The presigned URL lives here and nowhere else.**
+   *
+   * `useState` rather than the Query cache, and deliberately not a sibling of `useDownloadFile` in
+   * `useDocuments.ts`: that one hands the URL to the OS and forgets it, while this one has to *hold* a
+   * credential for as long as an image is on screen. Somewhere a signed URL is held is worth having in
+   * exactly one place, in view state, cleared on close — and colocating it means there is no hook a
+   * future call site can reach for and accidentally cache.
+   */
+  const [viewing, setViewing] = useState<{ src: string; alt: string } | null>(null)
+  const [viewFailure, setViewFailure] = useState<string | null>(null)
+
+  /**
+   * Mints the download URL at the moment of the tap.
+   *
+   * A `useMutation` and never a `useQuery`, for the reason in this file's header note: a query would be
+   * persisted to IndexedDB by `persister.ts`, and a presigned URL must never be written down
+   * (security-model.md §6). It is also short-lived, so a cached one would be a dead link anyway.
+   */
+  const presign = useMutation({
+    mutationFn: (fileId: string) => api.files.presignDownload(documentId, fileId),
+  })
+
+  async function openViewer(file: DocumentFile) {
+    setViewFailure(null)
+    try {
+      const presigned = await presign.mutateAsync(file.id)
+      setViewing({ src: presigned.download_url, alt: `Version ${file.version}` })
+    } catch (error) {
+      setViewFailure(
+        error instanceof ApiError
+          ? error.message
+          : 'Couldn’t open that scan — the connection dropped. Nothing was changed.',
+      )
+    }
+  }
 
   /**
    * Only confirmed versions.
@@ -207,14 +267,36 @@ export function DocumentFiles({
                  * floor, and the row is `min-h` rather than `h` precisely so it can grow.
                  */
                 <div className="flex w-full shrink-0 justify-end gap-1">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => download.mutate(file.id)}
-                    disabled={download.isPending}
-                  >
-                    Open
-                  </Button>
+                  {/*
+                    **One button, and which one depends on the mime.** An image opens in the app's own
+                    viewer, where it is contained, centred and dismissable with Escape; a PDF goes to
+                    the OS, which has a reader we are not going to rewrite.
+
+                    Not both: the actions already wrap onto their own line at 390px (see the note
+                    above), and a fourth control is what clipped "Version 1" to "Versi…" in the first
+                    place. The trade, stated: there is no in-app way to *save* an image — the viewer
+                    shows it and the browser's own long-press does the rest.
+                  */}
+                  {isImage(file.mime) ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void openViewer(file)}
+                      disabled={presign.isPending}
+                      aria-label={`View version ${file.version}`}
+                    >
+                      View
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => download.mutate(file.id)}
+                      disabled={download.isPending}
+                    >
+                      Open
+                    </Button>
+                  )}
                   {!file.is_primary && (
                     <Button
                       variant="quiet"
@@ -259,8 +341,48 @@ export function DocumentFiles({
           Add another version
         </Button>
       )}
+
+      {/* A failed presign is not a failed file, so it is said here rather than on the row's border —
+          that treatment means "this file has a problem", and this one does not. */}
+      {viewFailure !== null && (
+        <Alert className="mt-2">
+          {viewFailure}
+          <Button
+            variant="quiet"
+            size="sm"
+            className="mt-1 block px-0"
+            onClick={() => setViewFailure(null)}
+          >
+            Dismiss
+          </Button>
+        </Alert>
+      )}
+
+      {/*
+        Mounted only while open, so the presigned URL exists for exactly as long as the picture does —
+        unmounting is what drops it, and it is also what hands focus back to the View button.
+      */}
+      {viewing !== null && (
+        <PhotoViewer src={viewing.src} alt={viewing.alt} onClose={() => setViewing(null)} />
+      )}
     </div>
   )
+}
+
+/**
+ * Whether a stored version is something the in-app viewer can show.
+ *
+ * Read off the mime rather than the extension: `ALLOWED_UPLOAD_MIMES` is the allowlist and everything in
+ * it except `application/pdf` is an image. A prefix test rather than a second list, so a mime added to
+ * the contract needs no change here — and a PDF, the one non-image, falls through to the OS.
+ *
+ * HEIC is included and will not render in most browsers, which is a real gap: the viewer would show a
+ * broken image where the OS would have opened it. Left as-is because the fix belongs upstream — M2's
+ * previews (roadmap) generate a displayable derivative — and special-casing it here would be a second
+ * mime list to keep in step for one format.
+ */
+function isImage(mime: string): boolean {
+  return mime.startsWith('image/')
 }
 
 /**
