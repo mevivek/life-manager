@@ -31,6 +31,20 @@ import {
   type ReminderCreate,
   reminderListResponseSchema,
   reminderSchema,
+  type Thing,
+  type ThingCreate,
+  type ThingDetailResponse,
+  type ThingHoldersResponse,
+  type ThingListQuery,
+  type ThingListResponse,
+  type ThingService,
+  type ThingServiceCreate,
+  type ThingUpdate,
+  thingDetailResponseSchema,
+  thingHoldersResponseSchema,
+  thingListResponseSchema,
+  thingSchema,
+  thingServiceSchema,
 } from '@life-manager/shared'
 import { z } from 'zod'
 import { API_ORIGIN } from './api-origin'
@@ -147,7 +161,7 @@ async function request<T>(
  * (debt D27), so a stray key is a 400 rather than a silently ignored filter — which is the desired
  * behaviour, but it means this function must not invent parameter names.
  */
-function toQueryString(query: Partial<DocumentListQuery>): string {
+function toQueryString(query: Partial<DocumentListQuery> | Partial<ThingListQuery>): string {
   const params = new URLSearchParams()
 
   for (const [key, value] of Object.entries(query)) {
@@ -245,6 +259,60 @@ export const api = {
       request('/api/v1/documents/issuers', z.object({ data: z.array(z.string()) })).then(
         (response) => response.data,
       ),
+  },
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  NONE OF THESE ENDPOINTS EXIST YET. ADR-0029, domains/things.md §10.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * The Things *contract* is written (`packages/shared/src/things.ts`) and its screens are built; the
+   * API is another session's work. So every call here answers **404** against the deployed API today,
+   * and each Things screen renders its error state. That is expected and temporary.
+   *
+   * It is written now rather than later for the reason invariant 9 exists: this is the only place the
+   * paths and shapes are stated, so the session that builds the server implements these rather than a
+   * second guess at them. The paths are exactly `things.md` §5.
+   */
+  things: {
+    list: (query: Partial<ThingListQuery> = {}): Promise<ThingListResponse> =>
+      request(`/api/v1/things${toQueryString(query)}`, thingListResponseSchema),
+
+    get: (id: string): Promise<ThingDetailResponse> =>
+      request(`/api/v1/things/${id}`, thingDetailResponseSchema),
+
+    create: (input: ThingCreate, idempotencyKey?: string): Promise<Thing> =>
+      request('/api/v1/things', thingSchema, { method: 'POST', body: input, idempotencyKey }),
+
+    update: (id: string, patch: ThingUpdate, idempotencyKey?: string): Promise<Thing> =>
+      request(`/api/v1/things/${id}`, thingSchema, {
+        method: 'PATCH',
+        body: patch,
+        idempotencyKey,
+      }),
+
+    /** `version` is REQUIRED, same as a document's — a stale delete must 409, not destroy an edit. */
+    remove: (id: string, version: number): Promise<null> =>
+      request(`/api/v1/things/${id}?version=${version}`, noContentSchema, { method: 'DELETE' }),
+
+    holders: (): Promise<ThingHoldersResponse['data']> =>
+      request('/api/v1/things/holders', thingHoldersResponseSchema).then((body) => body.data),
+
+    /**
+     * Logs a service. The **server** recomputes `service_due_on` from this date plus the interval
+     * (things.md §4 rule 3) — the client does not send a next date, because a cycle whose next date
+     * is client-computed is a cycle two devices can disagree about.
+     */
+    logService: (
+      thingId: string,
+      input: ThingServiceCreate,
+      idempotencyKey?: string,
+    ): Promise<ThingService> =>
+      request(`/api/v1/things/${thingId}/services`, thingServiceSchema, {
+        method: 'POST',
+        body: input,
+        idempotencyKey,
+      }),
   },
 
   files: {
