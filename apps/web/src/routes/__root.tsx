@@ -45,14 +45,34 @@ function Shell({
     <div
       className={
         withChrome
-          ? // `pb-28` clears the fixed tab bar; without it the last row sits underneath it and
-            // looks clipped. The TOP inset lives here while the tab bar owns the BOTTOM one — which
-            // is why neither is on `body` any more (see styles.css).
-            //
-            // `px-gutter` is the design's 22px screen gutter (26px at 430px+), a hair wider than
-            // iOS's 16pt so the serif has room to breathe.
-            'mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-5 px-gutter pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-28'
-          : 'mx-auto flex min-h-dvh w-full max-w-2xl flex-col justify-center gap-5 px-gutter py-8'
+          ? /*
+             * The bottom padding clears the fixed tab bar, and it is written as the SAME EXPRESSION
+             * the bar's own height is — deliberately, because it used to be a flat `pb-28` (112px).
+             *
+             * ═══════════════════════════════════════════════════════════════════════════════
+             *  A constant cannot clear a bar whose height depends on the device.
+             * ═══════════════════════════════════════════════════════════════════════════════
+             *
+             * The bar is `60px + max(env(safe-area-inset-bottom), 0.75rem)`: 94px on a
+             * home-indicator iPhone, 72px on a home-button one or a desktop. Against a flat 112px
+             * that left **17px of dead paper on the phone and 40px on everything else**, always
+             * above the bar, and it was worst exactly where it shows — a screen whose content ends
+             * early and pushes its footer down with `mt-auto`. That reads as a gap around the tab
+             * bar, and it was reported as one from a real phone.
+             *
+             * Now it is the bar's height plus one `0.5rem` of breathing room, so the gap is 8px on
+             * every device instead of 17 or 40. **If you change the bar's geometry, change this too**
+             * — `TabBar.test.tsx` fails if the two stop agreeing, which is the only reason a reader
+             * can trust the duplication.
+             *
+             * The TOP inset lives here while the tab bar owns the BOTTOM one — which is why neither
+             * is on `body` any more (see styles.css).
+             *
+             * `px-gutter` is the design's 22px screen gutter (26px at 430px+), a hair wider than
+             * iOS's 16pt so the serif has room to breathe.
+             */
+            'mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-stack px-gutter pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-[calc(max(env(safe-area-inset-bottom),0.75rem)+4.25rem)]'
+          : 'mx-auto flex min-h-dvh w-full max-w-2xl flex-col justify-center gap-stack px-gutter py-8'
       }
     >
       {children}

@@ -152,7 +152,7 @@ function DocumentsPage() {
               No chevron beside "Documents". ADR-0025 §4: the domain switcher appears the day the second
               domain does, and drawing it now would be a control that does nothing.
             */}
-            <h1 className="font-serif text-title font-normal leading-tight">Documents</h1>
+            <h1 className="font-heading text-title font-face-h leading-tight">Documents</h1>
             <span className="text-body text-ink-3">
               {firstPage.isPending
                 ? ''
@@ -229,7 +229,7 @@ function DocumentsPage() {
         }}
         emptyState={
           <div className="px-8 py-10 text-center">
-            <p className="font-serif text-[1.1875rem] leading-snug">
+            <p className="font-heading text-[1.1875rem] font-face-h leading-snug">
               {hasAnyFilter(filters) ? 'Nothing matches' : 'No documents yet'}
             </p>
             <p className="mt-1.5 text-body leading-relaxed text-ink-3">

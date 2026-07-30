@@ -138,7 +138,7 @@ export function Horizon({
                   {document.expires_on !== null && formatDateShort(document.expires_on)} ·{' '}
                   {expiry.label}
                 </span>
-                <span className="mt-0.5 block font-serif text-serif-row leading-snug">
+                <span className="mt-0.5 block font-heading text-serif-row font-face-h leading-snug">
                   {document.title}
                 </span>
                 <span className="mt-px block text-meta text-ink-3">

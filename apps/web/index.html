@@ -48,6 +48,26 @@
           // not take the whole page down before the bundle has even loaded.
           document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#131311')
         }
+
+        /**
+         * Density and face, resolved before first paint for the same reason as the theme: a compact
+         * user must not see one frame of generous, and a grotesk user must not see the serif flash.
+         *
+         * Voice is absent here on purpose — it changes words, not tokens, and words come from the
+         * bundle regardless, so there is nothing to pre-stamp. Keep these keys and their allowed
+         * values in step with `lib/feel.ts`; the fallbacks below ARE the design's defaults.
+         */
+        const el = document.documentElement
+        const pick = (key, allowed, fallback) => {
+          try {
+            const v = localStorage.getItem(key)
+            return allowed.indexOf(v) !== -1 ? v : fallback
+          } catch {
+            return fallback
+          }
+        }
+        el.dataset.density = pick('life-manager-density', ['generous', 'compact'], 'generous')
+        el.dataset.face = pick('life-manager-face', ['serif', 'grotesk'], 'serif')
       })()
     </script>
   </head>

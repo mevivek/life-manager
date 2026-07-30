@@ -2,11 +2,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Chip } from '@/components/ui/chip'
 import { Eyebrow } from '@/components/ui/label'
 import { useHolders } from '@/features/documents/useDocuments'
 import { toLedger, useLedger } from '@/features/documents/useLedger'
 import { api } from '@/lib/api'
+import type { Feel } from '@/lib/feel'
 import { endSession } from '@/lib/session'
+import { useFeel } from '@/lib/useFeel'
 import { useTheme } from '@/lib/useTheme'
 
 export const Route = createFileRoute('/_authed/you')({ component: YouPage })
@@ -47,6 +50,7 @@ function YouPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { resolved, toggle } = useTheme()
+  const { feel, set } = useFeel()
 
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, staleTime: 5 * 60 * 1000 })
 
@@ -67,12 +71,12 @@ function YouPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <h1 className="mt-2.5 font-serif text-title font-normal leading-tight">You</h1>
+      <h1 className="mt-2.5 font-heading text-title font-face-h leading-tight">You</h1>
 
       {/* ── Account ── */}
-      <Card className="mt-4 p-4">
+      <Card className="mt-4 p-card">
         <Eyebrow>Account</Eyebrow>
-        <p className="mt-2.5 font-serif text-serif-row leading-snug">
+        <p className="mt-2.5 font-heading text-serif-row font-face-h leading-snug">
           {me.isPending ? '…' : (me.data?.email ?? 'Not signed in')}
         </p>
         <p className="mt-1 text-meta text-ink-3 [text-wrap:pretty]">
@@ -147,7 +151,7 @@ function YouPage() {
       <PushStatus />
 
       {/* ── Numbers ── */}
-      <Card tone="sunken" className="mt-5 p-4">
+      <Card tone="sunken" className="mt-5 p-card">
         <p className="text-row font-medium leading-snug">
           Numbers are stored, and hidden by default
         </p>
@@ -205,6 +209,52 @@ function YouPage() {
         </dl>
       </section>
 
+      {/* ── Feel ── */}
+      <section className="mt-5">
+        <Eyebrow>Feel</Eyebrow>
+        <p className="mt-1.5 text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
+          {/*
+            "On this device" is the load-bearing phrase: these are stored in localStorage, not the
+            account, so someone can run compact on the phone and generous on the laptop — the same
+            reasoning as the theme, `lib/feel.ts`. Naming it here is what stops "why didn't my laptop
+            change?" from reading as a bug.
+          */}
+          On this device. The app remembers these here, not on your account.
+        </p>
+        <div className="mt-3.5 flex flex-col gap-4">
+          <FeelChoice
+            label="Density"
+            hint="How much room the rows and cards take."
+            value={feel.density}
+            options={[
+              { value: 'generous', label: 'Generous' },
+              { value: 'compact', label: 'Compact' },
+            ]}
+            onChange={(value) => set('density', value as Feel['density'])}
+          />
+          <FeelChoice
+            label="Headings"
+            hint="The face used for titles and headlines."
+            value={feel.face}
+            options={[
+              { value: 'serif', label: 'Serif' },
+              { value: 'grotesk', label: 'Grotesk' },
+            ]}
+            onChange={(value) => set('face', value as Feel['face'])}
+          />
+          <FeelChoice
+            label="Voice"
+            hint="Warm speaks in sentences; plain states the facts."
+            value={feel.voice}
+            options={[
+              { value: 'warm', label: 'Warm' },
+              { value: 'plain', label: 'Plain' },
+            ]}
+            onChange={(value) => set('voice', value as Feel['voice'])}
+          />
+        </div>
+      </section>
+
       {/* ── Danger ── */}
       <div className="mt-6 border-t border-rule pt-4">
         <NotYet label="Delete my account and everything in it">
@@ -218,6 +268,54 @@ function YouPage() {
         Your documents live in one space that only you can read. Nothing here is shared with anyone.
       </p>
     </div>
+  )
+}
+
+/**
+ * One Feel preference: a label, a one-line hint, and a chip row where exactly one is selected.
+ *
+ * Chips rather than a native control for the same reason the rest of the app has none (ADR-0025 §7,
+ * `chip.tsx`): a two-option `<select>` on a phone opens an OS sheet to hide two words behind one.
+ *
+ * A `<fieldset>`/`<legend>` groups the options — the same shape as the people picker in
+ * `DocumentForm`, and the semantic element biome insists on over a `role="group"` div. The legend
+ * names the group, and each chip's `aria-pressed` carries which one is on.
+ *
+ * `value`/`onChange` are typed as `string` rather than a generic: the `options` array is the source
+ * of valid values, and threading a type parameter through TSX buys nothing the call site's own typing
+ * (`set('density', v as Feel['density'])`) does not already give.
+ */
+function FeelChoice({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  hint: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <fieldset className="border-0 p-0">
+      <legend className="float-left text-row font-medium leading-snug">{label}</legend>
+      {/* `float-left` on the legend clears the float so the hint sits under it — a legend is not a
+          flow element, so it needs the same handling as the DocumentForm one. */}
+      <p className="clear-both pt-0.5 text-meta leading-snug text-ink-3">{hint}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {options.map((option) => (
+          <Chip
+            key={option.value}
+            selected={value === option.value}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </Chip>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
@@ -331,7 +429,7 @@ function PushStatus() {
           }
 
   return (
-    <Card className="mt-5 p-4">
+    <Card className="mt-5 p-card">
       <p className="text-row font-medium leading-snug">{title}</p>
       <p className="mt-1 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">{body}</p>
     </Card>

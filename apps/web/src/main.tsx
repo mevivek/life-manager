@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { startOutboxReplay } from '@/lib/outbox-replay'
 import { cacheBuster, dehydrateOptions, MAX_AGE, queryCachePersister } from '@/lib/persister'
 import { createQueryClient } from '@/lib/query-client'
+import { FeelProvider } from '@/lib/useFeel'
 import { routeTree } from './routeTree.gen'
 import './styles.css'
 
@@ -46,7 +47,15 @@ createRoot(rootElement).render(
         dehydrateOptions,
       }}
     >
-      <RouterProvider router={router} />
+      {/*
+        Inside the persist provider, outside the router: the voice register is read by route
+        components, so the context has to sit above them — and it depends on nothing the query cache
+        holds, so its exact position relative to the persist boundary does not matter. Above the
+        router is the shallowest place that covers every screen.
+      */}
+      <FeelProvider>
+        <RouterProvider router={router} />
+      </FeelProvider>
     </PersistQueryClientProvider>
   </StrictMode>,
 )

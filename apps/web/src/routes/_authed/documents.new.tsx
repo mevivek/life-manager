@@ -39,7 +39,7 @@ function NewDocumentPage() {
         Documents
       </Link>
 
-      <h1 className="mt-1.5 mb-4 font-serif text-title font-normal leading-tight">
+      <h1 className="mt-1.5 mb-4 font-heading text-title font-face-h leading-tight">
         Add a document
       </h1>
 

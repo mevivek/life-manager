@@ -66,7 +66,18 @@ export const RADII = ['1', '2', '3', '4', 'pill'] as const
  * and `min-h-tap`, and a caller that overrides with an arbitrary `min-h-[3.375rem]` must win rather
  * than coexist.
  */
-const NAMED_SPACING = ['gutter', 'tap', 'row', 'field'] as const
+export const NAMED_SPACING = [
+  'gutter',
+  'tap',
+  'row',
+  'field',
+  // The three the DENSITY preference moves. Each one replaced a hardcoded utility at a call site that
+  // sometimes also passes an override — `Card` takes a `className` and several callers set their own
+  // padding — so leaving them ungrouped is the `rounded-2` / `rounded-pill` coin flip again.
+  'row-pad',
+  'card',
+  'stack',
+] as const
 
 const twMerge = extendTailwindMerge({
   extend: {
@@ -78,6 +89,13 @@ const twMerge = extendTailwindMerge({
       px: [{ px: [...NAMED_SPACING] }],
       py: [{ py: [...NAMED_SPACING] }],
       mx: [{ mx: [...NAMED_SPACING] }],
+      gap: [{ gap: [...NAMED_SPACING] }],
+      // `font-heading` is a FAMILY and `font-face-h` is a WEIGHT. Both start `font-`, and
+      // tailwind-merge's built-in groups only know the stock names — so without these two lines a
+      // heading that sets the family and a variant that sets the weight land in no group, never
+      // conflict, and their real precedence comes down to stylesheet emission order.
+      'font-family': [{ font: ['heading'] }],
+      'font-weight': [{ font: ['face-h'] }],
     },
   },
 })
