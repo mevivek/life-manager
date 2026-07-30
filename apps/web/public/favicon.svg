@@ -1,6 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="life-manager">
-  <rect width="64" height="64" rx="14" fill="#0f172a"/>
-  <path d="M18 16h20l10 10v22a4 4 0 0 1-4 4H22a4 4 0 0 1-4-4V20a4 4 0 0 1 4-4z" fill="none" stroke="#38d6d6" stroke-width="4" stroke-linejoin="round"/>
-  <path d="M38 16v10h10" fill="none" stroke="#38d6d6" stroke-width="4" stroke-linejoin="round"/>
-  <path d="M25 36h14M25 43h9" stroke="#38d6d6" stroke-width="4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img"
+     aria-label="life-manager: three descending bars, the shortest one approaching its date">
+  <!--
+    The gauge, cut down to a mark.
+
+    Three descending bars are already the app's own vocabulary: the Now tab's glyph
+    (components/TabBar.tsx — three ruled lines of decreasing length and opacity, a ledger page) and
+    the expiry gauge (features/documents/ExpiryStatus.tsx). Read at icon scale they are a stack of
+    filed papers, and the shortest bar is the one that needs you.
+
+    WHY THE SHORTEST BAR IS AMBER. It is the same amber the app uses for a date that is approaching.
+    The icon states the app's job — something is coming up — without depending on colour: the bar is
+    also the shortest, so the meaning survives greyscale, exactly as the five-state expiry ladder
+    does (design.md §4).
+
+    WHY NO GLYPH. A folder, a shield or a passport would name the filing cabinet rather than the
+    reason to open it, and all three are crowded categories on a home screen.
+
+    ── PALETTE: on-palette, not merely similar ──
+
+    Every value is a Ledger token from apps/web/src/styles.css. There is no brand accent and adding
+    one would break the system rather than extend it (ADR-0025 §2, design.md §4):
+
+      #15140f  ground   = light-theme --ink
+      #f7f5f0  bars 1–2 = light-theme --paper (bar 2 at 72%, the same recession the Now glyph uses)
+      #e0b063  bar 3    = DARK-theme --status-soon
+
+    That last one is the load-bearing coincidence: the comp's amber IS dark-mode --status-soon, and
+    the comp's paper-variant amber #8a5a12 IS light-mode --status-soon. The icon sits on a dark
+    ground, so it takes the dark-theme value — the same token the app spends on "expiring soon".
+
+    ── GEOMETRY: literal on a 1024 grid, so it is checkable ──
+
+      corner radius   227  = 0.222 × 1024 (the handoff states 0.222 explicitly)
+      horizontal inset 227  = 62/280 of the comp's drawn art
+      content box     570  = 1024 − 2 × 227
+      bar height       73  = 20/280 · bar gap 73 = 20/280
+      bar radius     36.5  = height/2, a true pill (the notes' "37" rounds this; SVG would clamp
+                             anything larger to half the height anyway, but do not rely on that)
+      bar widths      570 · 422 (74%) · 228 (40%) of the content box
+      group top     329.5  = (1024 − (3×73 + 2×73)) / 2 — the three bars are centred as a group
+
+    The handoff's production note says "66px inset", but the art it was drawn from has 66px vertical
+    and 62px horizontal padding, and its vertical padding is not what positions the bars at all: the
+    comp centres them in a flex column, so the effective vertical margin is 329.5/1024, not 66/280.
+    The drawn proportions are what was designed and reviewed, so they win. See the agent report.
+  -->
+  <rect width="1024" height="1024" rx="227" fill="#15140f"/>
+  <rect x="227" y="329.5" width="570" height="73" rx="36.5" fill="#f7f5f0"/>
+  <rect x="227" y="475.5" width="422" height="73" rx="36.5" fill="#f7f5f0" fill-opacity=".72"/>
+  <rect x="227" y="621.5" width="228" height="73" rx="36.5" fill="#e0b063"/>
 </svg>

@@ -48,8 +48,13 @@ try {
 
 const svg = readFileSync(join(publicDir, 'favicon.svg'), 'utf8')
 
-/** The background from the SVG, so a transparent-corner PNG never shows through as white. */
-const BACKGROUND = '#0f172a'
+/**
+ * The background from the SVG, so a transparent-corner PNG never shows through as white.
+ *
+ * Keep this in step with the `<rect>` fill in `favicon.svg`. It is the Ledger's light-theme `--ink`
+ * (`apps/web/src/styles.css`), not a colour of its own — the icon has no brand accent, by design.
+ */
+const BACKGROUND = '#15140f'
 
 /**
  * `maskable` wraps the mark in a full-bleed background and scales it to 80%, per the safe-zone
