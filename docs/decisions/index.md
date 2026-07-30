@@ -52,6 +52,8 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0026](0026-store-the-full-identifier.md) | Store the full document identifier, unencrypted | accepted — **detail-only rule superseded by 0027** | **Reverses business rule 6.** Full value in `identifier`, mask DERIVED into `identifier_last4`, detail response only. Plaintext — amends 0009's data-minimisation half, not its encryption half (invariant 7 stands) |
 | [0027](0027-identifier-in-the-list-response.md) | The full identifier is returned in the list response | accepted | **Supersedes 0026's detail-only rule.** `identifier` on `documentSchema`, so the archive shows and copies a number with no detail round-trip. Cost accepted and named: the persisted cache holds every number on the device (**D47**) |
 | [0028](0028-external-trigger-for-the-daily-scan.md) | An external scheduler triggers the daily scan over HTTP | accepted | **Amends 0012: pg-boss keeps the queue, loses the clock.** A pg-boss cron cannot fire on a scale-to-zero service, so `POST /maintenance:run-daily` does the scan inline, authenticated by a constant-time-compared `X-Cron-Key` and serialised by an advisory lock. Avoids **D8** rather than accepting it |
+| [0029](0029-the-things-domain.md) | The Things domain — and cover is not expiry | accepted | The second domain, pulled forward from M4. **Cover gets its own four-state ladder** (a depleting bar, 60-day boundary) because a lapsed warranty is not an invalid document. Ownership is `here`/`lent`/`gone`, never a delete. One nullable `thing_id` links the two domains. **Arrives as the switcher ADR-0025 §4 promised, not as a fourth tab** |
+| [0030](0030-capture-as-a-stepped-wizard.md) | Capture is a stepped wizard, two tracks | accepted | Replaces the single-page form: `type→whose→title→number→dates→scan` for a document, `kind→name→detail→purchase→warranty→photo` for a thing. **Q2 is unchanged** — one required field per track, and every other step draws *Skip for now* |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -95,7 +97,12 @@ first
 **Adding a screen, or touching how anything looks**
 0025 the Ledger design system — tokens, the expiry ladder, the three-tab rule · 0003 SPA shell ·
 0024 what a write does with no network, and what the cache holds · 0026 why a passport number is
-stored in full and why it is not encrypted
+stored in full and why it is not encrypted · 0029 the second status ladder, and why the tab bar
+still has three tabs · 0030 why capture has steps
+
+**Working on Things, or on anything a household owns**
+0029 the domain, cover-is-not-expiry, ownership states, the document↔thing link · 0030 the thing
+capture track · 0025 the ladder cover deliberately does not reuse
 
 ---
 

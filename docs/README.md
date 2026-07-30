@@ -30,6 +30,7 @@ that must be read exhaustively are no better than no docs
 |---|---|
 | **Just arrived, no specific task** | [`CLAUDE.md`](../CLAUDE.md) → this file → [architecture.md](architecture.md) |
 | **Working on the Documents domain** | [domains/documents.md](domains/documents.md) → [conventions/api.md](conventions/api.md) → the relevant playbook |
+| **Working on the Things domain** | [domains/things.md](domains/things.md) → [ADR-0029](decisions/0029-the-things-domain.md). **The UI exists and the API does not** — §10 |
 | **Adding an endpoint** | [agent-playbooks/add-an-endpoint.md](agent-playbooks/add-an-endpoint.md) → the domain doc |
 | **Adding a whole new domain** | [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md) → [domains/_template.md](domains/_template.md) |
 | **Changing the database schema** | [agent-playbooks/change-the-schema.md](agent-playbooks/change-the-schema.md) → [conventions/data.md](conventions/data.md) |
@@ -37,7 +38,9 @@ that must be read exhaustively are no better than no docs
 | **Building the vault** | [security-model.md](security-model.md) §5 → [ADR-0010](decisions/0010-vault-key-hierarchy.md) |
 | **File upload or download** | [ADR-0008](decisions/0008-object-storage-r2.md) → [architecture.md](architecture.md) §6 |
 | **Anything visual — a screen, a component, a colour, a size** | [conventions/design.md](conventions/design.md) → [ADR-0025](decisions/0025-ledger-design-system.md) |
-| **Seeing the original design comp for a screen** | [design/](design/README.md) — the Claude Design handoff bundles; handoff 3 is authoritative |
+| **Seeing the original design comp for a screen** | [design/](design/README.md) — the Claude Design handoff bundles; **handoff 4** is authoritative, and its README summarises what it changed |
+| **Showing a warranty, a service date, or anything a thing owns** | [conventions/design.md](conventions/design.md) §2a — the cover ladder. **Cover is not expiry**; never reuse the expiry gauge for it ([ADR-0029](decisions/0029-the-things-domain.md)) |
+| **Touching capture / the Add sheet** | [ADR-0030](decisions/0030-capture-as-a-stepped-wizard.md) → [conventions/design.md](conventions/design.md) §6. Six steps, two tracks, and **every step but one is skippable** |
 | **Writing tests** | [conventions/testing.md](conventions/testing.md) |
 | **Deciding what to build next** | [product/brain.md](product/brain.md) → [product/idea-backlog.md](product/idea-backlog.md) → [roadmap.md](roadmap.md) |
 | **Brainstorming features with the human** | [product/brain.md](product/brain.md) §7 |
@@ -87,9 +90,12 @@ its **rejected alternatives**, which is usually the part you need.
 ### Domains
 
 - [**domains/documents.md**](domains/documents.md) — the first domain, fully specified
+- [**domains/things.md**](domains/things.md) — the second, pulled forward from M4 by the fourth design
+  handoff ([ADR-0029](decisions/0029-the-things-domain.md)). Specified in full; **the UI is built and
+  the API is not** — §10 says exactly which halves
 - [**domains/_template.md**](domains/_template.md) — the fixed shape every domain doc follows
 
-Planned: Assets, Money, People, Notes, Vault. Each gets a doc before it gets code.
+Planned: Money, People, Notes, Vault. Each gets a doc before it gets code.
 
 ### Playbooks — step-by-step recipes
 

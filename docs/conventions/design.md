@@ -18,9 +18,10 @@ every one of them exists because getting it wrong produced a real bug.
 
 Warm paper, ink-black hierarchy. A **serif for what a human wrote** (titles, dates, headlines), a
 **grotesk for what the machine says** (labels, status, controls), **mono for eyebrows and data**.
-**Colour is spent only on expiry status** — there is no brand accent and adding one breaks the system
-rather than extending it. Elevation is a **1px hairline**, not a shadow; exactly two things lift.
-Light and dark are at **full parity**. Three tabs, forever.
+**Colour is spent only on status** — a document's expiry (§2) or a thing's cover (§2a), and nothing
+else. There is no brand accent and adding one breaks the system rather than extending it. Elevation is a
+**1px hairline**, not a shadow; exactly two things lift. Light and dark are at **full parity**. Three
+tabs, forever — domains are a switcher (§8).
 
 ---
 
@@ -71,10 +72,13 @@ The feel work added two more traps of the same shape, both now declared and walk
 
 ---
 
-## 2. The expiry ladder is the only status vocabulary
+## 2. The expiry ladder is the status vocabulary for a document
 
-`apps/web/src/features/documents/ExpiryStatus.tsx`. **Never hand-roll a second one**, and never
-render an expiry date without it.
+`apps/web/src/features/documents/ExpiryStatus.tsx`. **Never hand-roll another one**, and never render
+an expiry date without it.
+
+There is exactly one sibling — the **cover** ladder in §2a, for a thing's warranty, which is a
+different kind of date and says so in shape and in words. Those two are the whole inventory.
 
 Five states, and each changes **four things at once** — the glyph's shape, the words, the type's
 weight, and its case:
@@ -94,6 +98,39 @@ give it a new *shape*, not a new hue.
 **No business rule goes in this file.** `NEEDS_YOU_DAYS` (45) decides a glyph and a sentence.
 Reminders fire at 90/30/7 **server-side** from `DEFAULT_LEAD_DAYS`; the two are allowed to disagree,
 and if they do the ladder is cosmetically off while the reminders stay right (invariant 5).
+
+---
+
+## 2a. The cover ladder is the SECOND status vocabulary, and the last one
+
+`apps/web/src/features/things/CoverStatus.tsx`. **A thing's warranty is not a document's expiry**, and
+this exists because reusing the expiry ladder for it would make the app lie in its loudest register —
+[ADR-0029](../decisions/0029-the-things-domain.md).
+
+A document that expires is *invalid*. A dishwasher whose warranty ended **keeps washing dishes**. So
+cover gets four states, its own shape, and a boundary of its own:
+
+| State | Glyph | Words | Tone |
+|---|---|---|---|
+| `active` | a **depleting bar**, proportional | "3 years left" | `--status-ok` |
+| `ending` ≤60d | the same bar, low | "Ends in 6 weeks" | `--status-soon` |
+| `ended` | the bar at zero | "Ended 20 Jan 2026" | `--status-late` |
+| `none` | a **dotted rule**, no bar | "No warranty recorded" | `--status-none` |
+
+Four rules, each with a failure mode:
+
+1. **The bar is proportional and continuous; the expiry gauge is three discrete bars.** That is the
+   whole visual distinction and it must survive greyscale like everything else: a warranty is a span
+   with a start and an end, an expiry is a countdown to a cliff.
+2. **`ended` never says "Expired" and never pulses.** It states a date. `--status-late` is the palette's
+   "past its date" hue and is correct; the *words* are what carry the difference.
+3. **`COVER_ENDING_DAYS` is 60, `NEEDS_YOU_DAYS` is 45, and service urgency is 45.** Three numbers,
+   two ladders, and this is not drift — each is a named constant beside the ladder that reads it, and
+   the reasoning is in [domains/things.md](../domains/things.md) §4 rules 2 and 3. None of them fires a
+   notification.
+4. **A third status vocabulary is a smell.** Two exist. If a domain arrives whose dates fit neither,
+   the question to answer first is whether it is really a new *kind* of date or a new *name* for one of
+   these.
 
 ---
 
@@ -184,6 +221,15 @@ problems in four cards read as four sections.
 - **A chip row is a `<fieldset>` with a `<legend>`**, not a `div role="group"`. The legend is
   announced before each pill, so "Type, Certificate" rather than a bare "Certificate".
 - **Empty states are never illustrations** — a sentence in the serif, one instruction, one control.
+- **A wizard step must be skippable, and the skip must be drawn.**
+  [ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md) made capture six steps, and the single
+  most likely regression is a guard added to a step because a blank one looks unfinished. **Exactly one
+  field is required per track** — a document's `title`, a thing's lead field — and every enrichment step
+  carries a visible *Skip for now* beneath the primary button. Q2 is unchanged; six steps must not
+  become six required fields by ceremony.
+- **A tap on a choice step advances it.** Picking a preset or a kind sets the value *and* moves on.
+  "Choose, then press Continue" is two taps for one decision, and the capture budget (ADR-0025 §5) has
+  no room for it.
 - **Alerts are inline, never modal.** Nothing here is urgent enough to block on, and a modal removes
   the context that explains it.
 - **Skeletons are first-paint only.** A refresh keeps the stale list and dims nothing; replacing real
@@ -234,16 +280,41 @@ the Now header, an ink pill on Documents — rather than in a bar of destination
 third tab Add; the second design handoff replaced it with You, which is a place, and gave the account,
 sign-out and theme controls the home §10 said they needed.
 
-**Domains never become tabs.** When assets, money, people and the vault arrive, the *middle tab's
-title* becomes a domain switcher — one tap swaps the collection under the same search, the same
-filters, the same row. Now stays a single cross-domain deadline feed, because a car's MOT and a
-passport's expiry belong in one list. Tab count stays three at six domains.
-
-**Do not draw the switcher until the second domain exists.** One domain, no chevron. Honest, never
-decorative: the control appears the day the thing it switches between does.
+**Domains never become tabs.** When money, people and the vault arrive, the *middle tab's title* keeps
+switching the collection under the same search, the same filters, the same row. Now stays a single
+cross-domain deadline feed, because a car's MOT and a passport's expiry belong in one list. Tab count
+stays three at six domains.
 
 This reverses an earlier plan to grow the bar one tab per domain. See ADR-0025 §4 before proposing
 tabs again.
+
+### The switcher now exists, because domain two does
+
+`apps/web/src/components/DomainSwitcher.tsx`. **Things arrived, so the control ADR-0025 §4 promised got
+drawn** — segmented `Documents` / `Things` pills beneath the title, on both screens.
+
+Three things about it:
+
+- **It is a switcher, not a fourth tab, and the comp's default disagrees.** Handoff 4 draws both and
+  ships a `thingsNav: "tab" | "switch"` knob defaulting to `tab` — while its own §4 prose still says
+  "three tabs, forever". We ship the switcher, and
+  [ADR-0029](../decisions/0029-the-things-domain.md) § *Alternatives considered* is where the argument
+  lives. Cost, stated: Things is two taps from Now rather than one.
+- **Pills, not a chevron menu.** ADR-0025 §4's mock drew a dropdown under `Documents ⌄`, which is right
+  for six domains and wrong for two: a menu to choose between two things is a tap to reveal what could
+  already be on screen. §6's no-dropdowns rule applies to navigation too. **Revisit at domain four**,
+  where a row of pills stops fitting 390px — that is the trigger, and it is the same
+  "draw it the day it is needed" discipline that kept the switcher itself unbuilt until now.
+- **Each domain keeps its own Add.** The pill row swaps the collection *and* what the Add button
+  captures, because inside a domain the answer to "what are you adding" is already known
+  ([ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md)).
+
+### Now is cross-domain, and shape is what separates the domains on it
+
+The horizon merges thing events into the document timeline rather than sectioning them. A **square** dot
+with a mono kicker ("Warranty ends", "Service due") is a thing; the existing **round** dot with no
+kicker is a document. Two section headers would have been the easy version and would have destroyed the
+one property Now has — that it answers *"what is next"* without asking which domain it is in.
 
 ---
 
@@ -333,7 +404,13 @@ apps/web/src/lib/feel.ts + useFeel.tsx       density / face / voice preferences 
 apps/web/src/lib/voice.ts                    the two copy registers (§12)
 apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton
 apps/web/src/components/TabBar.tsx           three tabs, forever (§8)
+apps/web/src/components/DomainSwitcher.tsx   Documents / Things, drawn now domain two exists (§8)
+apps/web/src/components/PhotoViewer.tsx      the full-screen image viewer for scans and photos
 apps/web/src/features/documents/
-  ExpiryStatus.tsx                           the ladder — the only status vocabulary (§2)
-  DocumentRow.tsx                            the row every list is made of
+  ExpiryStatus.tsx                           the expiry ladder — five states (§2)
+  DocumentRow.tsx                            the row every document list is made of
+  CaptureSheet.tsx                           the stepped wizard, both tracks (ADR-0030)
+apps/web/src/features/things/
+  CoverStatus.tsx                            the cover ladder — four states, the second and last (§2a)
+  ThingRow.tsx                               the row every thing list is made of
 ```

@@ -24,15 +24,26 @@ wrapped under the Space Key. Vault-only concept. See
 plus zero or more **files**. A document is the logical thing ("my passport"); a file is a
 specific scan of it. See [domains/documents.md](domains/documents.md).
 
-**Domain** — one area of life the app models: Documents, Assets, Money, People, Notes,
+**Domain** — one area of life the app models: Documents, Things, Money, People, Notes,
 Vault. Each has exactly one doc in [domains/](domains/) and is designed to be worked on
 without reading the others.
+
+**Cover** — a **thing's** warranty period, and deliberately *not* an expiry. A document
+expires and becomes invalid; a thing whose cover has **ended** keeps working. Four states
+(`active` · `ending` · `ended` · `none`), drawn as a proportional bar rather than the expiry
+gauge, with a 60-day boundary. Say *cover ended*, never *warranty expired*.
+[ADR-0029](decisions/0029-the-things-domain.md).
 
 **E2EE** — end-to-end encrypted. Ciphertext only server-side; the server holds no key and
 cannot decrypt. **Tier 2**. Applies to the vault only.
 
 **File** — the bytes of an uploaded document scan, stored in R2 and described by a
 `document_files` row. Files are versioned; replacing a scan does not destroy the old one.
+
+**Holder** — whose a record is, as a **label** and never a permission. Free text, `null` for
+the account owner's own — and `null` is drawn as *absence*, so there is no "Me" badge
+anywhere. On both documents and things. `space_id` remains the only thing deciding who may
+read a record. [documents.md](domains/documents.md) §4 rule 13.
 
 **KEK** — Key Encryption Key. Derived client-side from the vault passphrase via Argon2id.
 Never leaves the client, never sent to the server. Vault-only.
@@ -74,6 +85,13 @@ plain `owner_id` because family sharing is near-term — see
 
 **Space Key** — the symmetric key protecting a space's vault items, stored once per member,
 each copy wrapped to that member's public key. Vault-only.
+
+**Thing** — a record in the Things domain: a physical object a household owns (a car, a
+laptop, a boiler, a gold chain). Has **cover**, a serial, a purchase price, a place it is
+kept and a service cycle — and it *owns the documents that prove it*, via
+`documents.thing_id`. A thing has no expiry and no issuer. Say **thing**, not "asset" or
+"product": the design's own word, and the tab says Things.
+[domains/things.md](domains/things.md).
 
 **Tenant** — *avoid.* Say **space**. "Tenant" implies organizational isolation we don't
 model.

@@ -157,13 +157,17 @@ anything visual; the ADR is there for *why*. Six things will bite a session that
    walks the lists.
 2. **The expiry ladder is five states that each change shape, words, weight AND case**
    (`ExpiryStatus.tsx`). Colour is the fourth wheel — the ladder must stay readable in greyscale.
-3. **45 days is the only threshold in the client**, and it decides a glyph and a sentence. Reminders
-   still fire at 90/30/7 server-side; the two are allowed to disagree.
-4. **Three tabs, forever — now Now · Documents · You.** ADR-0025 §4 reversed the old one-tab-per-domain
+3. **45 days is the expiry threshold in the client**, and it decides a glyph and a sentence. Cover's is
+   **60** and a service's is 45 ([design.md §2a](docs/conventions/design.md)) — three numbers, two
+   ladders, each named beside the ladder that reads it. Reminders still fire at 90/30/7 server-side;
+   all of them are allowed to disagree with it.
+4. **Three tabs, forever — Now · Documents · You.** ADR-0025 §4 reversed the old one-tab-per-domain
    plan; the second design handoff then replaced **Add** with **You**, because a tab is a *place* and Add
-   was a sheet. Add lives in the Now header and as the one emphatic pill on Documents. Domains still
-   become a switcher on the Documents title, and that switcher **must not be drawn until domain two
-   exists**.
+   was a sheet. Add lives in the Now header and as the one emphatic pill on each collection. **The domain
+   switcher now exists**, because domain two does: `components/DomainSwitcher.tsx` draws
+   `Documents` / `Things` as segmented pills beneath the title. It is pills rather than ADR-0025's
+   mocked `Documents ⌄` dropdown — a menu to choose between two things is a tap to reveal what fits on
+   screen — and **domain four is the trigger to revisit that**, when a pill row stops fitting 390px.
 5. **A screen whose content can be short needs `flex-1` and a footer with `mt-auto`.** The shell is
    `min-h-dvh`, so without it a sparse archive leaves a screen of dead space above the tab bar —
    reported from a real phone, invisible to every twelve-document fixture.
@@ -172,6 +176,37 @@ anything visual; the ADR is there for *why*. Six things will bite a session that
    means "mine" and is drawn as *absence*: no "Me" badge anywhere. See
    [documents.md](docs/domains/documents.md) §4 rule 13 before touching any of it. Two of its bugs were
    found only by rendering the edit screen — the same class as D43, again.
+
+**A FOURTH design handoff landed on 2026-07-30, and it is the authoritative one now.** It brought a
+whole second domain and rewrote capture. Three things follow, and the first one will look like a bug if
+you don't know it:
+
+- **THINGS EXISTS AS UI ONLY.** [ADR-0029](docs/decisions/0029-the-things-domain.md) pulls M4's Assets
+  forward as **Things** — the physical objects a household owns, which *own the paperwork proving them*.
+  The shared contract, both screens, the capture track, the cross-domain horizon and the
+  document↔thing link are built. **There are no tables, no repository, no service and no routes**, so
+  `useThings` 404s and every Things screen renders its error state against the deployed API. That is
+  expected and temporary; the server half is M4 step 1, and it must implement
+  `packages/shared/src/things.ts` rather than inventing a second shape (invariant 9).
+  [domains/things.md](docs/domains/things.md) §10 says exactly which halves exist.
+- **COVER IS NOT EXPIRY, and that is the one design rule most likely to be broken by accident.** A
+  passport that expires is *invalid*; a dishwasher whose warranty ends **keeps washing dishes**. So
+  there is a second status ladder — four states, a proportional depleting **bar** rather than the
+  expiry gauge's three discrete bars, and a **60-day** boundary where the expiry ladder's is 45.
+  `ended` states a date and never says "Expired", never pulses. `features/things/CoverStatus.tsx`,
+  [design.md §2a](docs/conventions/design.md). Two ladders is the whole inventory; a third is a smell.
+- **CAPTURE IS A SIX-STEP WIZARD NOW**, on two tracks
+  ([ADR-0030](docs/decisions/0030-capture-as-a-stepped-wizard.md)) — the single-page form with its
+  *"Add more now"* disclosure is gone. **Q2 is unchanged and this is the trap**: exactly one field is
+  required per track (`title` for a document, the lead field for a thing), and every other step draws a
+  visible *Skip for now*. Adding a guard to a step because a blank one looks unfinished turns six
+  invitations into six required fields, which is what the ADR exists to prevent.
+
+Two smaller things the same handoff changed: the tab bar is **still three tabs** — Things arrived as
+the switcher ADR-0025 §4 promised, even though the comp's own default knob says fourth tab — and a
+**vehicle registration is two live formats**, so `Vehicle RC` no longer masks to `AA##AA####` (that
+made a Bharat-series plate `22 BH 1234 AA` untypeable). The series is an explicit choice and the
+digit-count hint drops for it, because two formats have no single length.
 
 What still does **not** exist: OCR and previews (M2), offline *download* of files, password reset,
 Playwright, R2 object deletion, and **any way for a user to undo a delete** (soft-delete sets
@@ -218,6 +253,9 @@ Four things worth knowing before you touch anything:
 | Task | Read |
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
+| **Anything in the THINGS domain** — a warranty, a serial, a service date, an owned object | [`domains/things.md`](docs/domains/things.md) then [`ADR-0029`](docs/decisions/0029-the-things-domain.md). **The UI is built and the API is not** (things.md §10) — so `useThings` 404s and every Things screen renders its error state. That is expected, not a bug to chase |
+| **Showing a warranty or a service date anywhere** | [`conventions/design.md`](docs/conventions/design.md) §2a — the **cover ladder**, four states. **Cover is NOT expiry**: a lapsed warranty still washes dishes, so it never borrows `ExpiryStatus`'s gauge, never says "Expired", and never pulses. Its boundary is 60 days where the expiry ladder's is 45 |
+| **Touching capture / the Add sheet** | [`ADR-0030`](docs/decisions/0030-capture-as-a-stepped-wizard.md) — six steps, two tracks. **Q2 survives it: exactly one field is required per track and every other step draws a visible *Skip for now*.** Adding a validation guard to a step because a blank one looks unfinished is the regression this ADR exists to prevent |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
 | **Anything visual — a screen, a component, a colour, a size** | [`conventions/design.md`](docs/conventions/design.md) — the practical rules; [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) for why they exist. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
 | **Seeing the ORIGINAL comp** — what a screen was drawn as, before the code | [`docs/design/`](docs/design/README.md) — the three Claude Design handoff bundles the system was built from. Handoff 3 is authoritative. **Read the source, don't render it** (the comps link the Google Fonts CDN we deliberately don't; the design.md rules are the faithful translation) |
@@ -232,6 +270,7 @@ Four things worth knowing before you touch anything:
 | **Adding a mutable column or a new writable domain** | `versioned()` in `apps/api/src/db/columns.ts` — an editable table needs the ADR-0024 version column, and its `PATCH` must take the version as a **required** field so a forgotten precondition is a type error rather than silent last-write-wins |
 | **Anything touching the daily scan, reminders firing, or that `maintenance` endpoint** | [`ADR-0028`](docs/decisions/0028-external-trigger-for-the-daily-scan.md) — pg-boss keeps the queue and loses the clock. The trigger must call **`runRemindersInline()`, not `scanReminders()`**: a queued job on a scale-to-zero instance never drains. `CRON_SECRET` unset ⇒ **503, not 200** — closed is the only safe default for something that writes `sent_at`. The advisory lock is what stops a scheduler retry double-sending |
 | Working on **Documents** | [`docs/domains/documents.md`](docs/domains/documents.md) |
+| **The tab bar, or where a domain lives** | Still **three tabs** — `TabBar.tsx` is unchanged. Domain two arrived as the **switcher** ADR-0025 §4 promised (`components/DomainSwitcher.tsx`), not a fourth tab. The comp draws both and defaults to the tab; [`ADR-0029`](docs/decisions/0029-the-things-domain.md) § *Alternatives* is why we didn't |
 | **Adding an endpoint** | [`docs/agent-playbooks/add-an-endpoint.md`](docs/agent-playbooks/add-an-endpoint.md) |
 | **Adding a domain** | [`docs/agent-playbooks/add-a-domain.md`](docs/agent-playbooks/add-a-domain.md) |
 | **Changing the schema** | [`docs/agent-playbooks/change-the-schema.md`](docs/agent-playbooks/change-the-schema.md) |

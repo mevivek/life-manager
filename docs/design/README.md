@@ -16,13 +16,49 @@ deviation before "fixing" the code to match the comp.
 |---|---|
 | `Life-Manager-handoff-1.dc.html` | First handoff — the Ledger system itself (warm paper, Newsreader + IBM Plex, colour only on status, the expiry ladder, three tabs) |
 | `Life-Manager-handoff-2.dc.html` | Second handoff — replaced the **Add** tab with **You**; the 22-document preset chooser |
-| `Life-Manager-handoff-3.dc.html` | Third handoff, **the authoritative one** — the full document identifier, holders (*"Whose document is it?"*), and the three **Feel** preferences (density · headings · voice) |
-| `support.js` | The Claude Design player runtime, shared byte-for-byte across all three. The comps reference it as a sibling (`./support.js`), which is why one copy sits beside them |
+| `Life-Manager-handoff-3.dc.html` | Third handoff — the full document identifier, holders (*"Whose document is it?"*), and the three **Feel** preferences (density · headings · voice) |
+| `Life-Manager-handoff-4.dc.html` | Fourth handoff, **the authoritative one** — the **Things** domain (a second domain, pulled forward from M4), capture as a **stepped wizard**, a cross-domain horizon, and the document↔thing link. [ADR-0029](../decisions/0029-the-things-domain.md) and [ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md) |
+| `support.js` | The Claude Design player runtime, shared byte-for-byte across all four. The comps reference it as a sibling (`./support.js`), which is why one copy sits beside them |
+| `image-slot.js` | The player's drop-an-image-here custom element, new in handoff 4 — it is how the comp fakes a photo on the Thing hero and on a document's scans. **Nothing in it is production code**: the shipped app puts real R2 files there ([ADR-0008](../decisions/0008-object-storage-r2.md)) |
 | `HANDOFF.md` | The bundle's own README, verbatim — the "coding agents, read this first" note the tool ships |
 
-Each handoff **supersedes the earlier one only for the parts it changed.** Handoff 3 is the one to
-trust for anything current; the earlier two are kept because they show what a decision replaced (the
-Add-tab-to-You move, for one) and because a comp is cheaper to read than to reconstruct.
+Each handoff **supersedes the earlier one only for the parts it changed.** Handoff 4 is the one to
+trust for anything current; the earlier three are kept because they show what a decision replaced (the
+Add-tab-to-You move, the single-page capture form) and because a comp is cheaper to read than to
+reconstruct.
+
+## What handoff 4 changed, in one place
+
+Read this before diffing 3 against 4 yourself — the file grew by 1300 lines and most of that is new
+rather than changed.
+
+**New:**
+
+- **The Things domain.** A `Things` list and a `Thing` detail screen: thing kinds, warranty **cover**
+  (deliberately *not* expiry — [ADR-0029](../decisions/0029-the-things-domain.md)), a service cycle
+  with a log, ownership states (lent / handed on), a sum-insured card measured against the contents
+  policy, a claim pack, and a vehicle's four-paper checklist.
+- **The document↔thing link**, drawn from both sides: *Belongs to* on a document, *Its documents* on
+  a thing.
+- **A cross-domain horizon.** Thing events — a warranty ending, a service due — sit on the Now
+  timeline beside document expiries, with a **square** dot and a mono kicker where a document has a
+  **round** dot and none.
+- **A full-screen photo viewer** for scans and thing photos.
+
+**Changed:**
+
+- **Capture is a six-step wizard**, on two tracks — `type → whose → title → number → dates → scan`
+  for a document, `kind → name → detail → purchase → warranty → photo` for a thing. Handoff 3 drew one
+  page with an *"Add more now (all optional)"* disclosure.
+  [ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md).
+- **A vehicle registration is two live formats, not one mask.** Handoff 3 masked `Vehicle RC` to
+  `AA##AA####`; handoff 4's own comment says that made a Bharat-series plate (`22 BH 1234 AA`)
+  untypeable. The series is now an explicit choice, and the number hint drops for it because two
+  formats have no single length.
+- **The Things nav is drawn twice**, and the prototype has a `thingsNav: "tab" | "switch"` knob. We
+  ship the **switcher**, not a fourth tab — see
+  [ADR-0029](../decisions/0029-the-things-domain.md) § *Alternatives considered*, and note that the
+  comp's own §4 prose still says "three tabs, forever" while its default knob says `tab`.
 
 ## Reading them
 
@@ -39,5 +75,7 @@ Three things the [`HANDOFF.md`](./HANDOFF.md) says, worth repeating:
   our code diverges from a comp are noted in `design.md` and the component files — the row markup
   (`<Link>` vs the comp's `div`+`onClick`), the "encrypted at rest" copy the comp claims and we
   refuse, the 90-day all-clear the comp shows and we render at 45.
-- **The seed data is the tool's fake fixtures** (`rowan@hey.com`, `FAKE…` document numbers). None of
-  it is real, and none of it should be treated as a value to preserve.
+- **The seed data is the tool's fake fixtures** (`rowan@hey.com`, `FAKE…` document numbers, eight
+  British-priced products). None of it is real, and none of it should be treated as a value to
+  preserve. Handoff 4's `PRODUCTS` array is a *fixture*, not a spec: the shapes it demonstrates are
+  what matter, and those are written down in [domains/things.md](../domains/things.md) §3.

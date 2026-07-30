@@ -174,12 +174,35 @@ contract (debt D39).
 
 **Steps 2–7 are unchanged and still the priority.** This did not make M1 done.
 
+### 4c. The Things UI landed early too — 2026-07-30
+
+The fourth design handoff specified a whole second domain, so its **client half** was built from the
+comp: two screens, the cover ladder, a capture track, a cross-domain horizon and the
+document↔thing link. [ADR-0029](decisions/0029-the-things-domain.md),
+[ADR-0030](decisions/0030-capture-as-a-stepped-wizard.md),
+[domains/things.md](domains/things.md).
+
+**There is no Things API.** No tables, no repository, no service, no routes — so every Things screen
+renders its error state against the deployed app. That is deliberate: the contract in
+`packages/shared/src/things.ts` was written first precisely so the server half implements it rather
+than inventing a second shape. The server half is M4 step 1.
+
+**This did not make M1 done either**, and it did not change the priority: steps 2–7 above still come
+first. What it did change is that the handoff also **rewrote capture** for both domains
+(ADR-0030), so the Documents flow the maintainer is about to use a week of is the new stepped one
+rather than the single page. Worth knowing before reading §4.7's "leave it a week".
+
 ### 5. Then M2
 
 Only after step 7. M2's remaining scope is OCR and previews — the offline read cache is done, see
 §4b. Starting the rest before M1 has a week of real use would repeat the mistake the working
 agreements name first: "one domain at a time — finish and actually use it before starting the next"
 ([product/brain.md](product/brain.md) §5).
+
+**That agreement is under strain and it is worth saying so plainly.** Things is a second domain begun
+before the first is finished. The mitigation is that only the *client* half exists and the server half
+is deferred to M4 rather than raced — but a session tempted to keep going on Things instead of
+finishing M1's last observation should read §5 of the brain again first.
 
 ---
 
@@ -289,11 +312,29 @@ amended with what was missed.
 
 ## M4 — Second and third domains
 
-Assets and Money, using [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md).
-Each gets its own doc in [domains/](domains/) before implementation.
+**Assets arrived early, as "Things", and only half of it.** The fourth design handoff
+specified the domain in full, so the client half was built against it ahead of schedule —
+[ADR-0029](decisions/0029-the-things-domain.md), [domains/things.md](domains/things.md).
+What exists is the shared contract, both screens, the capture track, the cross-domain
+horizon and the document↔thing link. **What does not exist is the server half**: no
+tables, no repository, no service, no routes. `useThings` 404s until somebody writes them.
+
+So M4 is now, in order:
+
+1. **The Things API**, to the spec in [domains/things.md](domains/things.md) §3–§6, using
+   [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md). Everything the UI
+   needs is already named in `packages/shared/src/things.ts` — implement that contract
+   rather than inventing a second one (invariant 9).
+2. **Answer things.md §9(2)** — whether a warranty gets automatic reminders — in
+   [product/open-questions.md](product/open-questions.md) before coding it. Documents only
+   auto-remind for `identity` and `certificate`, and the equivalent call here has not been
+   made.
+3. **Money**, with its own doc first.
 
 The real test here is whether the playbook works: adding a domain should be mechanical.
-If it isn't, fix the playbook, not just the domain.
+**This is the first measurement of ADR-0006's central promise** — that a second domain
+needs no change to the tenant filter. If it turns out to, that is an ADR-0006 failure and
+gets recorded as one rather than worked around.
 
 Also candidates once two domains exist: email-inbox ingestion and AI-extracted expiry
 dates (both from [prior-art.md](prior-art.md) §2).
