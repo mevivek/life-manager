@@ -26,6 +26,8 @@ function doc(overrides: Partial<Document> & { id: string }): Document {
     title: overrides.id,
     doc_type: 'other',
     issuer: null,
+    holder: null,
+    relation: null,
     // ADR-0027: the full value is on every document response, including the list.
     identifier: null,
     identifier_last4: null,

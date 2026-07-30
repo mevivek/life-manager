@@ -38,6 +38,8 @@ const documentBody = (overrides: Record<string, unknown> = {}) => ({
   // ADR-0027 put the full value on every document response, `documentSchema` included — so a fixture
   // without it fails Zod at the fetch boundary and the replay never reports success.
   identifier: null,
+  holder: null,
+  relation: null,
   identifier_last4: null,
   issued_on: null,
   expires_on: null,

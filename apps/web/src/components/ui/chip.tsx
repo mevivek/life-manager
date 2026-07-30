@@ -25,12 +25,22 @@ export type ChipProps = ComponentProps<'button'> & {
   selected?: boolean
   /** 40px inside a form (thumb-sized), 36px in a scrolling filter row. */
   size?: 'default' | 'sm'
+  /**
+   * A dashed hairline, for a chip that **opens something** rather than making a choice — "Someone
+   * else", which reveals a name field.
+   *
+   * The same "this is an absence to be filled" language as the no-scan page marker, and the reason it
+   * is a variant rather than a `className`: a dashed border needs to survive `selected` inverting the
+   * fill, and expressing that at the call site would put the precedence rules in every caller.
+   */
+  variant?: 'solid' | 'dashed'
 }
 
 export function Chip({
   className,
   selected = false,
   size = 'default',
+  variant = 'solid',
   type = 'button',
   ...props
 }: ChipProps) {
@@ -46,6 +56,8 @@ export function Chip({
         selected
           ? 'border-ink bg-ink text-onink'
           : 'border-rule-2 bg-transparent text-ink-2 hover:bg-sunken active:bg-sunken',
+        // After the selected/unselected rules, so it wins the border style in both states.
+        variant === 'dashed' && 'border-dashed',
         className,
       )}
       {...props}

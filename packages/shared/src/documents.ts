@@ -93,8 +93,25 @@ export const tagSchema = z
  */
 export const identifierInputSchema = z.string().min(1).max(64)
 
+/**
+ * A holder's name. Trimmed, because the same person typed with a trailing space would autocomplete as
+ * two people and filter as neither.
+ */
+export const holderSchema = z.string().trim().min(1).max(120)
+
+/** A relation — "Wife", "Son (12)". Short by design: it is a gloss on a name, not a biography. */
+export const relationSchema = z.string().trim().min(1).max(60)
+
 /** The masked display form, derived from the stored value: at most 4 characters. */
 export const identifierLast4Schema = z.string().max(4)
+
+/**
+ * The `?holder=` value meaning "the owner's own", i.e. `holder IS NULL`.
+ *
+ * Exported so the client and the repository cannot disagree about the spelling of it — a mismatch here
+ * would be a filter that silently matches nothing.
+ */
+export const HOLDER_MINE = 'mine'
 
 /**
  * The mask, as the one function that produces it.
@@ -236,6 +253,20 @@ export const documentSchema = z.object({
   doc_type: documentTypeSchema,
   issuer: z.string().nullable(),
   /**
+   * Whose document this is — free text, `null` for the owner's own.
+   *
+   * **A label, not a permission.** Nobody is invited and nothing is shared; a holder is a word on a
+   * document, and `space_id` remains the only thing that decides who can read it (invariant 2 and 3).
+   * Sharing, when it arrives, is a space growing a second member — a different mechanism, and this
+   * field will not change to accommodate it.
+   *
+   * `null` means "mine", which is why the account holder has no name anywhere in the app: it is the
+   * absence of a holder, drawn as absence, in the same way `other` is the absence of a type.
+   */
+  holder: z.string().nullable(),
+  /** How the holder relates to the owner — "Wife", "Son (12)". Free text and purely cosmetic. */
+  relation: z.string().nullable(),
+  /**
    * The **full** identifier — on every response that carries a document, including the list.
    *
    * ADR-0026 put this on the detail response only, on data-minimisation grounds. **ADR-0027 moved it
@@ -337,6 +368,8 @@ export const documentCreateSchema = z.strictObject({
   issuer: z.string().trim().max(200).nullish(),
   /** Truncated to the last 4 characters server-side — business rule 6. */
   identifier: identifierInputSchema.nullish(),
+  holder: holderSchema.nullish(),
+  relation: relationSchema.nullish(),
   issued_on: isoDateSchema.nullish(),
   expires_on: isoDateSchema.nullish(),
   country: countryCodeSchema.nullish(),
@@ -370,6 +403,8 @@ export const documentUpdateSchema = z
     doc_type: documentTypeSchema.optional(),
     issuer: z.string().trim().max(200).nullish(),
     identifier: identifierInputSchema.nullish(),
+    holder: holderSchema.nullish(),
+    relation: relationSchema.nullish(),
     issued_on: isoDateSchema.nullish(),
     expires_on: isoDateSchema.nullish(),
     country: countryCodeSchema.nullish(),
@@ -412,6 +447,23 @@ export const documentListQuerySchema = z.strictObject({
   type: repeatable(documentTypeSchema).optional(),
   tag: repeatable(tagSchema).optional(),
   expiring_before: isoDateSchema.optional(),
+  /**
+   * Filter by whose document it is.
+   *
+   * ── Three states, and the middle one is why this is not just a name ──
+   *
+   *  - **absent** — no filter, every holder.
+   *  - **`mine`** — the owner's own, i.e. `holder IS NULL`. A literal sentinel rather than an empty
+   *    string, because `?holder=` is indistinguishable from `?holder` in enough query-string parsers
+   *    that relying on it would be a filter that works until the parser changes. The collision risk —
+   *    someone actually filing a document under the name "mine" — is accepted and documented here,
+   *    because the alternative is a second boolean parameter for one filter.
+   *  - **any other string** — an exact holder match.
+   *
+   * Not `repeatable()`, unlike `type` and `tag`. Those are AND-ed checkboxes; "whose" is one answer at
+   * a time, which is what the design's single chip draws.
+   */
+  holder: z.string().trim().min(1).max(120).optional(),
   has_file: z.stringbool().optional(),
   sort: documentSortSchema.default('expires_on'),
   order: sortOrderSchema.default('asc'),
@@ -430,6 +482,17 @@ export const documentListResponseSchema = z.object({
   next_cursor: z.string().nullable(),
 })
 export type DocumentListResponse = z.infer<typeof documentListResponseSchema>
+
+/**
+ * `GET /api/v1/documents/holders` — the people picker's suggestions.
+ *
+ * Pairs, not names: picking a known person fills the relation too, which is what keeps `relation`
+ * being stored per document from surfacing as work for the user.
+ */
+export const holdersResponseSchema = z.object({
+  data: z.array(z.object({ holder: z.string(), relation: z.string().nullable() })),
+})
+export type HoldersResponse = z.infer<typeof holdersResponseSchema>
 
 /** `GET /api/v1/documents/:id` — includes files and reminders (§5). */
 export const documentDetailResponseSchema = documentSchema.extend({

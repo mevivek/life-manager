@@ -49,6 +49,21 @@ export function useIssuers() {
 }
 
 /**
+ * The people a holder has been filed for before, with the relation most recently used for each.
+ *
+ * Shares the `documents` key root, so it is invalidated by every document write and the picker's
+ * suggestions include the person you just typed — without which the second document for a new family
+ * member would offer no shortcut for a name entered thirty seconds earlier.
+ */
+export function useHolders() {
+  return useQuery({
+    queryKey: [...documentsKey, 'holders'],
+    queryFn: api.documents.holders,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+/**
  * Runs a write, and queues it in the outbox if there is no connectivity (ADR-0024).
  *
  * The attempt comes FIRST, and the queue is the fallback — not the other way round. Checking

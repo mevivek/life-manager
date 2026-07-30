@@ -4,10 +4,12 @@ import type {
   DocumentSort,
   DocumentType,
 } from '@life-manager/shared'
+import { HOLDER_MINE } from '@life-manager/shared'
 import {
   and,
   arrayContains,
   count,
+  desc,
   eq,
   getTableColumns,
   inArray,
@@ -140,6 +142,18 @@ export async function list(
     query.expiring_before === undefined
       ? undefined
       : lte(documents.expiresOn, query.expiring_before),
+
+    /**
+     * `?holder=mine` is `holder IS NULL` — see `documentListQuerySchema`. Anything else is an exact
+     * match, and an empty-string holder is folded into "mine" too: the column should never hold `''`
+     * (the create/update schemas trim and require at least one character), but a row that predates
+     * this filter or arrives from a direct database edit should not become unreachable by any filter.
+     */
+    query.holder === undefined
+      ? undefined
+      : query.holder === HOLDER_MINE
+        ? sql`(${documents.holder} is null or ${documents.holder} = '')`
+        : eq(documents.holder, query.holder),
 
     query.has_file === undefined
       ? undefined
@@ -475,6 +489,36 @@ export async function softDeleteFilesFor(
     .update(documentFiles)
     .set({ deletedAt: now, isPrimary: false, updatedAt: now })
     .where(and(scoped(actor, documentFiles), eq(documentFiles.documentId, documentId)))
+}
+
+/**
+ * Distinct holders with the relation most recently filed against each — for the people picker.
+ *
+ * Returns pairs rather than names, so picking a known person fills both fields and the per-document
+ * duplication of `relation` stays invisible to the user. `holder IS NOT NULL` excludes the owner's own
+ * documents, which the picker represents as "Me" rather than as a name.
+ *
+ * `DISTINCT ON` needs the same leading expression in `ORDER BY`, and the secondary sort decides *which*
+ * relation wins — newest, so correcting "Son (11)" to "Son (12)" on one document updates the
+ * suggestion for the next rather than being outvoted by history.
+ */
+export async function distinctHolders(
+  actor: ActorContext,
+  limit = 50,
+): Promise<{ holder: string; relation: string | null }[]> {
+  const rows = await db
+    .selectDistinctOn([documents.holder], {
+      holder: documents.holder,
+      relation: documents.relation,
+    })
+    .from(documents)
+    .where(and(scoped(actor, documents), sql`${documents.holder} is not null`))
+    .orderBy(documents.holder, desc(documents.createdAt))
+    .limit(limit)
+
+  return rows.flatMap((row) =>
+    row.holder === null ? [] : [{ holder: row.holder, relation: row.relation }],
+  )
 }
 
 /** Distinct issuers, for the autocomplete spec §9 question 1 settles on for now. */

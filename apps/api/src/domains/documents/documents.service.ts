@@ -78,6 +78,9 @@ function toDocument(row: DocumentRow): Document {
     title: row.title,
     doc_type: row.docType,
     issuer: row.issuer,
+    /** Whose document it is — `null` means the owner's own. A label, never a permission. */
+    holder: row.holder,
+    relation: row.relation,
     /**
      * The full identifier, on every document response including the list — ADR-0027.
      *
@@ -194,6 +197,28 @@ function identifierColumns(value: string | null | undefined): {
 }
 
 /**
+ * Both holder columns, from one pair of inputs — the only place either is written.
+ *
+ * **A relation with no holder is discarded.** "Wife" on a document with no name attached is a label
+ * for nobody: the detail screen would read "Mine · Wife", and the people picker has no person to
+ * suggest it against. So clearing the holder clears the relation with it, in one place rather than at
+ * each of the two call sites.
+ *
+ * Trimming is the schema's job (`holderSchema`), not this function's — but a value that trims to
+ * nothing still has to become `null`, or the column holds `''` and `?holder=<name>` can never match it
+ * while `?holder=mine` has to special-case it.
+ */
+function holderColumns(
+  holder: string | null | undefined,
+  relation: string | null | undefined,
+): { holder: string | null; relation: string | null } {
+  const name = holder == null || holder.trim() === '' ? null : holder.trim()
+  if (name === null) return { holder: null, relation: null }
+  const how = relation == null || relation.trim() === '' ? null : relation.trim()
+  return { holder: name, relation: how }
+}
+
+/**
  * Business rule 1 (title required, everything else optional), 2 (date order), 6 (identifier
  * stored in full, masked for display — ADR-0026), 8 (default reminders for identity and
  * certificate types).
@@ -221,6 +246,7 @@ export async function create(actor: ActorContext, input: DocumentCreate): Promis
         // Business rule 6 as revised by ADR-0026: the full value is stored, and the mask derived
         // from it in the same breath.
         ...identifierColumns(input.identifier),
+        ...holderColumns(input.holder, input.relation),
         issuedOn,
         expiresOn,
         country: input.country ?? null,
@@ -299,6 +325,17 @@ export async function update(
     ...('issuer' in patch ? { issuer: patch.issuer ?? null } : {}),
     // Both columns move together or neither does — see `identifierColumns`.
     ...('identifier' in patch ? identifierColumns(patch.identifier) : {}),
+    /**
+     * `holder` and `relation` also move together, and a patch that mentions either resolves both —
+     * otherwise clearing the holder alone would leave "Wife" attached to a document that is now the
+     * owner's own. See `holderColumns`.
+     */
+    ...('holder' in patch || 'relation' in patch
+      ? holderColumns(
+          'holder' in patch ? patch.holder : existing.holder,
+          'relation' in patch ? patch.relation : existing.relation,
+        )
+      : {}),
     ...('issued_on' in patch ? { issuedOn } : {}),
     ...('expires_on' in patch ? { expiresOn } : {}),
     ...('country' in patch ? { country: patch.country ?? null } : {}),
@@ -366,6 +403,13 @@ export async function remove(actor: ActorContext, id: string): Promise<void> {
     await repository.softDeleteFilesFor(actor, id, tx)
     await remindersRepository.softDeletePendingFor(actor, id, tx)
   })
+}
+
+/** Distinct holders with their most recent relation — for the people picker. */
+export async function listHolders(
+  actor: ActorContext,
+): Promise<{ holder: string; relation: string | null }[]> {
+  return repository.distinctHolders(actor)
 }
 
 /** Distinct issuers for autocomplete — spec §9 question 1's "free text plus autocomplete". */

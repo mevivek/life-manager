@@ -63,23 +63,58 @@ export const documents = pgTable(
     issuer: text('issuer'),
 
     /**
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  Whose document this is. FREE TEXT, and deliberately NOT an account.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * A household files for more than one person: a wife's Aadhaar, a child's passport. Before this,
+     * every such document sat in one undifferentiated list and the only way to tell them apart was to
+     * put the name in the title — "Arun passport" — which then breaks the preset matching that reads
+     * titles.
+     *
+     * **`null` means the owner's own.** That is why there is no name for the account holder anywhere:
+     * "Mine" is the absence of a holder, drawn as absence, exactly as `other` is the absence of a
+     * `doc_type` and a null `expires_on` is the absence of a countdown.
+     *
+     * ── This is a LABEL, not a permission ──
+     *
+     * Nobody is invited, nothing is shared, and no row is readable by anyone outside the space. A
+     * holder is a word on a document. Sharing, when it comes, is [ADR-0006](spaces) growing a second
+     * member — a different mechanism entirely, and this field will not change to accommodate it. Do
+     * **not** let a holder become an authorization input: `scoped()` is still the only filter that
+     * decides what a caller may read (invariant 3).
+     */
+    holder: text('holder'),
+
+    /**
+     * How the holder relates to the owner — "Wife", "Son (12)". Free text, and cosmetic.
+     *
+     * Stored per document rather than in a people table because there is no people domain yet and
+     * inventing one for two strings would be the "six shallow domains" mistake
+     * ([brain.md](../../../../docs/product/brain.md) §5). The autocomplete returns distinct
+     * holder+relation pairs, so picking a known person fills both and the duplication stays
+     * invisible. When people become a real domain (M4), this is what it grows out of.
+     */
+    relation: text('relation'),
+
+    /**
      * The **full** identifier — passport number, Aadhaar number, policy number. **ADR-0026 reversed
      * business rule 6**, which used to truncate this to four characters at the API boundary.
      *
      * Plaintext, by explicit decision. Invariant 7 and ADR-0009 keep application-level encryption for
      * the vault, and this is not the vault. That makes the pino redaction list load-bearing rather
      * than tidy: what must never reach a log is now a whole Aadhaar number, not its last four digits.
-     * It is returned on the **detail** response only, never in a list.
+     * It is returned on **every** document response including the list (ADR-0027).
      */
     identifier: text('identifier'),
 
     /**
      * The masked display form, derived from `identifier` by `truncateToLast4` on every write.
      *
-     * Kept as its own column rather than computed in the query, because it is what the **list**
-     * returns — and the list must not carry the full value (see `documentDetailResponseSchema`). A
-     * generated column would be tidier; a plain one keeps the derivation in the one service function
-     * that already owns it, next to the value it derives from.
+     * Kept as its own column rather than computed in the query, because it is what rows render until
+     * the user reveals — and a client-derived mask would be a second implementation of a rule the
+     * server owns. A generated column would be tidier; a plain one keeps the derivation in the one
+     * service function that already owns it, next to the value it derives from.
      */
     identifierLast4: text('identifier_last4'),
 

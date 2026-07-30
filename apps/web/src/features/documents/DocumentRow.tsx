@@ -134,7 +134,26 @@ export function DocumentRow({
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-row font-medium leading-snug">{document.title}</span>
+          {/*
+            The holder's name as a hairline pill beside the title — the design's badge.
+
+            `shrink-0` on the pill and `min-w-0` on the title, so a long title truncates and the NAME
+            never does: "Aadhaar" filed for Priya truncating to "Priy…" would be worse than a shortened
+            title, because the name is the thing that distinguishes two otherwise identical documents.
+
+            Absent for the owner's own documents. "Me" on nine rows out of ten is noise, and absence is
+            how this system draws a default (`other`, no expiry, no scan).
+          */}
+          <span className="flex items-baseline gap-[7px]">
+            <span className="min-w-0 truncate text-row font-medium leading-snug">
+              {document.title}
+            </span>
+            {document.holder != null && document.holder !== '' && (
+              <span className="shrink-0 rounded-pill border border-rule-2 px-[7px] text-[0.6875rem] font-medium text-ink-2">
+                {document.holder}
+              </span>
+            )}
+          </span>
           {/*
             The status must never shrink; the meta must always be the thing that truncates.
             `whitespace-nowrap` alone does not achieve that — a flex item still shrinks below its

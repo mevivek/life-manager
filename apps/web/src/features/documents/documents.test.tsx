@@ -69,6 +69,8 @@ const detailFixture: DocumentDetailResponse = {
   title: 'Passport',
   doc_type: 'identity',
   issuer: 'Ministry of External Affairs',
+  holder: null,
+  relation: null,
   identifier: 'FAKEM1234567',
   identifier_last4: '4567',
   issued_on: null,
@@ -287,6 +289,16 @@ const numbered = {
 }
 
 describe('the number on an archive row', () => {
+  it('badges the holder beside the title, and omits it for the owner’s own', async () => {
+    await renderWithRouter(<DocumentRow document={{ ...numbered, holder: 'Priya' }} />)
+    expect(screen.getByText('Priya')).toBeInTheDocument()
+
+    // Absent for "mine". Nine "Me" pills down a list is noise, and absence is how this system draws
+    // a default — `other`, no expiry, no scan.
+    await renderWithRouter(<DocumentRow document={{ ...numbered, holder: null }} />)
+    expect(screen.queryByText('Me')).toBeNull()
+  })
+
   it('shows the label and the mask, not the value', async () => {
     await renderWithRouter(
       <DocumentRow
@@ -863,6 +875,154 @@ describe('DocumentForm', () => {
 
     // Still the policy number, untouched, under its original label.
     expect(screen.getByLabelText('Policy number')).toHaveValue('AV-4471-9820')
+  })
+
+  it('files a document for someone else, and sends both fields', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
+
+    // "Me" is selected by default — the absence of a holder, which is how this system draws a default.
+    expect(screen.getByRole('button', { name: 'Me' })).toHaveAttribute('aria-pressed', 'true')
+    // The name fields are not there until asked for.
+    expect(screen.queryByLabelText('Their name')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Someone else' }))
+    await userEvent.type(screen.getByLabelText('Their name'), 'Priya')
+    await userEvent.type(screen.getByLabelText('How they’re related'), 'Wife')
+    await userEvent.type(screen.getByLabelText('Title'), 'Aadhaar')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ holder: 'Priya', relation: 'Wife' })
+  })
+
+  it('sends no holder at all for the owner’s own document', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
+
+    await userEvent.type(screen.getByLabelText('Title'), 'My PAN')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    // `null`, not the string "Me". The account holder has no name anywhere in the app: "mine" is the
+    // absence of a holder, and the blank-to-null transform is what makes that arrive as null.
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ holder: null, relation: null })
+  })
+
+  it('opens the name fields already filled when editing someone else’s document', async () => {
+    // The suggestion list loads asynchronously, so a document filed for Priya must not appear to be
+    // filed for "Me" during the first render — which is what a `useState(false)` here would do.
+    // No holders handler here, so the suggestions never arrive and the field stays open.
+    const hers = { ...detailFixture, holder: 'Priya', relation: 'Wife' }
+    renderWithQuery(<DocumentForm initial={hers} onSubmit={vi.fn()} />)
+
+    expect(screen.getByLabelText('Their name')).toHaveValue('Priya')
+    expect(screen.getByLabelText('How they’re related')).toHaveValue('Wife')
+    expect(screen.getByRole('button', { name: 'Me' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════════════════════
+   *  The three below are one bug, found by RENDERING the edit screen — not by any assertion on
+   *  what got submitted, which was correct the whole time.
+   * ═════════════════════════════════════════════════════════════════════════════════════════
+   *
+   * `someoneElse` was state seeded from `initial.holder`. Every saved holder is also a suggestion
+   * (`distinctHolders()` returns all of them), so editing Priya's Aadhaar lit **her chip and the
+   * dashed one at once**, with a second editable copy of her name below. Openness is now derived.
+   */
+
+  it('closes the name fields once the person turns out to have a chip', async () => {
+    server.use(
+      http.get('*/api/v1/documents/holders', () =>
+        HttpResponse.json({ data: [{ holder: 'Priya', relation: 'Wife' }] }),
+      ),
+    )
+    const hers = { ...detailFixture, holder: 'Priya', relation: 'Wife' }
+    renderWithQuery(<DocumentForm initial={hers} onSubmit={vi.fn()} />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Priya' })).toHaveAttribute('aria-pressed', 'true'),
+    )
+    // Exactly one selected chip. Two is not a decoration bug — it leaves no way to tell which value
+    // will be saved.
+    expect(screen.getByRole('button', { name: 'Someone else' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(screen.queryByLabelText('Their name')).toBeNull()
+  })
+
+  it('choosing Me closes the name fields rather than leaving them open and empty', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Someone else' }))
+    await userEvent.type(screen.getByLabelText('Their name'), 'Priya')
+    await userEvent.click(screen.getByRole('button', { name: 'Me' }))
+
+    // An empty "Their name" under a selected Me reads as a required field still to fill in.
+    expect(screen.queryByLabelText('Their name')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Me' })).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.type(screen.getByLabelText('Title'), 'My PAN')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    // And the typed-then-abandoned name is not quietly submitted.
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ holder: null, relation: null })
+  })
+
+  it('picking a suggested person closes the fields and does not double-select', async () => {
+    server.use(
+      http.get('*/api/v1/documents/holders', () =>
+        HttpResponse.json({ data: [{ holder: 'Arjun', relation: 'Son (12)' }] }),
+      ),
+    )
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
+
+    // Open the fields first, so the test covers the transition and not just the initial state.
+    await userEvent.click(screen.getByRole('button', { name: 'Someone else' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Arjun' }))
+
+    expect(screen.queryByLabelText('Their name')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Someone else' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Bike registration')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    // The relation rides along with the person — that is what keeps it from being a second thing to
+    // type on every document filed for the same child.
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ holder: 'Arjun', relation: 'Son (12)' })
+  })
+
+  it('re-opening the fields to rename someone starts from their current name', async () => {
+    server.use(
+      http.get('*/api/v1/documents/holders', () =>
+        HttpResponse.json({ data: [{ holder: 'Priya', relation: 'Wife' }] }),
+      ),
+    )
+    const hers = { ...detailFixture, holder: 'Priya', relation: 'Wife' }
+    renderWithQuery(<DocumentForm initial={hers} onSubmit={vi.fn()} />)
+
+    await waitFor(() => expect(screen.queryByLabelText('Their name')).toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: 'Someone else' }))
+
+    // Not blank. Tapping it to fix a spelling should not make you retype the name first — and the
+    // suggestion list must no longer be able to close the field under you.
+    expect(screen.getByLabelText('Their name')).toHaveValue('Priya')
+    expect(screen.getByRole('button', { name: 'Priya' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('offers the people picker when EDITING too, unlike the preset chooser', async () => {
+    // The preset chooser is hidden on an edit because a tap overwrites the title. Picking a person
+    // overwrites nothing the user typed, so there is no reason to hide this one.
+    renderWithQuery(<DocumentForm initial={detailFixture} onSubmit={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Me' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Aadhaar' })).toBeNull()
   })
 
   it('offers no presets when editing, where a tap would overwrite a real title', async () => {

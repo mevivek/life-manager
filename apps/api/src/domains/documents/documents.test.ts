@@ -178,6 +178,182 @@ describeDb('documents', () => {
     expect(list.json().data[0].identifier_last4).toBe('8109')
   })
 
+  // ── Holders: a label, not a permission ───────────────────────────────────
+
+  it('stores a holder and its relation, and returns both', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Aadhaar', holder: 'Priya', relation: 'Wife' },
+    })
+
+    expect(created.statusCode).toBe(201)
+    expect(created.json().holder).toBe('Priya')
+    expect(created.json().relation).toBe('Wife')
+  })
+
+  it('discards a relation with no holder, because it labels nobody', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Passport', relation: 'Wife' },
+    })
+
+    // "Wife" on a document with no name attached would render as "Mine · Wife" on the detail screen,
+    // and the people picker has nobody to suggest it against.
+    expect(created.statusCode).toBe(201)
+    expect(created.json().holder).toBeNull()
+    expect(created.json().relation).toBeNull()
+  })
+
+  it('clears the relation when the holder is cleared, in one patch', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Aadhaar', holder: 'Priya', relation: 'Wife' },
+    })
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${created.json().id}`,
+      ...authAs(user),
+      // Only `holder` is mentioned. `relation` must follow it to null rather than being left behind
+      // on a document that is now the owner's own.
+      payload: { holder: null, version: created.json().version },
+    })
+
+    expect(patched.statusCode).toBe(200)
+    expect(patched.json().holder).toBeNull()
+    expect(patched.json().relation).toBeNull()
+  })
+
+  it('keeps the relation when only the holder is renamed', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Aadhaar', holder: 'Priya', relation: 'Wife' },
+    })
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${created.json().id}`,
+      ...authAs(user),
+      payload: { holder: 'Priyanka', version: created.json().version },
+    })
+
+    // The opposite failure to the one above: a patch mentioning only `holder` must not wipe a
+    // relation the user never touched.
+    expect(patched.json().holder).toBe('Priyanka')
+    expect(patched.json().relation).toBe('Wife')
+  })
+
+  it('filters by holder, and by ?holder=mine for the owner’s own', async () => {
+    const user = await seedUserWithSpace(app)
+
+    for (const payload of [
+      { title: 'My Aadhaar' },
+      { title: 'Priya Aadhaar', holder: 'Priya', relation: 'Wife' },
+      { title: 'Arun passport', holder: 'Arun', relation: 'Son' },
+    ]) {
+      await app.inject({ method: 'POST', url: '/api/v1/documents', ...authAs(user), payload })
+    }
+
+    const named = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?holder=Priya',
+      ...authAs(user),
+    })
+    expect(named.json().data.map((row: { title: string }) => row.title)).toEqual(['Priya Aadhaar'])
+
+    // `mine` is the sentinel for `holder IS NULL` — see `documentListQuerySchema`.
+    const mine = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?holder=mine',
+      ...authAs(user),
+    })
+    expect(mine.json().data.map((row: { title: string }) => row.title)).toEqual(['My Aadhaar'])
+
+    // Absent means no filter at all, which is a different thing from `mine`.
+    const all = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
+    expect(all.json().data).toHaveLength(3)
+  })
+
+  it('lists distinct holders with the most recently filed relation for each', async () => {
+    const user = await seedUserWithSpace(app)
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Arun passport', holder: 'Arun', relation: 'Son (11)' },
+    })
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Arun Aadhaar', holder: 'Arun', relation: 'Son (12)' },
+    })
+    // The owner's own documents are not people: `holder IS NULL` is excluded, because the picker
+    // draws "Me" rather than a name.
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'My PAN' },
+    })
+
+    const holders = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents/holders',
+      ...authAs(user),
+    })
+
+    expect(holders.statusCode).toBe(200)
+    // One entry per person, and the NEWEST relation wins — so correcting "Son (11)" to "Son (12)"
+    // updates the suggestion rather than being outvoted by history.
+    expect(holders.json().data).toEqual([{ holder: 'Arun', relation: 'Son (12)' }])
+  })
+
+  it('does not let a holder cross a space boundary', async () => {
+    // The invariant that matters most about this field: it is a label, and `scoped()` is still the
+    // only thing that decides what a caller can read (invariants 2, 3 and 4).
+    const mine = await seedUserWithSpace(app)
+    const theirs = await seedUserWithSpace(app)
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(theirs),
+      payload: { title: 'Their Aadhaar', holder: 'Priya', relation: 'Wife' },
+    })
+
+    const holders = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents/holders',
+      ...authAs(mine),
+    })
+    expect(holders.json().data).toEqual([])
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?holder=Priya',
+      ...authAs(mine),
+    })
+    expect(filtered.json().data).toEqual([])
+  })
+
   it('never lets a client set the mask directly, in a list or anywhere else', async () => {
     const user = await seedUserWithSpace(app)
 
