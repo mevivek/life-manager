@@ -169,10 +169,7 @@ export function PhotoViewer({
         implicit `min-height: auto` is the image's intrinsic height, so a tall scan overflows the
         viewport instead of being contained — the image looks correct and the header scrolls away.
       */}
-      <div
-        ref={groundRef}
-        className="flex min-h-0 flex-1 items-center justify-center px-3 pb-5"
-      >
+      <div ref={groundRef} className="flex min-h-0 flex-1 items-center justify-center px-3 pb-5">
         {/*
           `object-contain` with both maxima: the whole page must be visible, because a document is
           read rather than admired, and cropping the top of a passport to fill the frame is the one

@@ -141,8 +141,9 @@ and unlike an edit there is nothing to re-apply.
 
 That has two consequences in the UI, and both are easy to break by writing the obvious code:
 **`useCreateDocument` and `useUpdateDocument` can return `{ queued: true }` instead of a document**, so
-every caller has to branch (`documents.new.tsx` and `AddDocumentSheet.tsx` both do — there is no id to
-navigate to yet); and **an edit must send the `version` the form was populated from**, not a fresh read,
+every caller has to branch (`CaptureSheet.tsx`'s saved step does — there is no id to
+navigate to yet, so it drops the two actions that need one); and **an edit must send the `version` the
+form was populated from**, not a fresh read,
 or the precondition it exists to enforce is defeated.
 
 **The whole web client now wears the Ledger design system

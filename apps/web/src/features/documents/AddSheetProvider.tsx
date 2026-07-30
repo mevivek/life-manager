@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
-import { CaptureSheet, type CaptureIntent } from './CaptureSheet'
+import { type CaptureIntent, CaptureSheet } from './CaptureSheet'
 
 /**
  * Owns the capture sheet's open state and hands out the functions that open it.
@@ -57,8 +57,7 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
   const openAdd = useCallback(() => setIntent({ track: 'document' }), [])
   const openAddThing = useCallback(() => setIntent({ track: 'thing' }), [])
   const openAddAgainst = useCallback<AddSheetValue['openAddAgainst']>(
-    ({ thing, preset, title }) =>
-      setIntent({ track: 'document', forThing: thing, preset, title }),
+    ({ thing, preset, title }) => setIntent({ track: 'document', forThing: thing, preset, title }),
     [],
   )
   const close = useCallback(() => setIntent(null), [])

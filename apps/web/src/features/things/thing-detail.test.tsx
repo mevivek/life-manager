@@ -60,6 +60,19 @@ function iso(days: number): string {
 
 const THING_ID = '33333333-3333-4333-8333-333333333333'
 
+/**
+ * A distinct, **valid** UUID per fixture row.
+ *
+ * Not cosmetic: `linkedDocumentSchema.id`, `thingServiceSchema.id` and `thingPhotoSchema.id` are all
+ * `uuidSchema`, and these fixtures go over MSW and through the **real** Zod parse in `lib/api`. A
+ * readable `'d-1'` therefore fails the parse, the query errors, and the screen renders `NotHere` —
+ * which is a passing-looking test file asserting nothing about the screen it names. Found exactly that
+ * way while writing this file.
+ */
+function uuid(seed: string): string {
+  return `${seed.padStart(8, '0')}-0000-4000-8000-000000000000`
+}
+
 function detail(overrides: Partial<ThingDetailResponse> = {}): ThingDetailResponse {
   return {
     id: THING_ID,
@@ -112,7 +125,9 @@ function service(
   }
 }
 
-function linked(overrides: Partial<LinkedDocument> & { id: string; title: string }): LinkedDocument {
+function linked(
+  overrides: Partial<LinkedDocument> & { id: string; title: string },
+): LinkedDocument {
   return { doc_type: 'other', issuer: null, expires_on: null, ...overrides }
 }
 
@@ -183,14 +198,14 @@ async function renderScreen(ui: React.ReactElement) {
   return render(<RouterProvider router={router as never} />)
 }
 
-/** The whole screen, with capture stubbed — the route supplies the real opener. */
-async function renderDetail(thing: ThingDetailResponse, onFileDocument = vi.fn()) {
+/** The whole screen, with capture stubbed — the route passes `openAddAgainst` in for real. */
+async function renderDetail(thing: ThingDetailResponse, onFileAgainst = vi.fn()) {
   serveThing(thing)
   const result = await renderScreen(
-    <ThingDetail thingId={thing.id} onFileDocument={onFileDocument} today={TODAY} />,
+    <ThingDetail thingId={thing.id} onFileAgainst={onFileAgainst} today={TODAY} />,
   )
   await screen.findByRole('heading', { level: 1 })
-  return { ...result, onFileDocument }
+  return { ...result, onFileAgainst }
 }
 
 /**
@@ -202,12 +217,7 @@ async function renderDetail(thing: ThingDetailResponse, onFileDocument = vi.fn()
 function renderServiceHistory(thing: ThingDetailResponse) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <ServiceHistory
-        thingId={thing.id}
-        thing={thing}
-        services={thing.services}
-        today={TODAY}
-      />
+      <ServiceHistory thingId={thing.id} thing={thing} services={thing.services} today={TODAY} />
     </QueryClientProvider>,
   )
 }
@@ -348,14 +358,14 @@ describe('the service cycle', () => {
         service_due_on: iso(200),
         services: [
           service({
-            id: 's-1',
+            id: uuid('1'),
             serviced_on: '2024-08-01',
             provider: 'Plumbcraft',
             cost: '95.00',
             currency: 'GBP',
           }),
           service({
-            id: 's-2',
+            id: uuid('2'),
             serviced_on: '2026-07-01',
             provider: 'VW Kilburn',
             cost: '18500',
@@ -384,7 +394,7 @@ describe('the service cycle', () => {
     renderServiceHistory(
       detail({
         service_every_months: 12,
-        services: [service({ id: 's-1', serviced_on: '2026-01-05' })],
+        services: [service({ id: uuid('1'), serviced_on: '2026-01-05' })],
       }),
     )
     expect(screen.getByText('—')).toBeInTheDocument()
@@ -401,7 +411,7 @@ describe('the service cycle', () => {
     renderServiceHistory(
       detail({
         service_every_months: null,
-        services: [service({ id: 's-1', serviced_on: '2026-01-05', provider: 'Plumbcraft' })],
+        services: [service({ id: uuid('1'), serviced_on: '2026-01-05', provider: 'Plumbcraft' })],
       }),
     )
     expect(screen.getByText('Plumbcraft')).toBeInTheDocument()
@@ -413,7 +423,7 @@ describe('the service cycle', () => {
     server.use(
       http.post(`*/api/v1/things/${THING_ID}/services`, async ({ request }) => {
         posted.push(await request.json())
-        return HttpResponse.json(service({ id: 's-new', serviced_on: '2026-07-30' }))
+        return HttpResponse.json(service({ id: uuid('9'), serviced_on: '2026-07-30' }))
       }),
     )
 
@@ -530,9 +540,9 @@ describe('the serial', () => {
 // ── The vehicle 2×2 ──────────────────────────────────────────────────────────
 
 describe('“Papers this one needs”', () => {
-  const registration = linked({ id: 'd-1', title: 'Registration (V5C)', doc_type: 'identity' })
+  const registration = linked({ id: uuid('21'), title: 'Registration (V5C)', doc_type: 'identity' })
   const insurance = linked({
-    id: 'd-2',
+    id: uuid('22'),
     title: 'Vehicle insurance',
     doc_type: 'financial',
     expires_on: iso(21),
@@ -583,6 +593,7 @@ describe('“Papers this one needs”', () => {
     expect(onCapture).toHaveBeenCalledTimes(1)
     expect(onCapture.mock.calls[0]?.[0]).toMatchObject({
       label: 'Insurance',
+      preset: 'Vehicle insurance',
       docType: 'financial',
       suggestedTitle: 'Insurance — Golf',
     })
@@ -606,7 +617,7 @@ describe('“Papers this one needs”', () => {
   it('gives one document to at most one slot', () => {
     // "Service policy schedule" matches both the insurance and the service regexes. A document in two
     // tiles would make the grid claim four papers where three exist.
-    const overlapping = linked({ id: 'd-9', title: 'Service policy schedule' })
+    const overlapping = linked({ id: uuid('29'), title: 'Service policy schedule' })
     const matched = matchSlots([overlapping])
     expect([...matched.values()]).toHaveLength(1)
     expect(matched.get('Insurance')).toBe(overlapping)
@@ -614,16 +625,16 @@ describe('“Papers this one needs”', () => {
 
   it('matches the words a person actually writes on a title', () => {
     const matched = matchSlots([
-      linked({ id: 'a', title: 'V5C logbook' }),
-      linked({ id: 'b', title: 'Aviva policy 2026' }),
-      linked({ id: 'c', title: 'MOT certificate' }),
-      linked({ id: 'd', title: 'Full service history' }),
+      linked({ id: uuid('31'), title: 'V5C logbook' }),
+      linked({ id: uuid('32'), title: 'Aviva policy 2026' }),
+      linked({ id: uuid('33'), title: 'MOT certificate' }),
+      linked({ id: uuid('34'), title: 'Full service history' }),
     ])
     expect(matched.size).toBe(4)
-    expect(matched.get('Registration')?.id).toBe('a')
-    expect(matched.get('Insurance')?.id).toBe('b')
-    expect(matched.get('Roadworthiness')?.id).toBe('c')
-    expect(matched.get('Service record')?.id).toBe('d')
+    expect(matched.get('Registration')?.id).toBe(uuid('31'))
+    expect(matched.get('Insurance')?.id).toBe(uuid('32'))
+    expect(matched.get('Roadworthiness')?.id).toBe(uuid('33'))
+    expect(matched.get('Service record')?.id).toBe(uuid('34'))
   })
 })
 
@@ -635,7 +646,7 @@ describe('the claim pack', () => {
     serial: '356938035643809',
     serial_last4: '3809',
     purchased_on: iso(-400),
-    documents: [linked({ id: 'd-1', title: 'Boiler manual', doc_type: 'other' })],
+    documents: [linked({ id: uuid('21'), title: 'Boiler manual', doc_type: 'other' })],
   })
 
   it('marks each of the six pieces In or Missing, and blocks on none of them', async () => {
@@ -664,8 +675,8 @@ describe('the claim pack', () => {
         price: '45999.00',
         currency: 'INR',
         warranty_ends_on: iso(400),
-        photos: [photo({ id: 'p-1' })],
-        documents: [linked({ id: 'd-1', title: 'Currys receipt', doc_type: 'receipt' })],
+        photos: [photo({ id: uuid('11') })],
+        documents: [linked({ id: uuid('21'), title: 'Currys receipt', doc_type: 'receipt' })],
       }),
     )
     expect(complete.every((piece) => piece.present)).toBe(true)
@@ -674,7 +685,7 @@ describe('the claim pack', () => {
   it('does not count a photo whose upload never finished', () => {
     // A `thing_photos` row with `uploaded_at === null` is a presign that died on the stairs. Counting it
     // would tell the user they have a photo of the boiler when they do not.
-    const pieces = packPieces(detail({ photos: [photo({ id: 'p-1', uploaded_at: null })] }))
+    const pieces = packPieces(detail({ photos: [photo({ id: uuid('11'), uploaded_at: null })] }))
     expect(pieces.find((piece) => piece.label === 'Photo of it')?.present).toBe(false)
   })
 
@@ -764,9 +775,7 @@ describe('ownership on the screen', () => {
     server.use(
       http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
         patched.push(await request.json())
-        return HttpResponse.json(
-          detail({ ownership: 'lent', ownership_who: 'Priya', version: 2 }),
-        )
+        return HttpResponse.json(detail({ ownership: 'lent', ownership_who: 'Priya', version: 2 }))
       }),
     )
     await renderDetail(detail())
@@ -953,19 +962,27 @@ describe('the whole screen', () => {
     expect(screen.getByRole('button', { name: 'Delete this thing' })).toBeInTheDocument()
   })
 
-  it('draws the holder as a pill, and draws NO pill for the owner’s own', async () => {
-    const { unmount } = await renderDetail(detail({ holder: 'Priya', relation: 'Wife' }))
+  it('draws the holder as a pill, with the relation beside it', async () => {
+    await renderDetail(detail({ holder: 'Priya', relation: 'Wife' }))
     expect(screen.getByText(/filed under priya · wife/i)).toBeInTheDocument()
-    unmount()
+  })
 
-    // Rule 6: `null` means "mine" and is drawn as *absence*. There is no "Me" badge anywhere.
+  /**
+   * Its own test rather than a second render in the one above, and the reason is the cache.
+   *
+   * `queryClient` is per-**test**, and both renders would share the key `['things','detail',id]` — so the
+   * second render reads the first record straight out of the cache and Priya's pill survives an
+   * `unmount()`. That failed exactly once, in the useful direction.
+   */
+  it('draws NO pill at all for the owner’s own thing', async () => {
+    // Rule 6: `null` means "mine" and is drawn as *absence*. There is no "Me" badge anywhere in the app.
     await renderDetail(detail({ holder: null }))
     expect(screen.queryByText(/filed under/i)).toBeNull()
     expect(screen.queryByText('Me')).toBeNull()
   })
 
   it('lists its documents, and the vehicle grid, on a full record', async () => {
-    const { onFileDocument } = await renderDetail(
+    const { onFileAgainst } = await renderDetail(
       detail({
         name: 'Golf',
         kind: 'vehicle',
@@ -980,11 +997,11 @@ describe('the whole screen', () => {
         warranty_ends_on: iso(-30),
         service_every_months: 12,
         service_due_on: iso(21),
-        services: [service({ id: 's-1', serviced_on: '2025-08-01', provider: 'VW Kilburn' })],
-        photos: [photo({ id: 'p-1', is_hero: true })],
+        services: [service({ id: uuid('1'), serviced_on: '2025-08-01', provider: 'VW Kilburn' })],
+        photos: [photo({ id: uuid('11'), is_hero: true })],
         documents: [
           linked({
-            id: 'd-1',
+            id: uuid('21'),
             title: 'Vehicle insurance',
             doc_type: 'financial',
             expires_on: iso(21),
@@ -1010,9 +1027,31 @@ describe('the whole screen', () => {
     // A non-zero photo count, stated (debt D33).
     expect(screen.getByText('1 photo')).toBeInTheDocument()
 
-    // The dashed invitation still reaches capture.
+    // The dashed invitation reaches capture with the THING attached and no type guessed for it.
     await userEvent.click(screen.getByRole('button', { name: 'File a document against this' }))
-    expect(onFileDocument).toHaveBeenCalled()
+    expect(onFileAgainst).toHaveBeenCalledWith({ thing: { id: THING_ID, name: 'Golf' } })
+  })
+
+  it('sends the SLOT’s preset, title and thing to capture from an empty paper slot', async () => {
+    /**
+     * The §7 shortcut, end to end through the screen rather than only through the component.
+     *
+     * `preset` is what makes the wizard arrive already knowing the type, the issuer and the number's
+     * label; `title` beats the preset's own name inside it; and `thing` is what drops the type step
+     * entirely (`forThing`, ADR-0030's five-step variant). All three have to survive the composition,
+     * and the component test alone cannot prove the route's half of it.
+     */
+    const { onFileAgainst } = await renderDetail(detail({ name: 'Golf', kind: 'vehicle' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'File the registration for Golf' }))
+
+    expect(onFileAgainst).toHaveBeenCalledWith({
+      thing: { id: THING_ID, name: 'Golf' },
+      // `Vehicle RC` is `legal`, not the `identity` the comp's `guessDoc()` returns — the preset in
+      // `presets.ts` is the authority, and the slot agrees with it rather than with the prototype.
+      preset: 'Vehicle RC',
+      title: 'Registration — Golf',
+    })
   })
 
   it('is CALM about a 404, and names the reason it is probably a 404 today', async () => {
@@ -1024,7 +1063,7 @@ describe('the whole screen', () => {
         ),
       ),
     )
-    await renderScreen(<ThingDetail thingId={THING_ID} onFileDocument={vi.fn()} today={TODAY} />)
+    await renderScreen(<ThingDetail thingId={THING_ID} onFileAgainst={vi.fn()} today={TODAY} />)
 
     expect(await screen.findByText('This thing isn’t here')).toBeInTheDocument()
     /**
@@ -1055,7 +1094,7 @@ describe('the whole screen', () => {
         ),
       ),
     )
-    await renderScreen(<ThingDetail thingId={THING_ID} onFileDocument={vi.fn()} today={TODAY} />)
+    await renderScreen(<ThingDetail thingId={THING_ID} onFileAgainst={vi.fn()} today={TODAY} />)
 
     expect(await screen.findByText('Couldn’t load this thing')).toBeInTheDocument()
     // Never flattened into "not found", never swallowed (conventions/code.md §6).
@@ -1089,9 +1128,14 @@ describe('formatting money', () => {
     expect(formatMoney('', 'GBP')).toBeNull()
   })
 
-  it('keeps both facts on screen for a currency code Intl does not know', () => {
-    // `Intl` throws `RangeError` on an unknown code, and a thrown formatter takes the whole screen down
-    // at the root error boundary for a three-letter typo.
-    expect(formatMoney('1000', 'ZZZ')).toMatch(/ZZZ$/)
+  it('keeps both facts on screen for a currency code Intl refuses', () => {
+    /**
+     * `Intl` throws `RangeError` only on a **malformed** code — not on an unknown one. `'ZZZ'` it formats
+     * itself, as `ZZZ 1,000.00`; `'ZZ'` it rejects. Both are asserted, because the distinction is the
+     * whole reason the `catch` in `money.ts` is narrower than it looks — and a thrown formatter takes
+     * the screen down at the root error boundary over one bad field (debt D46).
+     */
+    expect(formatMoney('1000', 'ZZZ')).toMatch(/ZZZ/)
+    expect(formatMoney('1000', 'ZZ')).toMatch(/ZZ$/)
   })
 })

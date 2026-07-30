@@ -2,11 +2,11 @@ import {
   CAPTURE_KINDS,
   COVER_LENGTHS,
   documentCreateSchema,
+  documentTypeSchema,
   KIND_LABELS,
   SERIAL_LABELS,
-  documentTypeSchema,
-  thingCreateSchema,
   type ThingKind,
+  thingCreateSchema,
 } from '@life-manager/shared'
 import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
@@ -32,9 +32,9 @@ import {
   MAKES,
   MODELS,
   REQUIRED_STEP,
+  STEP_COPY,
   savedFacts,
   savedGaps,
-  STEP_COPY,
   THING_STEPS,
   type ThingDraft,
   thingName,
@@ -1050,8 +1050,10 @@ export function CaptureWizard({
         >
           {primaryLabel(isLastStep, track, createDocument.isPending || createThing.isPending)}
         </Button>
+        {/* `size="bare"` is already a 44px row — design.md §6: a text-only control still needs a
+            thumb-sized hit area, and this is the control that carries Q2's promise. */}
         {canSkip && (
-          <Button variant="quiet" size="bare" className="min-h-tap w-full" onClick={advance}>
+          <Button variant="quiet" size="bare" className="w-full" onClick={advance}>
             {isLastStep ? 'Save without a photo' : 'Skip for now'}
           </Button>
         )}

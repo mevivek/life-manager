@@ -38,10 +38,25 @@ export type PaperSlot = {
   /** The words on the tile — also the stem of the suggested document title. */
   label: string
   /**
-   * The `doc_type` to prefill. Taken from the comp's `guessDoc()` (line 2150) with one correction:
-   * roadworthiness maps to `certificate`, where the comp's own regex (`/certificate|mot|fitness|puc/`)
-   * misses the word "Roadworthiness" entirely and falls through to `other`. An MOT, a PUC and a
-   * fitness certificate are all certificates; the slot label is the general word for them.
+   * The capture **preset** to open with, by name, from `features/documents/presets.ts`.
+   *
+   * A preset rather than a bare `doc_type`, because that is what `CaptureSheet` takes and it carries
+   * more: the type, the issuer, the number's label and its format. Tapping the registration slot on a
+   * car should land on a form that already says *"Registration number"* and *"Regional Transport
+   * Office"*, not merely one whose type pill is lit.
+   *
+   * `undefined` where no preset fits — a service record is free text, and the presets are a list of
+   * documents that actually exist rather than a taxonomy to force a slot into.
+   */
+  preset?: string
+  /**
+   * The `doc_type`, kept alongside the preset so the slot states its own intent rather than only
+   * implying it through a lookup.
+   *
+   * Each value **agrees with its preset's** `type` — `Vehicle RC` is `legal`, not the `identity` the
+   * comp's `guessDoc()` (line 2150) returns. The comp is also wrong about roadworthiness: its regex
+   * (`/certificate|mot|fitness|puc/`) misses the word "Roadworthiness" and falls through to `other`,
+   * where an MOT, a PUC and a fitness certificate are all certificates.
    */
   docType: DocumentType
   /** Which of a thing's documents already fills this slot. Title keywords — see `SLOTS`. */
@@ -66,13 +81,26 @@ export type PaperSlot = {
  * cannot separate them, while "insurance" in a title is what a person actually wrote.
  */
 const SLOTS: readonly PaperSlot[] = [
-  { label: 'Registration', docType: 'identity', matches: /registration|\brc\b|v5c|logbook/i },
-  { label: 'Insurance', docType: 'financial', matches: /insurance|policy/i },
+  {
+    label: 'Registration',
+    preset: 'Vehicle RC',
+    docType: 'legal',
+    matches: /registration|\brc\b|v5c|logbook/i,
+  },
+  {
+    label: 'Insurance',
+    preset: 'Vehicle insurance',
+    docType: 'financial',
+    matches: /insurance|policy/i,
+  },
   {
     label: 'Roadworthiness',
+    preset: 'PUC certificate',
     docType: 'certificate',
     matches: /roadworth|\bmot\b|fitness|\bpuc\b|emission/i,
   },
+  // No preset: a service record is whatever the garage handed over, and the preset list is documents
+  // that exist rather than a taxonomy to force a slot into.
   { label: 'Service record', docType: 'other', matches: /service|\bfsh\b/i },
 ]
 
@@ -80,9 +108,12 @@ export function PapersChecklist({
   thing,
   documents,
   /**
-   * Opens capture for an empty slot. Supplied by the route, which owns the Add sheet — see the note
-   * there. A prop rather than `useOpenAdd()` called in here so this component is testable without
-   * mounting the provider and the sheet behind it.
+   * Opens capture for an empty slot, with the slot resolved — the type, a suggested title and the
+   * thing, which is exactly what things.md §7 asks for and the case ADR-0030's five-step variant
+   * exists for (`forThing` drops the type step).
+   *
+   * A prop rather than `useAddSheet()` called in here, so this component is testable without mounting
+   * the provider and the whole capture sheet behind it.
    */
   onCapture,
   today,

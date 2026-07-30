@@ -1,10 +1,10 @@
 import {
   type DocumentCreate,
-  documentCreateSchema,
+  type documentCreateSchema,
   KIND_LABELS,
   SERIAL_LABELS,
   type ThingKind,
-  thingCreateSchema,
+  type thingCreateSchema,
 } from '@life-manager/shared'
 import type { z } from 'zod'
 import { formatDate } from './ExpiryStatus'
@@ -234,9 +234,9 @@ export const KIND_META: Partial<
   furniture: {
     example: 'Ercol dining table',
     noun: 'table',
-    nameSub:
-      'The shop or maker, then what the thing actually is — that’s how you’ll look for it.',
-    photoSub: 'One of the piece. The order number on a receipt matters more here than a serial plate.',
+    nameSub: 'The shop or maker, then what the thing actually is — that’s how you’ll look for it.',
+    photoSub:
+      'One of the piece. The order number on a receipt matters more here than a serial plate.',
   },
   tool: { example: 'Bosch GSB 18V drill', noun: 'drill' },
   valuable: {
@@ -520,7 +520,9 @@ export function addMonths(isoDate: string, months: number): string {
 
   const target = new Date(Date.UTC(year, month - 1 + months, 1))
   // Day 0 of the following month is the last day of the target month.
-  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate()
   target.setUTCDate(Math.min(day, lastDay))
   return target.toISOString().slice(0, 10)
 }
@@ -579,7 +581,10 @@ export function savedFacts(
   }
   // "Mine" is the ONLY place the owner is named, and it is a readback rather than a badge — `holder`
   // is `null` and drawn as absence everywhere else (documents.md §4 rule 13).
-  facts.push({ key: 'Whose', value: document.holder.trim() === '' ? 'Mine' : document.holder.trim() })
+  facts.push({
+    key: 'Whose',
+    value: document.holder.trim() === '' ? 'Mine' : document.holder.trim(),
+  })
   if (document.title.trim() !== '') facts.push({ key: 'Title', value: document.title.trim() })
   if (document.identifier.trim() !== '') {
     facts.push({
@@ -621,11 +626,7 @@ function mask(value: string): string {
  * an Aadhaar — which never expires — would be the app inventing an obligation. The preset knows
  * (`preset.expires`), so it is asked.
  */
-export function savedGaps(
-  track: CaptureTrack,
-  document: DocumentDraft,
-  thing: ThingDraft,
-): string {
+export function savedGaps(track: CaptureTrack, document: DocumentDraft, thing: ThingDraft): string {
   const gaps: string[] = []
 
   if (track === 'thing') {

@@ -10,7 +10,7 @@ import {
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
 import { CaptureWizard, visibleSteps } from './CaptureSheet'
@@ -44,6 +44,37 @@ import {
  */
 
 // ── Harness ──────────────────────────────────────────────────────────────────
+
+/**
+ * `idb-keyval` in a Map, exactly as `outbox.test.ts` does it.
+ *
+ * jsdom has no IndexedDB, so without this the outbox's `set` rejects — and the queued-offline path
+ * would fail for the wrong reason, reporting "something went wrong" instead of "saved on this device".
+ * The store is module-scoped and never asserted on here; the outbox's own behaviour is tested there.
+ */
+const idbStore = new Map<string, unknown>()
+vi.mock('idb-keyval', () => ({
+  get: async (key: string) => idbStore.get(key),
+  set: async (key: string, value: unknown) => {
+    idbStore.set(key, structuredClone(value))
+  },
+  del: async (key: string) => {
+    idbStore.delete(key)
+  },
+}))
+
+/**
+ * The wizard reads the issuer and holder suggestions on mount, so every test needs both handlers or
+ * `onUnhandledRequest: 'error'` fills the output with noise about requests the test does not care
+ * about. Empty by default — a test that wants a person to pick overrides with its own `server.use`,
+ * which wins because MSW matches the most recently registered handler first.
+ */
+beforeEach(() => {
+  server.use(
+    http.get('*/api/v1/documents/issuers', () => HttpResponse.json({ data: [] })),
+    http.get('*/api/v1/documents/holders', () => HttpResponse.json({ data: [] })),
+  )
+})
 
 const SPACE = '22222222-2222-4222-8222-222222222222'
 const CREATED_ID = '00000009-0000-4000-8000-000000000009'
@@ -799,7 +830,11 @@ describe('toThingCreate', () => {
     }
     // A make alone is not the name of a thing you own. `isMake` is what decides this.
     expect(thingName(draft)).toBe('Tata Nexon')
-    expect(toThingCreate(draft)).toMatchObject({ name: 'Tata Nexon', brand: 'Tata', model: 'Nexon' })
+    expect(toThingCreate(draft)).toMatchObject({
+      name: 'Tata Nexon',
+      brand: 'Tata',
+      model: 'Nexon',
+    })
   })
 
   it('keeps a valuable’s own words as its name and stores no brand', () => {
@@ -834,9 +869,9 @@ describe('toThingCreate', () => {
 
 describe('coverEndsOn', () => {
   it('counts the chosen length from the purchase date', () => {
-    expect(
-      coverEndsOn({ ...EMPTY_THING_DRAFT, purchasedOn: '2026-06-14', coverMonths: 36 }),
-    ).toBe('2029-06-14')
+    expect(coverEndsOn({ ...EMPTY_THING_DRAFT, purchasedOn: '2026-06-14', coverMonths: 36 })).toBe(
+      '2029-06-14',
+    )
   })
 
   it('treats "No cover" as an answer, not a blank', () => {
@@ -853,9 +888,9 @@ describe('coverEndsOn', () => {
      */
     expect(coverEndsOn({ ...EMPTY_THING_DRAFT, coverMonths: 24 })).toBeNull()
     // The step asks for the end date instead, and that is what is used.
-    expect(
-      coverEndsOn({ ...EMPTY_THING_DRAFT, coverMonths: 24, coverEndsOn: '2028-03-01' }),
-    ).toBe('2028-03-01')
+    expect(coverEndsOn({ ...EMPTY_THING_DRAFT, coverMonths: 24, coverEndsOn: '2028-03-01' })).toBe(
+      '2028-03-01',
+    )
   })
 
   it('clamps to the end of the target month rather than rolling over', () => {
@@ -871,7 +906,12 @@ describe('savedFacts and savedGaps', () => {
   it('reads back only what the record holds', () => {
     const facts = savedFacts(
       'document',
-      { ...EMPTY_DOCUMENT_DRAFT, preset: 'Aadhaar', title: 'Aadhaar', identifier: '9999 8888 7777' },
+      {
+        ...EMPTY_DOCUMENT_DRAFT,
+        preset: 'Aadhaar',
+        title: 'Aadhaar',
+        identifier: '9999 8888 7777',
+      },
       EMPTY_THING_DRAFT,
     )
     // Non-zero, and exact — an empty list here would make the readback silently useless (D33).
@@ -890,9 +930,7 @@ describe('savedFacts and savedGaps', () => {
       { ...EMPTY_DOCUMENT_DRAFT, title: 'Dishwasher receipt' },
       EMPTY_THING_DRAFT,
     )
-    expect(gaps).toBe(
-      'Still blank: number, type. Add any of it later — the record works without.',
-    )
+    expect(gaps).toBe('Still blank: number, type. Add any of it later — the record works without.')
   })
 
   it('does not nag about an expiry a document never has — Q1', () => {

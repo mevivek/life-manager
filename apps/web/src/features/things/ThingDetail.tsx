@@ -36,11 +36,11 @@ import { useThing } from './useThings'
  *
  * ── Why the screen lives here and not in the route file ──
  *
- * `routes/_authed/things.$thingId.tsx` is a ten-line shell that reads the param and calls `useOpenAdd()`.
- * That split is what makes this testable: a route module is bound to the generated route tree and to the
- * `AddSheetProvider` above it, and `thing-detail.test.tsx` needs neither — it needs the sparse state, the
- * four cover states and the ownership writes, which are all *here*. Opening capture arrives as a prop for
- * the same reason `PapersChecklist` takes one.
+ * `routes/_authed/things.$thingId.tsx` is a ten-line shell that reads the param and pulls
+ * `openAddAgainst` out of `useAddSheet()`. That split is what makes this testable: a route module is
+ * bound to the generated route tree and to the `AddSheetProvider` above it, and `thing-detail.test.tsx`
+ * needs neither — it needs the sparse state, the four cover states and the ownership writes, which are
+ * all *here*. Opening capture arrives as a prop for the same reason `PapersChecklist` takes one.
  *
  * ── No `flex-1` and no `mt-auto`, on purpose ──
  *
@@ -60,15 +60,23 @@ import { useThing } from './useThings'
 export function ThingDetail({
   thingId,
   /**
-   * Opens capture. Supplied by the route, which is inside `AddSheetProvider` — see the note above, and
-   * the TODO in the route file about the prefill that is not wired yet.
+   * Opens capture with this thing attached. `AddSheetProvider`'s `openAddAgainst`, passed straight
+   * through by the route — the signature is deliberately identical so there is nothing to translate and
+   * nothing to get wrong between them.
+   *
+   * `forThing` is what makes the sheet drop its type step (ADR-0030's five-step variant), and `preset`
+   * is what makes it arrive already knowing the issuer and the number's label.
    */
-  onFileDocument,
+  onFileAgainst,
   /** Injectable so every relative assertion is arithmetic rather than a race with the clock. */
   today,
 }: {
   thingId: string
-  onFileDocument: () => void
+  onFileAgainst: (intent: {
+    thing: { id: string; name: string }
+    preset?: string
+    title?: string
+  }) => void
   today?: Date
 }) {
   const navigate = useNavigate()
@@ -111,6 +119,17 @@ export function ThingDetail({
       <BackLink />
 
       <div className="pt-1.5">
+        {/*
+          `text-[1.6875rem]` (27px) is copied verbatim from `documents.$documentId.tsx`, and the
+          arbitrary value is the point: a detail screen's title sits between `--t-title` (24px) and
+          `--t-display` (30px), which is a step the scale does not have. It is not promoted to a token
+          because a token would then need declaring in `utils.ts`'s `TEXT_SIZES` (design.md §1's
+          two-file trap) for a value used on exactly two screens — and the two screens must match, which
+          the shared literal makes obvious and a near-miss token would not.
+
+          `font-heading` / `font-face-h` / `tracking-heading` rather than `font-serif`, so the *Headings*
+          feel preference reaches it (design.md §12).
+        */}
         <h1 className="font-heading text-[1.6875rem] font-face-h leading-[1.18] tracking-heading">
           {detail.name}
         </h1>
@@ -139,12 +158,7 @@ export function ThingDetail({
       <ThingCoverCard thing={detail} today={today} className="mt-4" />
 
       {/* ── 3. The cycle and its log ── */}
-      <ServiceHistory
-        thingId={thingId}
-        thing={detail}
-        services={detail.services}
-        today={today}
-      />
+      <ServiceHistory thingId={thingId} thing={detail} services={detail.services} today={today} />
 
       {/* ── 4. The facts, then the number on the label ── */}
       <ThingFacts thing={detail} />
@@ -155,12 +169,27 @@ export function ThingDetail({
         thing={detail}
         documents={detail.documents}
         today={today}
-        // The slot is resolved and then discarded, because there is nothing to pass it to yet — see the
-        // TODO in the route file. Named in the signature rather than dropped, so the wiring point is
-        // obvious when `CaptureSheet` lands.
-        onCapture={() => onFileDocument()}
+        /*
+          things.md §7's shortcut, wired end to end: the slot's preset and its suggested title go with
+          the thing, and `forThing`'s presence is what drops capture's type step. An explicit `title`
+          beats the preset's own name inside the wizard, so "Insurance — Golf" survives rather than
+          being overwritten by "Vehicle insurance".
+        */
+        onCapture={(slot) =>
+          onFileAgainst({
+            thing: { id: detail.id, name: detail.name },
+            preset: slot.preset,
+            title: slot.suggestedTitle,
+          })
+        }
       />
-      <ThingDocuments documents={detail.documents} onFile={onFileDocument} today={today} />
+      {/* The dashed invitation: the thing, and nothing else. There is no slot to infer a type from, and
+          guessing one from the thing's kind would prefill an answer the user has not given. */}
+      <ThingDocuments
+        documents={detail.documents}
+        onFile={() => onFileAgainst({ thing: { id: detail.id, name: detail.name } })}
+        today={today}
+      />
 
       <ThingPhotos photos={detail.photos} />
 
@@ -231,6 +260,9 @@ function NotHere({ error, onRetry }: { error: unknown; onRetry: () => void }) {
           aria-hidden="true"
           className="mx-auto mb-4 h-[19px] w-[19px] rounded-1 border-[1.5px] border-dashed border-ink-3"
         />
+        {/* 20px — the same step `documents.$documentId.tsx` uses for its own not-found headline, and
+            arbitrary for the same reason: an empty state's sentence is a size between `--t-head` and
+            `--t-title` that only these two screens need. */}
         <p className="font-heading text-[1.25rem] font-face-h leading-snug">
           {notFound ? 'This thing isn’t here' : 'Couldn’t load this thing'}
         </p>

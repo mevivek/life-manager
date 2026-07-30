@@ -51,12 +51,19 @@ export function formatMoney(
     return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value)
   } catch {
     /**
-     * `Intl` throws `RangeError` on a currency code it does not recognise, and a thrown formatter
-     * would take the whole screen down at the root error boundary for a three-letter typo. Falling
-     * back to `1,234.56 XYZ` keeps both facts on screen and loses only the symbol.
+     * `Intl` throws `RangeError` on a **malformed** currency code — anything that is not three
+     * letters — and a thrown formatter takes the whole screen down at the root error boundary over a
+     * typo in one field.
      *
-     * Deliberately not swallowed silently: the code is still printed, so the bad value is visible
-     * rather than hidden (conventions/code.md §6).
+     * Note what does **not** throw: a well-formed code `Intl` has never heard of. `'ZZZ'` formats as
+     * `ZZZ 1,000.00` all by itself, which is already the honest rendering — so this branch is
+     * narrower than it looks, and only fires for a value `currencySchema` (`^[A-Z]{3}$`) would have
+     * rejected anyway. It exists because the persisted cache can hand this component a record an
+     * older build wrote (debt D46), and a screen that crashes on a bad three-character string is a
+     * worse outcome than one that prints it.
+     *
+     * Deliberately not swallowed silently: the code is still printed, so the bad value stays visible
+     * rather than being hidden (conventions/code.md §6).
      */
     return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)} ${currency}`
   }

@@ -120,7 +120,7 @@ export function NowPage() {
    * momentary hedge is a better failure than a confident total that is wrong.
    */
   const horizonComplete =
-    ledger !== null && ledger.complete && things.isSuccess && things.data.next_cursor === null
+    ledger?.complete === true && things.isSuccess && things.data.next_cursor === null
 
   return (
     /**
