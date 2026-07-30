@@ -52,13 +52,11 @@ export const handlers = [
   /**
    * Things — ADR-0029.
    *
-   * ═══════════════════════════════════════════════════════════════════════════════════════
-   *  These are the only place `/api/v1/things` answers anything at all today.
-   * ═══════════════════════════════════════════════════════════════════════════════════════
-   *
-   * things.md §10: the endpoints do not exist, so a Things screen 404s against the real API. That makes
-   * these handlers do more work than the document ones — they are not just avoiding the network, they
-   * are standing in for a server nobody has written. Two consequences:
+   * The real endpoints exist now — M4 step 1 built them (`apps/api/src/domains/things/`), so these
+   * handlers stand in for a server that answers, exactly like the document ones. This comment used to
+   * say the endpoints did not exist and a Things screen 404'd against the real API; that stopped being
+   * true when the server half landed, and a stale "it isn't built yet" note is how a session comes to
+   * trust a mock over the contract. Two consequences, both unchanged:
    *
    *  - **They must match `thingListResponseSchema` exactly**, because `lib/api` parses them with the
    *    real Zod schema. A field the contract requires and this handler omits is a red test rather than

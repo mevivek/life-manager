@@ -2,6 +2,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-07-26
+- **Amended:** 2026-07-30 — one named exemption to invariant 1, for the deploy verifier
+  (see § Amendment below). The invariant itself is unchanged.
 
 ## Context
 
@@ -71,3 +73,39 @@ per screen. No SSR, so the first paint waits on an API round trip
 
 **Revisit if:** never, realistically. This is the load-bearing constraint the rest of the
 architecture rests on. If it stops holding, most other ADRs need re-examining too.
+
+## Amendment, 2026-07-30: the deploy verifier holds a database credential
+
+A review found that `scripts/verify-deployment.mjs` opens a direct connection to production
+Postgres from outside `apps/api` — it reads `DATABASE_URL_UNPOOLED` (from the real environment,
+or failing that from `apps/api/.env`) and runs a `pg` client to delete the rows its own
+round-trip checks created. Invariant 1 above says *"No client, build step, or script outside
+it may connect to Postgres or R2"*, with no exemption clause. So the invariant was being
+violated by a committed script, and had been for as long as the verifier has had a cleanup step.
+
+**The decision: carve the exemption here, explicitly, rather than pretend or quietly widen the
+rule.** An invariant that the codebase visibly breaks teaches the next session that all twelve
+are negotiable, which is a worse outcome than a narrow, argued exception.
+
+**The exemption, and its limits.** `scripts/verify-deployment.mjs` may hold a read/delete
+database credential, because:
+
+- It is **not a client and not a build step.** Nothing it does ships, and no user-facing code
+  path runs it. It is an operator tool that answers "is the thing I just deployed actually
+  working", which is a question no client is allowed to care about.
+- Its database access exists **only to clean up after itself.** The verifier writes real rows
+  through the real API to prove the presign → PUT → confirm path works end to end; without the
+  cleanup, every run would leave litter in the maintainer's space. Routing that through a new
+  API endpoint would mean shipping a production *delete* endpoint whose only purpose is
+  testing — a bigger hole than the one being closed.
+- The credential is **optional**, so a machine that has never run the API locally can still run
+  every check; only the tidy-up is skipped.
+
+**What this does NOT license.** No other script, no build step, no client, and no future
+verifier variant. If a second script needs the database, that is a new decision, not a
+precedent — and the right answer is probably an endpoint. The exemption is for this file, for
+cleanup, and nothing else.
+
+**Revisit if:** the cleanup grows into anything that reads or modifies data it did not create,
+or if R2 object deletion lands and the same argument gets stretched to cover a storage
+credential. Either is a signal the tool has outgrown the exemption.
