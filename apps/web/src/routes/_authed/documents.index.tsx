@@ -3,11 +3,13 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
+import { Toast } from '@/components/ui/toast'
 import { useOpenAdd } from '@/features/documents/AddSheetProvider'
 import { DocumentFilters, type Filters, hasAnyFilter } from '@/features/documents/DocumentFilters'
 import { DocumentList } from '@/features/documents/DocumentList'
 import { useDocuments } from '@/features/documents/useDocuments'
 import { useLedger } from '@/features/documents/useLedger'
+import { cn } from '@/lib/utils'
 
 /**
  * The archive. domains/documents.md §7, ADR-0025 §7.
@@ -78,6 +80,21 @@ function toQuery(filters: Filters): Partial<DocumentListQuery> {
 function DocumentsPage() {
   const filters = Route.useSearch()
   const openAdd = useOpenAdd()
+  /**
+   * Revealed numbers — ADR-0027. Two pieces of state, not one.
+   *
+   * `revealAll` is the header toggle and `revealedIds` is the per-row one, and they are deliberately
+   * separate rather than the toggle filling the set: with one set, turning the header off after
+   * revealing a single row would have to remember which rows the *user* opened, and turning it on
+   * would have to enumerate rows that have not been fetched yet. Two flags compose without either
+   * problem — a row is revealed if the page says so OR if it says so itself.
+   *
+   * Neither persists. A "keep revealed" preference would be a way to leave every number on screen
+   * permanently, which is the opposite of what masking is for.
+   */
+  const [revealAll, setRevealAll] = useState(false)
+  const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [copied, setCopied] = useState<string | null>(null)
   const navigate = useNavigate({ from: Route.fullPath })
   const [openPanel, setOpenPanel] = useState<'none' | 'type' | 'tag' | 'before'>('none')
 
@@ -103,6 +120,8 @@ function DocumentsPage() {
 
   const total = firstPage.data?.data.length ?? 0
   const complete = firstPage.data?.next_cursor === null
+  /** Whether the loaded page holds any number at all — the toggle is not drawn otherwise. */
+  const anyNumbers = (firstPage.data?.data ?? []).some((row) => row.identifier !== null)
 
   return (
     <div>
@@ -115,21 +134,57 @@ function DocumentsPage() {
         while the content stays on the gutter.
       */}
       <div className="-mx-gutter sticky top-0 z-30 border-b border-rule bg-paper px-gutter pb-3">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-baseline gap-2">
+            {/*
+              No chevron beside "Documents". ADR-0025 §4: the domain switcher appears the day the second
+              domain does, and drawing it now would be a control that does nothing.
+            */}
+            <h1 className="font-serif text-title font-normal leading-tight">Documents</h1>
+            <span className="text-body text-ink-3">
+              {firstPage.isPending
+                ? ''
+                : hasAnyFilter(filters)
+                  ? // "6 of 12" is only sayable when both numbers are known. Under a filter the second
+                    // number would need an unfiltered count the API cannot give, so say what matched.
+                    `${total}${complete ? '' : '+'} matching`
+                  : `${total}${complete ? '' : '+'}`}
+            </span>
+          </div>
+
           {/*
-            No chevron beside "Documents". ADR-0025 §4: the domain switcher appears the day the second
-            domain does, and drawing it now would be a control that does nothing.
+            Show / hide every number on the page — ADR-0027.
+
+            Rendered only when the loaded page actually has one. A control that reveals nothing is
+            worse than no control: it implies the archive holds numbers it does not, and it is the
+            "draw it the day the thing exists" rule the domain switcher follows (ADR-0025 §4).
           */}
-          <h1 className="font-serif text-title font-normal leading-tight">Documents</h1>
-          <span className="text-body text-ink-3">
-            {firstPage.isPending
-              ? ''
-              : hasAnyFilter(filters)
-                ? // "6 of 12" is only sayable when both numbers are known. Under a filter the second
-                  // number would need an unfiltered count the API cannot give, so say what matched.
-                  `${total}${complete ? '' : '+'} matching`
-                : `${total}${complete ? '' : '+'}`}
-          </span>
+          {anyNumbers && (
+            <Button
+              variant="quiet"
+              size="sm"
+              className="-mr-2 shrink-0 gap-1.5 text-meta text-ink-2"
+              onClick={() => {
+                setRevealAll((previous) => !previous)
+                // Turning the page-wide toggle OFF clears the rows the user opened individually too.
+                // Otherwise "hide" leaves numbers on screen, which is the one thing the control
+                // promises not to do.
+                setRevealedIds(new Set())
+              }}
+              aria-pressed={revealAll}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'font-mono text-[0.6875rem] tracking-label uppercase',
+                  revealAll ? 'text-ink' : 'text-ink-3',
+                )}
+              >
+                {revealAll ? '••••' : '1234'}
+              </span>
+              {revealAll ? 'Hide numbers' : 'Show numbers'}
+            </Button>
+          )}
         </div>
 
         <DocumentFilters
@@ -147,6 +202,18 @@ function DocumentsPage() {
 
       <DocumentList
         query={query}
+        numbers={{
+          revealedIds,
+          revealAll,
+          onToggle: (documentId) =>
+            setRevealedIds((previous) => {
+              const next = new Set(previous)
+              if (next.has(documentId)) next.delete(documentId)
+              else next.add(documentId)
+              return next
+            }),
+          onCopied: setCopied,
+        }}
         emptyState={
           <div className="px-8 py-10 text-center">
             <p className="font-serif text-[1.1875rem] leading-snug">
@@ -211,6 +278,13 @@ function DocumentsPage() {
         </span>
         Add
       </button>
+
+      {/*
+        The copy confirmation. A PLAIN toast — the comp added a dismiss variant precisely because its
+        toast showed "Undo" unconditionally, and there is nothing to undo about a clipboard write.
+        `Toast` takes no action here, so it renders the dismiss affordance instead.
+      */}
+      {copied !== null && <Toast message={`${copied} copied`} onDismiss={() => setCopied(null)} />}
     </div>
   )
 }

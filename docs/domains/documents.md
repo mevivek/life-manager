@@ -55,7 +55,7 @@ The logical document — "my passport" — independent of any particular scan of
 | `title` | `text not null` | Free text. The only field required at capture — see [Q2](../product/open-questions.md) |
 | `doc_type` | `enum not null` | `identity` · `financial` · `legal` · `warranty` · `receipt` · `certificate` · `other` |
 | `issuer` | `text null` | Who issued it. Free text with autocomplete — see §9 |
-| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on the DETAIL response only. In pino's redaction list |
+| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on **every** document response including the list ([ADR-0027](../decisions/0027-identifier-in-the-list-response.md)). In pino's redaction list |
 | `identifier_last4` | `text null` | The **display** form, derived from `identifier` on every write. This is what lists show — §4 rule 6 |
 | `issued_on` | `date null` | |
 | `expires_on` | `date null` | **`date`, not timestamp.** A passport expires on a day, not an instant |
@@ -165,8 +165,10 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
    [ADR-0026](../decisions/0026-store-the-full-identifier.md) — this rule previously truncated
    to four characters at the API boundary. It now keeps the whole value in `identifier` and
    **derives** `identifier_last4` from it server-side, so a client cannot send a mask that
-   disagrees with its number. **The full value is returned on the detail response only**; the
-   list carries the mask, and `documentSchema` has no field for anything else. Plaintext, by
+   disagrees with its number. **The full value is returned on every document response**, the
+   list included — [ADR-0027](../decisions/0027-identifier-in-the-list-response.md) reversed
+   0026's detail-only rule so the archive can show and copy a number without a round-trip, at
+   the cost of the persisted cache holding every number on the device (debt D47). Plaintext, by
    explicit decision: encryption stays vault-only (invariant 7, ADR-0009), so no copy in the
    app may claim otherwise. Revealing it in the UI is a display state, **not** an
    authorization boundary.

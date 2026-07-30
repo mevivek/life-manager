@@ -146,7 +146,19 @@ describeDb('documents', () => {
     expect(detail.json().identifier_last4).toBe('4567')
   })
 
-  it('rule 6: keeps the full identifier out of every list response', async () => {
+  /**
+   * ── ADR-0027 reverses ADR-0026's detail-only rule ──
+   *
+   * This test previously asserted the opposite: that the full identifier was **absent** from every
+   * list response, because "a list of 100 documents has no use for 100 full numbers". The archive
+   * turned out to be exactly where a person goes when they need a number, and a detail round-trip on
+   * a cold-starting API is seconds of standing at a counter — so the field moved onto
+   * `documentSchema` by explicit decision.
+   *
+   * Rewritten rather than deleted, and it still asserts something the old one did not: that the mask
+   * is present **alongside** the full value, so the client always has something to render by default.
+   */
+  it('ADR-0027: returns the full identifier in the list, alongside the mask', async () => {
     const user = await seedUserWithSpace(app)
 
     await app.inject({
@@ -159,12 +171,33 @@ describeDb('documents', () => {
     const list = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
 
     expect(list.statusCode).toBe(200)
-    // The list is what the offline cache persists and the archive screen renders 100 at a time. The
-    // mask belongs there; the number does not. Asserted on the raw body rather than the parsed rows,
-    // so a field added to the shared mapper by mistake fails here too.
-    expect(list.body).not.toContain('FAKE729481038109')
+    expect(list.json().data[0].identifier).toBe('FAKE729481038109')
+    // The mask must still be there. It is what rows render until the user reveals, so a response
+    // carrying only the full value would force every client to derive its own — and a client-derived
+    // mask is a second implementation of a rule the server owns.
     expect(list.json().data[0].identifier_last4).toBe('8109')
-    expect(list.json().data[0].identifier).toBeUndefined()
+  })
+
+  it('never lets a client set the mask directly, in a list or anywhere else', async () => {
+    const user = await seedUserWithSpace(app)
+
+    // `identifier_last4` is DERIVED. A create that tries to supply one must not be able to make the
+    // mask disagree with the number it masks — that is the drift `identifierColumns` exists to stop,
+    // and it is the one invariant ADR-0027 did NOT relax.
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'PAN card', identifier: 'FAKEABCDE1234F', identifier_last4: '0000' },
+    })
+
+    // Query schemas are strict, and so is the create body: an unknown field is a 400 rather than a
+    // silent strip (conventions/api.md §7, debt D27). Either way the mask must never be '0000'.
+    if (created.statusCode === 201) {
+      expect(created.json().identifier_last4).toBe('234F')
+    } else {
+      expect(created.statusCode).toBe(400)
+    }
   })
 
   it('rule 6: trims before masking, and treats an emptied field as no identifier', async () => {

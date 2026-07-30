@@ -35,6 +35,9 @@ const documentBody = (overrides: Record<string, unknown> = {}) => ({
   title: 'Passport',
   doc_type: 'identity',
   issuer: null,
+  // ADR-0027 put the full value on every document response, `documentSchema` included — so a fixture
+  // without it fails Zod at the fetch boundary and the replay never reports success.
+  identifier: null,
   identifier_last4: null,
   issued_on: null,
   expires_on: null,

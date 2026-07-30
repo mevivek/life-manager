@@ -109,7 +109,7 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D46 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D47 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -151,7 +151,7 @@ Four things worth knowing before you touch anything:
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
 | **Anything visual — a screen, a component, a colour, a size** | [`conventions/design.md`](docs/conventions/design.md) — the practical rules; [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) for why they exist. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0025 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
-| **Anything touching a document's NUMBER** | [`ADR-0026`](docs/decisions/0026-store-the-full-identifier.md) — the full value is stored and returned on the **detail response only**; `identifier_last4` is DERIVED, never sent by a client. `IdentifierCard`'s Reveal is a display state, **not** an authorization boundary, and the value is in the DOM before any tap |
+| **Anything touching a document's NUMBER** | [`ADR-0026`](docs/decisions/0026-store-the-full-identifier.md) then [`ADR-0027`](docs/decisions/0027-identifier-in-the-list-response.md) — the full value is stored **plaintext** and returned on **every** document response, list included (0027 reversed 0026's detail-only rule). `identifier_last4` is DERIVED, never sent by a client. Reveal is a display state, **not** an authorization boundary. The cache now holds every number on the device — debt **D47** |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Adding or changing a FIELD on any cached response** | [`lib/persister.ts`](apps/web/src/lib/persister.ts)'s buster note and debt **D46** — the persisted cache is **rehydrated without re-running Zod**, so the first render after a deploy can hand a component last week's shape. A field the schema says is `string \| null` arrives `undefined`. This crashed the app at its root error boundary on a real phone |
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it |
@@ -165,7 +165,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D46, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D47, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**

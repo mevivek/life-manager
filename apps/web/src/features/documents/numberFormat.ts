@@ -134,6 +134,21 @@ export function autoCapitalizeFor(format: NumberFormat | undefined): 'characters
 }
 
 /**
+ * A stored value, grouped for reading aloud.
+ *
+ * `9999 8888 7777` is how an Aadhaar number is printed and how a person reads one back. An
+ * alphanumeric code like `ABCDE1234F` is left alone: inserting spaces into one invents a format the
+ * document does not use.
+ *
+ * Deliberately NOT `formatNumber`. This runs on a value already saved, where no preset is in hand —
+ * the archive renders a hundred rows and knows only what came back from the API.
+ */
+export function groupForReading(value: string): string {
+  if (!/^\d+$/.test(value) || value.length < 8) return value
+  return value.replace(/(\d{4})(?=\d)/g, '$1 ')
+}
+
+/**
  * Where to put the caret after reformatting, given where it was in **significant** terms.
  *
  * Counted in significant characters rather than string indices, because the reformat inserts and

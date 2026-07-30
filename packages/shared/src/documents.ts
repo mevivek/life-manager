@@ -235,6 +235,19 @@ export const documentSchema = z.object({
   title: z.string().min(1).max(MAX_TITLE_LENGTH),
   doc_type: documentTypeSchema,
   issuer: z.string().nullable(),
+  /**
+   * The **full** identifier — on every response that carries a document, including the list.
+   *
+   * ADR-0026 put this on the detail response only, on data-minimisation grounds. **ADR-0027 moved it
+   * here**, because the archive is where a person goes when they need a number and a detail round-trip
+   * on a cold-starting API is seconds of standing at a counter.
+   *
+   * The cost is stated in ADR-0027 and is real: the persisted Query cache writes list responses to
+   * IndexedDB, so a phone that has opened the archive holds every number in plaintext. `identifier` is
+   * in pino's redaction list; the cache is the remaining exposure (debt D47).
+   */
+  identifier: z.string().nullable(),
+  /** The masked display form, DERIVED from `identifier` server-side. Never sent by a client. */
   identifier_last4: identifierLast4Schema.nullable(),
   issued_on: isoDateSchema.nullable(),
   expires_on: isoDateSchema.nullable(),
@@ -420,21 +433,12 @@ export type DocumentListResponse = z.infer<typeof documentListResponseSchema>
 
 /** `GET /api/v1/documents/:id` — includes files and reminders (§5). */
 export const documentDetailResponseSchema = documentSchema.extend({
-  /**
-   * The **full** identifier, and the only response that carries it — ADR-0026.
-   *
-   * Deliberately not on `documentSchema`, so it is absent from the list. A list of 100 documents has
-   * no use for 100 full numbers, and putting them there would mean every archive fetch, every
-   * offline cache write and every service-worker precache carried the lot. One document at a time,
-   * asked for by id, is the smallest surface that still answers "what is my Aadhaar number".
-   *
-   * Space scoping is the repository's job and is unchanged: this field is only reachable through a
-   * query already filtered by `space_id IN actor.spaceIds` (invariant 3), so a cross-space read 404s
-   * before it can return one (invariant 4). Revealing it in the UI is a display state and **not** an
-   * authorization boundary — the server does not gate it, because the caller who can read the
-   * document is by definition the caller entitled to its number.
-   */
-  identifier: z.string().nullable(),
+  /*
+    `identifier` is NOT re-declared here. It moved onto `documentSchema` in ADR-0027, so this response
+    inherits it — as does the list. Space scoping is unchanged and is the repository's job: the field
+    is only reachable through a query already filtered by `space_id IN actor.spaceIds` (invariant 3),
+    so a cross-space read 404s before it can return one (invariant 4).
+  */
   files: z.array(documentFileSchema),
   reminders: z.array(reminderSchema),
 })

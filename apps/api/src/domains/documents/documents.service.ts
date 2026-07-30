@@ -78,6 +78,16 @@ function toDocument(row: DocumentRow): Document {
     title: row.title,
     doc_type: row.docType,
     issuer: row.issuer,
+    /**
+     * The full identifier, on every document response including the list — ADR-0027.
+     *
+     * ADR-0026 kept this off `toDocument` on purpose, so it could not leak into a list by someone
+     * adding a field to the shared mapper. ADR-0027 reverses that deliberately: the archive is where
+     * a person goes when they need a number, and a detail round-trip on a cold-starting API is
+     * seconds of standing at a counter. The cost — the persisted cache now holds every number on the
+     * device — is stated in ADR-0027 and tracked as debt D47.
+     */
+    identifier: row.identifier,
     identifier_last4: row.identifierLast4,
     issued_on: row.issuedOn,
     expires_on: row.expiresOn,
@@ -148,15 +158,9 @@ export async function getDetail(actor: ActorContext, id: string): Promise<Docume
   ])
 
   return {
+    // `identifier` comes from `toDocument` now — ADR-0027 moved it onto `documentSchema`, so the
+    // detail response inherits it rather than spreading it in separately.
     ...toDocument(row),
-    /**
-     * The full identifier, on this response and no other — ADR-0026.
-     *
-     * `toDocument` deliberately does not carry it, so it cannot leak into the list by someone adding
-     * a field to the shared mapper. Being spread in *here* is the enforcement: a new list endpoint
-     * gets the mask and has to opt in explicitly to get more.
-     */
-    identifier: row.identifier,
     files: files.map(toFile),
     reminders: reminders.map(toReminder),
   }

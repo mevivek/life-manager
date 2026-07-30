@@ -1,5 +1,12 @@
 import type { DocumentDetailResponse } from '@life-manager/shared'
 import { QueryClientProvider } from '@tanstack/react-query'
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
@@ -8,6 +15,7 @@ import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
 import { useOpenAdd } from './AddSheetProvider'
 import { DocumentForm } from './DocumentForm'
+import { DocumentRow } from './DocumentRow'
 import {
   ago,
   daysUntil,
@@ -248,6 +256,159 @@ describe('formatDate', () => {
  * Neither component renders a `<Link>`, so both mount without a router. That is a property worth
  * keeping: it is what makes them testable at all.
  */
+/**
+ * `DocumentRow` renders a `<Link>`, so it needs a router in context — which is why it had no tests
+ * until now. ADR-0027 gave it interactive controls, and their **structure** is the thing worth
+ * locking: buttons beside the link rather than inside it.
+ */
+async function renderWithRouter(ui: React.ReactElement) {
+  const rootRoute = createRootRoute({ component: () => ui })
+  const detail = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/documents/$documentId',
+    component: () => null,
+  })
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([detail]),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  })
+  // `RouterProvider` renders nothing until the router has resolved its first match, so awaiting
+  // `load()` is what makes these tests synchronous afterwards rather than a pile of `waitFor`s.
+  await router.load()
+  return render(<RouterProvider router={router as never} />)
+}
+
+const numbered = {
+  ...detailFixture,
+  identifier: '999988887777',
+  identifier_last4: '7777',
+  title: 'Aadhaar',
+  doc_type: 'identity' as const,
+}
+
+describe('the number on an archive row', () => {
+  it('shows the label and the mask, not the value', async () => {
+    await renderWithRouter(
+      <DocumentRow
+        document={numbered}
+        number={{
+          label: 'Aadhaar number',
+          revealed: false,
+          grouped: '9999 8888 7777',
+          onToggleReveal: () => {},
+          onCopy: () => {},
+        }}
+      />,
+    )
+    expect(screen.getByText('Aadhaar number')).toBeInTheDocument()
+    expect(screen.getByText('•••• 7777')).toBeInTheDocument()
+    expect(screen.queryByText('9999 8888 7777')).toBeNull()
+  })
+
+  it('names both controls after the field AND the document', async () => {
+    // There can be more than one number on a screen — a hundred rows, in fact — so "Show" alone is
+    // ambiguous to anyone navigating by control name.
+    await renderWithRouter(
+      <DocumentRow
+        document={numbered}
+        number={{
+          label: 'Aadhaar number',
+          revealed: false,
+          grouped: '9999 8888 7777',
+          onToggleReveal: () => {},
+          onCopy: () => {},
+        }}
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Show Aadhaar number for Aadhaar' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Copy Aadhaar number for Aadhaar' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the buttons OUTSIDE the link, because interactive content cannot nest', async () => {
+    /**
+     * The structural assertion, and the reason the row is a container rather than a link.
+     *
+     * The comp draws the row as a `div` with an `onClick` and calls `stopPropagation()` on the buttons
+     * inside it. A `<button>` inside an `<a>` is invalid HTML: browsers cope unevenly, screen readers
+     * fold the inner control into the link's accessible name, and a keyboard user cannot reach it. If
+     * someone later "simplifies" this back to buttons-inside-link, this fails.
+     */
+    const { container } = await renderWithRouter(
+      <DocumentRow
+        document={numbered}
+        number={{
+          label: 'Aadhaar number',
+          revealed: false,
+          grouped: '9999 8888 7777',
+          onToggleReveal: () => {},
+          onCopy: () => {},
+        }}
+      />,
+    )
+    const link = container.querySelector('a')
+    expect(link).not.toBeNull()
+    expect(link?.querySelector('button')).toBeNull()
+    expect(container.querySelectorAll('button')).toHaveLength(2)
+  })
+
+  it('shows the grouped value once revealed, and flips the control to Hide', async () => {
+    await renderWithRouter(
+      <DocumentRow
+        document={numbered}
+        number={{
+          label: 'Aadhaar number',
+          revealed: true,
+          grouped: '9999 8888 7777',
+          onToggleReveal: () => {},
+          onCopy: () => {},
+        }}
+      />,
+    )
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Hide Aadhaar number for Aadhaar' }),
+    ).toBeInTheDocument()
+  })
+
+  it('draws no number and no controls when the prop is absent', async () => {
+    // What the Now screen's cards want: rows without a number line.
+    const { container } = await renderWithRouter(<DocumentRow document={numbered} />)
+    expect(container.querySelectorAll('button')).toHaveLength(0)
+    expect(screen.queryByText('•••• 7777')).toBeNull()
+  })
+
+  it('draws no number line for a document that has none, even when asked to', async () => {
+    const { container } = await renderWithRouter(
+      <DocumentRow
+        document={{ ...numbered, identifier: null, identifier_last4: null }}
+        number={{
+          label: 'Number',
+          revealed: false,
+          grouped: '',
+          onToggleReveal: () => {},
+          onCopy: () => {},
+        }}
+      />,
+    )
+    // A "•••• " with nothing after it, and two controls that copy an empty string, is worse than
+    // nothing at all.
+    expect(container.querySelectorAll('button')).toHaveLength(0)
+  })
+
+  it('survives a row cached by a build that had no identifier field', async () => {
+    // The D46 shape drift again, on the row this time. `identifier` absent, not null.
+    const { identifier: _dropped, ...stale } = numbered
+    const { container } = await renderWithRouter(
+      <DocumentRow document={stale as typeof numbered} />,
+    )
+    expect(container.querySelector('a')).not.toBeNull()
+  })
+})
+
 describe('the identifier card', () => {
   it('masks by default and reveals on request', async () => {
     render(<IdentifierCard identifier="999988887777" last4="7777" label="Aadhaar number" />)
