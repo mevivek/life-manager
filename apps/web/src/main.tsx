@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { ScreenSkeleton } from '@/components/ui/skeleton'
 import { startOutboxReplay } from '@/lib/outbox-replay'
 import { createQueryClient } from '@/lib/query-client'
+import { installStaleChunkRecovery } from '@/lib/recovery'
 import { App } from './App'
 import { routeTree } from './routeTree.gen'
 import './styles.css'
@@ -16,6 +17,21 @@ import './styles.css'
  * load-bearing (see `RestoreGate`) and this file cannot be mounted by a test — `createRoot`,
  * `registerSW` and `startOutboxReplay` are all one-per-page side effects.
  */
+
+/**
+ * **First, before anything else in this file.**
+ *
+ * The listener has to exist before any dynamic import can fail, and the imports in question are the
+ * router's lazy route chunks — `autoCodeSplitting` splits every route — which begin loading the
+ * moment `RouterProvider` mounts, below. Registering after `createRoot().render()` would miss the
+ * failure it exists to catch on the very launch that matters: the first one after a deploy.
+ *
+ * It belongs in `main.tsx` rather than `App.tsx` for the reason stated above: it is a one-per-page
+ * side effect on `window`, exactly like `registerSW` and `startOutboxReplay`. `App.tsx` is the tree a
+ * test mounts, possibly several times per file, and a `window` listener installed per mount would be
+ * a leak. `lib/recovery.ts` holds the logic and `lib/startup.test.tsx` drives it directly.
+ */
+installStaleChunkRecovery()
 
 const queryClient = createQueryClient()
 

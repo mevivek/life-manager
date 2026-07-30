@@ -1,6 +1,7 @@
 import { hashKey } from '@tanstack/react-query'
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
@@ -124,19 +125,24 @@ function persistedQuery(queryKey: readonly unknown[], data: unknown) {
  * archive. Seeding both matters — ADR-0013's promise is that the app is *readable* offline, so a test
  * that only seeds `me` proves the guard passed but not that anything useful is behind it.
  */
-function seedPersistedCache(buster: string): void {
+function seedPersistedCache(
+  buster: string,
+  /**
+   * Overridable so one test can seed a cache that is VALID (the buster matches, so the persister
+   * restores it and leaves the file on disk) yet does not satisfy the route guard — which is how the
+   * error boundary can be reached with a real cache still sitting in IndexedDB to be purged.
+   */
+  queries: ReturnType<typeof persistedQuery>[] = [
+    persistedQuery(['me'], CACHED_ME),
+    persistedQuery(LEDGER_KEY, { data: [CACHED_DOCUMENT], next_cursor: null }),
+  ],
+): void {
   store.set(
     CACHE_KEY,
     JSON.stringify({
       buster,
       timestamp: Date.now(),
-      clientState: {
-        mutations: [],
-        queries: [
-          persistedQuery(['me'], CACHED_ME),
-          persistedQuery(LEDGER_KEY, { data: [CACHED_DOCUMENT], next_cursor: null }),
-        ],
-      },
+      clientState: { mutations: [], queries },
     }),
   )
 }
@@ -187,14 +193,121 @@ async function mountApp(): Promise<void> {
   )
 }
 
+/**
+ * A fake Cache Storage and a fake service-worker container, plus a `location` whose only difference
+ * from the real one is that `reload` is observable.
+ *
+ * jsdom provides none of the three: `caches` and `navigator.serviceWorker` simply do not exist, and
+ * `location.reload` is non-configurable so it cannot be spied. The `Proxy` swaps exactly one property
+ * and forwards everything else to the real `Location`, so nothing else in the environment — MSW,
+ * testing-library, the router — notices the substitution.
+ */
+type RecoveryEnvironment = {
+  cacheNames: string[]
+  unregistered: number
+  reloads: number
+}
+
+function fakeRecoveryEnvironment(cacheNames: string[]): RecoveryEnvironment {
+  const environment: RecoveryEnvironment = {
+    cacheNames: [...cacheNames],
+    unregistered: 0,
+    reloads: 0,
+  }
+
+  vi.stubGlobal('caches', {
+    keys: async () => [...environment.cacheNames],
+    delete: async (name: string) => {
+      const before = environment.cacheNames.length
+      environment.cacheNames = environment.cacheNames.filter((each) => each !== name)
+      return environment.cacheNames.length < before
+    },
+  })
+
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    value: {
+      getRegistrations: async () => [
+        {
+          unregister: async () => {
+            environment.unregistered += 1
+            return true
+          },
+        },
+      ],
+    },
+  })
+
+  /**
+   * A plain stand-in rather than a `Proxy` over the real `Location`. A proxy cannot lie about
+   * `reload`: it is a non-configurable, non-writable data property on the target, and returning
+   * anything else from the `get` trap violates a proxy invariant and throws. So the fields the
+   * environment actually reads are copied across and only `reload` differs.
+   */
+  const { href, origin, protocol, host, hostname, port, pathname, search, hash } = window.location
+  vi.stubGlobal('location', {
+    href,
+    origin,
+    protocol,
+    host,
+    hostname,
+    port,
+    pathname,
+    search,
+    hash,
+    toString: () => href,
+    assign: () => {},
+    replace: () => {},
+    reload: () => {
+      environment.reloads += 1
+    },
+  })
+
+  return environment
+}
+
+/**
+ * The loop guard's key, hand-written rather than imported — the same reasoning as `LEDGER_KEY` above.
+ * The key is part of what is being asserted: importing the constant would let a rename that breaks the
+ * guard's lifetime (say, to a `localStorage` key) slip through green.
+ */
+const RECOVERY_KEY = 'life-manager-stale-client-recovery'
+
+/** Fires the event Vite dispatches on `window` when a dynamic import or its preload fails. */
+function dispatchPreloadError(): Event {
+  const event = new Event('vite:preloadError', { cancelable: true })
+  // The `payload` Vite attaches. `Object.assign` because `Event` has no such field in the DOM types.
+  Object.assign(event, { payload: new Error('Failed to fetch dynamically imported module') })
+  window.dispatchEvent(event)
+  return event
+}
+
+/**
+ * Lets `hardRecovery()`'s three awaited steps settle.
+ *
+ * A macrotask turn rather than a fixed number of microtask ticks: one turn drains the whole microtask
+ * queue, so it cannot be off by one as the number of `await`s changes. And unlike `vi.waitFor` it can
+ * establish that a reload did **not** happen, which half of these assertions need.
+ */
+async function settleRecovery(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 beforeEach(() => {
   store.clear()
+  window.sessionStorage.clear()
 })
 
 afterEach(async () => {
   const { onlineManager } = await import('@tanstack/react-query')
   onlineManager.setOnline(true)
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  window.sessionStorage.clear()
+  // `configurable: true` above is what makes this possible; leaving it defined would let one test's
+  // fake worker satisfy another test's assertions.
+  Reflect.deleteProperty(navigator, 'serviceWorker')
 })
 
 describe('cold start with a warm persisted cache', () => {
@@ -284,5 +397,170 @@ describe('cold start with no usable cache', () => {
      * all would satisfy the "0 requests" assertion by never having a cache to begin with.
      */
     expect(meRequests).toBe(1)
+  })
+})
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ *  Recovery from a client that is OLDER than the origin — the loop a phone was stuck in.
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Three deploys in quick succession left an installed PWA holding an `index.html` from the first,
+ * naming `/assets/_authed-B5PBI_a-.js`, which no longer existed. The origin's SPA fallback answered
+ * that path with the app's own HTML at status 200, so the browser refused to execute it as a module
+ * and the root error boundary offered a **Reload** that fetched the same precached HTML and asked for
+ * the same dead chunk.
+ *
+ * These live beside the D49 tests above because they are the same class of defect — the app's cold
+ * start, wrong in a way no feature test can see — and because both fixes are one `location.reload()`
+ * away from being silently undone.
+ */
+describe('recovering from a stale client', () => {
+  it('recovers once per tab, and refuses to reload a second time', async () => {
+    const environment = fakeRecoveryEnvironment(['workbox-precache-v2-https://app.mevivek.dev/'])
+    store.set(CACHE_KEY, 'a cache written by the build that is now stale')
+
+    const { installStaleChunkRecovery } = await import('./recovery')
+    const uninstall = installStaleChunkRecovery()
+
+    const first = dispatchPreloadError()
+    await settleRecovery()
+
+    // Vite rethrows the error only `if (!e.defaultPrevented)`, so this is what stops a second,
+    // more confusing message appearing in the moment before the page goes away.
+    expect(first.defaultPrevented).toBe(true)
+    expect(environment.reloads).toBe(1)
+    expect(environment.unregistered).toBe(1)
+    expect(environment.cacheNames).toEqual([])
+    expect(store.has(CACHE_KEY)).toBe(false)
+
+    /**
+     * The guard must survive a reload and must NOT survive the tab. Asserting both keys, because
+     * `localStorage` would leave a device that hit one bad deploy unable to attempt recovery for good.
+     */
+    expect(window.sessionStorage.getItem(RECOVERY_KEY)).not.toBeNull()
+    expect(window.localStorage.getItem(RECOVERY_KEY)).toBeNull()
+
+    // The page after the reload: module state is gone, so re-install — but `sessionStorage` is not.
+    uninstall()
+    const uninstallAfterReload = installStaleChunkRecovery()
+    store.set(CACHE_KEY, 'a cache written by the build that reloaded')
+
+    const second = dispatchPreloadError()
+    await settleRecovery()
+
+    // Still 1. A genuinely broken deploy gets an error message, not an endless reload on a phone.
+    expect(environment.reloads).toBe(1)
+    // And this time the error is deliberately NOT suppressed: it has to reach the error boundary,
+    // which is where the user is offered a Reload that performs the same recovery on purpose.
+    expect(second.defaultPrevented).toBe(false)
+    expect(store.has(CACHE_KEY)).toBe(true)
+
+    uninstallAfterReload()
+  })
+
+  it('suppresses the extra events one failed import fires, without reloading twice', async () => {
+    const environment = fakeRecoveryEnvironment([])
+    const { installStaleChunkRecovery } = await import('./recovery')
+    const uninstall = installStaleChunkRecovery()
+
+    // Vite reports every rejected preload dependency and then the module load itself, so more than
+    // one event per failure is normal.
+    const first = dispatchPreloadError()
+    const second = dispatchPreloadError()
+    await settleRecovery()
+
+    expect(first.defaultPrevented).toBe(true)
+    expect(second.defaultPrevented).toBe(true)
+    expect(environment.reloads).toBe(1)
+
+    uninstall()
+  })
+
+  it('does not auto-reload at all when the loop guard cannot be written', async () => {
+    const environment = fakeRecoveryEnvironment([])
+    /**
+     * `Storage.prototype`, not the `sessionStorage` instance. jsdom implements a `Storage` as an
+     * exotic object with a named-property handler, so an own `setItem` defined on the instance is not
+     * the property a caller reaches — the spy appears to install and then does nothing, which made an
+     * earlier draft of this test pass a recovery it was asserting had been declined.
+     */
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage is disabled')
+    })
+
+    const { installStaleChunkRecovery } = await import('./recovery')
+    const uninstall = installStaleChunkRecovery()
+
+    const event = dispatchPreloadError()
+    await settleRecovery()
+
+    /**
+     * With no durable guard there is nothing to stop a loop, so the automatic path declines and the
+     * error surfaces instead. The Reload button still works — a tap is one decision per tap.
+     */
+    expect(environment.reloads).toBe(0)
+    expect(event.defaultPrevented).toBe(false)
+
+    uninstall()
+  })
+
+  it("the error boundary's Reload does the hard recovery, not a bare location.reload()", async () => {
+    const { cacheBuster } = await import('./persister')
+    /**
+     * A cache whose buster MATCHES — so the persister restores it and leaves the file on disk — but
+     * which has no `me` entry, so `_authed`'s guard still has to go to the network. Offline, that
+     * fails and lands on the error boundary with a real persisted cache still there to be purged.
+     */
+    seedPersistedCache(cacheBuster, [
+      persistedQuery(LEDGER_KEY, { data: [CACHED_DOCUMENT], next_cursor: null }),
+    ])
+    stubTheRestOfTheNowScreen()
+    const environment = fakeRecoveryEnvironment(['workbox-precache-v2-https://app.mevivek.dev/'])
+    await goOffline()
+
+    await mountApp()
+
+    expect(await screen.findByText('Something went wrong.')).toBeInTheDocument()
+    expect(store.has(CACHE_KEY)).toBe(true)
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }))
+    await settleRecovery()
+
+    /**
+     * A plain reload would score `reloads: 1` and nothing else — which is exactly the button that
+     * could not escape the loop. The other three are what make the label honest.
+     */
+    expect(environment.unregistered).toBe(1)
+    expect(environment.cacheNames).toEqual([])
+    expect(store.has(CACHE_KEY)).toBe(false)
+    expect(environment.reloads).toBe(1)
+  })
+})
+
+/**
+ * A config assertion, and a cheap one. `navigateFallbackDenylist` is a line in `vite.config.ts` that
+ * no test could previously see, which is how a denylist entry gets deleted by a session tidying up.
+ *
+ * Asserted by MATCHING REAL PATHS rather than comparing regex sources: what matters is which requests
+ * the service worker is allowed to answer with `index.html`, and a `/^\/assets\//` that had been
+ * mistyped would still compare equal to itself.
+ */
+describe('the service worker navigation denylist', () => {
+  it('excludes the API and the hashed assets, and still allows a deep link', async () => {
+    const { NAVIGATE_FALLBACK_DENYLIST } = await import('./sw-routing')
+    // Workbox tests these against `url.pathname + url.search`, so that is what is fed in here.
+    const denied = (pathname: string) =>
+      NAVIGATE_FALLBACK_DENYLIST.some((pattern) => pattern.test(pathname))
+
+    expect(denied('/api/v1/me')).toBe(true)
+    expect(denied('/assets/_authed-B5PBI_a-.js')).toBe(true)
+    expect(denied('/assets/index-abc123.css')).toBe(true)
+
+    // The fallback's whole purpose: a client-side route with no file behind it must still get the
+    // shell, or a hard refresh on a document is a 404.
+    expect(denied('/documents/00000001-0000-4000-8000-000000000000')).toBe(false)
+    expect(denied('/home')).toBe(false)
+    expect(denied('/outbox')).toBe(false)
   })
 })

@@ -85,10 +85,16 @@ Pages (builds on push from `main`); `api.mevivek.dev` is Cloud Run, scale-to-zer
 ([ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md), superseding ADR-0014's Fly choice);
 Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 42 checks,
 including the ones `localhost` structurally cannot perform.
-**Check the deployed app with `fetch`, not `curl`.** From an agent container `curl` goes through the
-agent HTTPS proxy, which has been seen returning the SPA fallback HTML for a large asset the origin
-serves correctly — so `curl` can invent a broken deploy that isn't. Node's `fetch` ignores
-`HTTPS_PROXY` and reaches the origin; confirm with it before believing any missing-asset finding.
+**Do not trust ANY probe of the deployed app from an agent container.** This file used to say that
+`curl` goes through the agent HTTPS proxy — which has been seen returning SPA-fallback HTML for an
+asset the origin serves correctly — but that **Node's `fetch` ignores `HTTPS_PROXY` and reaches the
+origin**. *That second half is false*, and believing it cost real time on 2026-07-30: a `fetch`-based
+probe reported four chunks "missing" from a deploy, and minutes later the same probe returned **503**
+for every path and served the literal body `DNS resolution failure` for `_redirects`. The evidence was
+the proxy's, not the origin's, and a conclusion had already been half-drawn from it.
+**So: a negative result from here is not evidence.** Re-run it several times, check
+`curl -sS "$HTTPS_PROXY/__agentproxy/status"`, and treat a real device's screenshot as the only
+trustworthy observation of production.
 
 **Both halves deploy on push.** Web via Cloudflare Pages; API via the Cloud Build trigger
 `deploy-api-on-push`, which tests, builds, deploys and health-checks. **GitHub Actions does not
@@ -269,6 +275,7 @@ Four things worth knowing before you touch anything:
 | **Anything touching `holder` — the people picker, the Whose filter, the row pill** | [`documents.md`](docs/domains/documents.md) §4 rule 13. **A holder is a LABEL, never a permission** — `space_id` is still the only thing deciding who can read a document. `null` is "mine" and is drawn as *absence*, so there is no "Me" badge on a row. `relation` cannot outlive `holder` (one helper writes both). The `?holder=` filter's "mine" is the literal sentinel `HOLDER_MINE`, not `''`. And in `DocumentForm` the name fields' openness is **derived, not stored** — storing it lit two chips at once |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Adding or changing a FIELD on any cached response** | [`lib/persister.ts`](apps/web/src/lib/persister.ts)'s buster note and debt **D46** — the persisted cache is **rehydrated without re-running Zod**, so the first render after a deploy can hand a component last week's shape. A field the schema says is `string \| null` arrives `undefined`. This crashed the app at its root error boundary on a real phone |
+| **A stale client, a chunk that no longer exists, or that Reload button** | [`lib/recovery.ts`](apps/web/src/lib/recovery.ts) and debt **D56/D57**. A deploy changes every hashed chunk name, so a client holding an old `index.html` asks for a chunk that is gone — and because the origin's SPA fallback is `/* /index.html 200`, it gets **HTML at 200**, which a module script cannot execute. `installStaleChunkRecovery()` recovers once per session; the error boundary's Reload runs the same hard recovery, because a bare `location.reload()` provably cannot escape (the worker re-serves the same stale document). **A client already stale when this shipped is not rescued by it** — that needs site data cleared by hand |
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it. Then `apps/web/src/App.tsx`: the cache is only restored *before* the router because `RestoreGate` holds it there (D49), and a query awaited by a route guard needs `networkMode: 'offlineFirst'` or it hangs forever offline |
 | **Calling a document mutation from a new place** | `useDocuments.ts` — `useCreateDocument` and `useUpdateDocument` may return `{ queued: true }` rather than a document (ADR-0024), so every call site branches; an edit must send the version the form was **read** at |
 | **Adding a mutable column or a new writable domain** | `versioned()` in `apps/api/src/db/columns.ts` — an editable table needs the ADR-0024 version column, and its `PATCH` must take the version as a **required** field so a forgotten precondition is a type error rather than silent last-write-wins |

@@ -6,6 +6,7 @@ import { TabBar } from '@/components/TabBar'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { AddSheetProvider } from '@/features/documents/AddSheetProvider'
+import { hardRecovery } from '@/lib/recovery'
 
 /**
  * `createRootRouteWithContext` so route `beforeLoad` and loaders can reach the QueryClient
@@ -132,9 +133,30 @@ function RootError({ error }: { error: Error }) {
       <Button
         variant="secondary"
         className="self-start"
-        // A full reload rather than a router navigation: the error boundary has already caught a
-        // render failure, so the safest recovery is to rebuild the tree from scratch.
-        onClick={() => window.location.reload()}
+        /**
+         * ═════════════════════════════════════════════════════════════════════════════════════
+         *  This was `window.location.reload()`, and against the failure that puts users here
+         *  most often it could not do what its label says.
+         * ═════════════════════════════════════════════════════════════════════════════════════
+         *
+         * A plain reload asks the service worker for a navigation, and `navigateFallback` answers it
+         * from the precache — so a client stale enough to reference a deleted chunk gets the *same*
+         * stale `index.html` and asks for the *same* dead chunk. Tapping this was a loop with no exit
+         * but clearing site data. `toast.tsx` states the standing rule for this codebase: never ship a
+         * control that cannot do what it says. This one could not.
+         *
+         * `hardRecovery()` unregisters the worker, empties Cache Storage, purges the persisted Query
+         * cache and then reloads — see `lib/recovery.ts` for why that sequence actually reaches the
+         * network. It is heavier than a reload needs to be for a merely transient render error, and
+         * that is the right trade: the two failures that land a user on this screen are a stale chunk
+         * and a stale *cache shape* (debt D46), and a bare reload fixes neither.
+         *
+         * `void` because `noFloatingPromises` is an error and there is nothing to await — the
+         * function ends in a navigation.
+         */
+        onClick={() => {
+          void hardRecovery()
+        }}
       >
         Reload
       </Button>

@@ -4,6 +4,7 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { NAVIGATE_FALLBACK_DENYLIST } from './src/lib/sw-routing'
 
 /**
  * **Plugin order is significant.** `tanstackRouter` must come BEFORE `react`: it generates
@@ -63,8 +64,14 @@ export default defineConfig({
         /**
          * App shell only. The service worker must NEVER answer an API call from cache:
          *
-         *  - `navigateFallbackDenylist` keeps `/api/*` navigations away from index.html.
+         *  - `navigateFallbackDenylist` keeps `/api/*` navigations away from index.html, and now
+         *    `/assets/*` too — a hashed chunk answered with HTML is the MIME-type failure that took
+         *    the app down on a real phone, and it is unrecoverable in a way a 404 is not.
          *  - No `runtimeCaching` entry for the API at all, so responses are never stored.
+         *
+         * The list itself lives in `src/lib/sw-routing.ts` — with the reasoning for each entry, and
+         * with an honest note about how much of the fix it actually is — so that `lib/startup.test.tsx`
+         * can assert it. A denylist entry no test can see is an entry the next session deletes.
          *
          * **Offline read caching now exists, and deliberately does not live here.** ADR-0013's
          * mechanism is the TanStack Query cache persisted to IndexedDB — `src/lib/persister.ts`.
@@ -73,7 +80,7 @@ export default defineConfig({
          * with one purge path is the whole design; do not "also" cache API responses here.
          */
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: NAVIGATE_FALLBACK_DENYLIST,
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
 
         /**

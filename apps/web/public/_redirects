@@ -1,3 +1,28 @@
 # Cloudflare Pages SPA fallback. Without this, a hard refresh on /home or /login is a 404 from
 # the CDN, because no such file exists — TanStack Router resolves those paths client-side.
+#
+# ═══════════════════════════════════════════════════════════════════════════════════════════
+#  This rule is ALSO the reason a missing /assets/*.js comes back as HTML at status 200, and
+#  it is deliberately left as it is. Do not "fix" it without a preview deploy. See debt D56.
+# ═══════════════════════════════════════════════════════════════════════════════════════════
+#
+# A stale client asking for a chunk a later deploy no longer builds gets this rule's index.html
+# instead of a 404, and a `<script type="module">` cannot execute HTML: *"'text/html' is not a valid
+# JavaScript MIME type for module script"*. That is the failure `src/lib/recovery.ts` recovers from,
+# and it would be cleaner to 404 the asset in the first place. Two things checked against
+# Cloudflare's own `_redirects` documentation say not to try it here:
+#
+#  1. **404 is not a supported status in `_redirects`.** The docs list rewrites to other status codes
+#     as unsupported, with `/blog/* /blog/404.html 404` as the explicit example. There is no rule that
+#     can be written on this line to produce a 404.
+#  2. **Removing or narrowing this rule would not produce one either.** Pages has a second, separate
+#     fallback: with no top-level `404.html` in the output it "assumes that you are deploying a
+#     single-page application" and serves the root for unmatched paths. So the HTML-for-a-missing-asset
+#     behaviour survives any edit to this file, and would need a `404.html` — which then interacts with
+#     this rule in a way the documentation does not state.
+#
+# Ordering *is* documented as first-match-wins ("the top-most redirect is applied"), so an earlier
+# `/assets/*` rule would take precedence — but what Pages does when a 200 rewrite's target does not
+# exist is not documented, and getting it wrong breaks every asset on the origin rather than one
+# chunk. That experiment belongs on a preview deployment, not here.
 /*  /index.html  200
