@@ -313,6 +313,10 @@ steps:
 options:
   # Required when the build runs as a user-specified service account.
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8
+  # No machineType set, deliberately: Cloud Build's 120 free build-minutes/day apply only to
+  # the default machine type. E2_HIGHCPU_8 was billed from the first minute with no free
+  # allowance at all. The last real (non-skipped) build on that tier took 4m25s against this
+  # file's 2400s timeout, so the default machine has plenty of headroom even if it runs
+  # several times slower.
 
 timeout: 2400s

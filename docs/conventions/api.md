@@ -6,7 +6,11 @@ client — and there will eventually be three
 
 The contract is generated from Zod schemas in `packages/shared`
 ([ADR-0004](../decisions/0004-zod-single-contract-source.md)) and served as OpenAPI 3.1 at
-`/api/v1/openapi.json`.
+`/api/v1/openapi.json` — public, in every environment, including production. A browsable Swagger
+UI is mounted at `/api/v1/docs`, also public and also in every environment: it renders the same
+document `/api/v1/openapi.json` already exposes, so it discloses no more than that endpoint
+already does. Its "try it out" panel fires requests using whatever session cookie the browser
+holds, same as any REST client.
 
 ---
 

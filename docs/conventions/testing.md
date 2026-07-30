@@ -166,8 +166,13 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 
 `pnpm test` **skips** the API's suites without Docker or `TEST_DATABASE_URL`
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
-API was tested. **Check the skip count, every time.** Measured 2026-07-30: **730 passed / 0 skipped**
-with a database; **529 passed / 201 skipped** without one — every skip is the API's.
+API was tested. **Check the skip count, every time.**
+
+**Measured 2026-07-30, after merging `main`: 744 passed / 0 skipped** with a database (web 466 ·
+api 222 · shared 56); **545 passed / 199 skipped** without one — every skip is the API's. Taken three
+times on a settled tree. **Re-measure rather than citing this**: the figure in this repo has been
+wrong three separate times, once by 17 tests, and once because a session did the arithmetic instead
+of running the suite.
 
 Postgres 16 is installed in the agent container, so no Docker is needed. `initdb` refuses to run as
 root:
