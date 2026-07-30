@@ -222,9 +222,7 @@ export const documents = pgTable(
      * foreign key automatically (conventions/data.md §2) — so the index is the useful half, and it
      * does not depend on the missing table.
      */
-    index('documents_thing_id_idx')
-      .on(table.thingId)
-      .where(sql`${table.deletedAt} is null`),
+    index('documents_thing_id_idx').on(table.thingId).where(sql`${table.deletedAt} is null`),
   ],
 )
 

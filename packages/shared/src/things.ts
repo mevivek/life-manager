@@ -405,7 +405,12 @@ export type ThingServiceCreate = z.infer<typeof thingServiceCreateSchema>
  * purchase all compete — so it sorts alphabetically, which is the one order a person can predict.
  * things.md §5.
  */
-export const thingSortSchema = z.enum(['name', 'purchased_on', 'warranty_ends_on', 'service_due_on'])
+export const thingSortSchema = z.enum([
+  'name',
+  'purchased_on',
+  'warranty_ends_on',
+  'service_due_on',
+])
 export type ThingSort = z.infer<typeof thingSortSchema>
 
 /** A repeatable query parameter arrives as a string for one value and an array for several. */
