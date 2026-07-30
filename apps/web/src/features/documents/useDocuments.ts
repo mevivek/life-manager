@@ -136,14 +136,17 @@ export function useDeleteDocument() {
 
   return useMutation({
     /**
-     * **Not queued offline, deliberately** — the one write that still fails hard with no network.
+     * Takes the version the caller last read — debt D41, closed. A delete built against stale data
+     * is now refused with 409 rather than destroying an edit made elsewhere.
      *
-     * `DELETE` carries no version precondition (debt D41), so a queued delete replayed after the
-     * document was edited on another device would destroy that edit with nothing shown. That is the
-     * exact failure ADR-0024 exists to prevent, so until D41 is closed the honest behaviour is to
-     * refuse: `OfflineError` propagates and the UI says the deletion did not happen.
+     * **Still not queued offline**, and that is now a product choice rather than a safety gap. The
+     * precondition makes queueing a delete *safe*; it does not make it *good*. A delete that sits in
+     * a queue for hours and then fails with a conflict is a confusing thing to explain, and unlike an
+     * edit there is nothing to re-apply — so it stays a write that requires a connection until
+     * somebody asks for otherwise. `OfflineError` propagates and the UI says it did not happen.
      */
-    mutationFn: (id: string) => api.documents.remove(id),
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      api.documents.remove(id, version),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentsKey })
     },

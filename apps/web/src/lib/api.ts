@@ -220,8 +220,17 @@ export const api = {
         idempotencyKey,
       }),
 
-    remove: (id: string): Promise<null> =>
-      request(`/api/v1/documents/${id}`, noContentSchema, { method: 'DELETE' }),
+    /**
+     * `version` is REQUIRED — debt D41, closed.
+     *
+     * A delete built against a stale read would otherwise destroy whatever was written since, and a
+     * delete is the one write this app cannot undo: there is no restore endpoint. Required in the
+     * signature means a call site that forgets is a type error rather than a lost document.
+     *
+     * It travels as a query parameter because `fetch` will not reliably send a body on a `DELETE`.
+     */
+    remove: (id: string, version: number): Promise<null> =>
+      request(`/api/v1/documents/${id}?version=${version}`, noContentSchema, { method: 'DELETE' }),
 
     /**
      * The people picker's suggestions — pairs, so choosing a known person fills the relation too.

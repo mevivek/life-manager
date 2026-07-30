@@ -286,19 +286,32 @@ export async function update(
  * **that is the service's job** — this function does one table, so it can be composed inside the
  * transaction that does all three.
  */
+/**
+ * Soft-deletes only if the row is still at `expectedVersion` — debt D41, and the same conditional
+ * shape as `update` above.
+ *
+ * A delete is the most destructive write there is, so it is the LAST place that should have been
+ * left unconditional: without the precondition, loading a document on one device, editing it on
+ * another, then deleting on the first removes the newer edit with nothing shown. The version bump is
+ * kept even though the row is now deleted, so a resurrected row could never collide with a
+ * precondition built against its pre-delete state.
+ */
 export async function softDelete(
   actor: ActorContext,
   id: string,
+  expectedVersion: number,
   executor: Executor = db,
-): Promise<number> {
+): Promise<number | null> {
   const now = new Date()
   const changed = await executor
     .update(documents)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(scoped(actor, documents), eq(documents.id, id)))
-    .returning({ id: documents.id })
+    .set({ deletedAt: now, updatedAt: now, version: sql`${documents.version} + 1` })
+    .where(
+      and(scoped(actor, documents), eq(documents.id, id), eq(documents.version, expectedVersion)),
+    )
+    .returning({ version: documents.version })
 
-  return changed.length
+  return changed[0]?.version ?? null
 }
 
 // ── Files ────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import {
   confirmUploadRequestSchema,
   documentCreateSchema,
+  documentDeleteQuerySchema,
   documentDetailResponseSchema,
   documentFileParamsSchema,
   documentFileSchema,
@@ -192,15 +193,18 @@ export async function documentsRoutes(app: FastifyInstance): Promise<void> {
         operationId: 'deleteDocument',
         summary: 'Soft-delete a document, its files and its pending reminders',
         description:
+          'Requires `?version=` — the version the client last read. A delete built against stale ' +
+          'data is refused with 409 rather than destroying an edit made elsewhere (ADR-0024, D41). ' +
           'Does not delete the stored objects — cleanup is a separate job so an accidental ' +
           'delete stays recoverable (ADR-0008).',
         tags: ['documents'],
         params: documentIdParamsSchema,
+        querystring: documentDeleteQuerySchema,
         response: { 204: z.null(), ...mutationErrors },
       },
     },
     async (request, reply) => {
-      await service.remove(requireActor(request), request.params.id)
+      await service.remove(requireActor(request), request.params.id, request.query.version)
       return reply.status(204).send(null)
     },
   )

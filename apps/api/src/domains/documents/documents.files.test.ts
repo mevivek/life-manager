@@ -393,7 +393,7 @@ describeDb('document files', () => {
 
     await app.inject({
       method: 'DELETE',
-      url: `/api/v1/documents/${document.id}`,
+      url: `/api/v1/documents/${document.id}?version=${document.version}`,
       ...authAs(user),
     })
 

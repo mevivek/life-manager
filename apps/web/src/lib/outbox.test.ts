@@ -11,7 +11,7 @@ import { server } from '@/test/msw'
  *  - a stale write being applied instead of refused,
  *  - a 4xx being retried forever,
  *  - the queue continuing past a network failure and losing its place,
- *  - and a delete being queued at all, which is still unsafe (debt D41).
+ *  - and a delete being queued at all, which stays out of scope by choice (D41 is closed).
  */
 
 const store = new Map<string, unknown>()
@@ -298,19 +298,20 @@ describe('resolving a conflict', () => {
 })
 
 describe('what must not be queued', () => {
-  it('a delete offline fails instead of queueing — debt D41', async () => {
+  it('a delete offline fails instead of queueing', async () => {
     const { api, OfflineError } = await import('./api')
     const outbox = await import('./outbox')
     server.use(http.delete('*/api/v1/documents/:id', () => HttpResponse.error()))
 
     // `useDeleteDocument` calls the API directly with no `writeOrQueue` wrapper, so this surfaces.
-    await expect(api.documents.remove(DOC_ID)).rejects.toBeInstanceOf(OfflineError)
+    await expect(api.documents.remove(DOC_ID, 1)).rejects.toBeInstanceOf(OfflineError)
 
     /**
-     * The queue stays empty, and that is the assertion that matters. `DELETE` has no version
-     * precondition (D41), so a queued delete replayed after the document was edited elsewhere would
-     * destroy that edit with no conflict shown — the precise failure ADR-0024 exists to prevent.
-     * If a future change starts queueing deletes, this test fails and points at D41.
+     * The queue stays empty, and that is the assertion that matters. With D41 closed a queued delete
+     * would now be *safe* — it carries a version and would be refused with 409 rather than destroying
+     * a newer edit — but it is deliberately still not queued, because a delete that conflicts hours
+     * later has nothing to re-apply and is hard to explain. This test pins that choice so enabling it
+     * has to be deliberate.
      */
     expect(await outbox.list()).toHaveLength(0)
   })

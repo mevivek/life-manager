@@ -106,10 +106,12 @@ in this app where the user is asked to resolve something rather than being told 
 
 **What this ADR does NOT cover, deliberately:**
 
-- **`DELETE` has no version precondition yet.** A stale delete can therefore still remove a record
-  that was edited on another device after the delete was queued. That is a real data-loss path and it
-  is registered as debt rather than hidden. `PATCH` came first because concurrent *edits* are the
-  common case; a delete is usually deliberate and recent.
+- ~~**`DELETE` has no version precondition yet.**~~ **Closed 2026-07-30 (D41).** `DELETE` now takes
+  `?version=` — a query parameter rather than a body, because `fetch` will not reliably send a body on
+  a `DELETE` — and a stale delete is refused with `409` exactly like a stale `PATCH`. It was worth
+  closing before real documents went in: a delete is the one write this app cannot undo, since there
+  is no restore endpoint, which makes it the write where a lost update matters *most* rather than
+  least. Queueing a delete offline is now safe but still deliberately not done — see `lib/outbox.ts`.
 - Reminders and files carry no version. They are append/remove-shaped rather than edit-shaped, so a
   merge question does not arise in the same way — but this should be re-examined the moment either
   grows an editable field.

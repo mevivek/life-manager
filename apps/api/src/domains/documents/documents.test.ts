@@ -511,7 +511,7 @@ describeDb('documents', () => {
 
     const deleted = await app.inject({
       method: 'DELETE',
-      url: `/api/v1/documents/${document.id}`,
+      url: `/api/v1/documents/${document.id}?version=${document.version}`,
       ...authAs(user),
     })
     expect(deleted.statusCode).toBe(204)
@@ -595,13 +595,84 @@ describeDb('documents', () => {
     expect(detail.json().version).toBe(2)
   })
 
+  it('D41: refuses a stale DELETE with 409 and leaves the document intact', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+
+    // Somebody edits it after this client last read it — the two-devices case.
+    const edited = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, title: 'Edited on the other device' },
+    })
+    expect(edited.statusCode).toBe(200)
+
+    // The delete still carries the version it loaded, which is now stale.
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${document.id}?version=${document.version}`,
+      ...authAs(user),
+    })
+    expect(deleted.statusCode).toBe(409)
+
+    /**
+     * The assertion that matters, and the reason D41 was worth closing: the document is STILL THERE.
+     * Before the precondition, this delete succeeded and destroyed the edit above — permanently,
+     * because there is no restore endpoint in this app.
+     */
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+    expect(detail.statusCode).toBe(200)
+    expect(detail.json().title).toBe('Edited on the other device')
+  })
+
+  it('D41: a DELETE with no version is rejected, not treated as unconditional', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+
+    // 400: the precondition is required, so a client that forgets it cannot fall back to the old
+    // unconditional behaviour by omission — which is exactly how this class of bug returns.
+    expect(deleted.statusCode).toBe(400)
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+    expect(detail.statusCode).toBe(200)
+  })
+
+  it('D41: a typo in the version parameter is rejected, not ignored', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user)
+
+    // `strictObject` on the query schema — conventions/api.md §7 / debt D27. Without it, `?verison=`
+    // is an unknown key that gets stripped, and the delete proceeds unconditionally.
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/documents/${document.id}?verison=${document.version}`,
+      ...authAs(user),
+    })
+    expect(deleted.statusCode).toBe(400)
+  })
+
   it('ADR-0024: a stale patch on a deleted document is 404, not 409', async () => {
     const user = await seedUserWithSpace(app)
     const document = await createDocument(app, user)
 
     await app.inject({
       method: 'DELETE',
-      url: `/api/v1/documents/${document.id}`,
+      url: `/api/v1/documents/${document.id}?version=${document.version}`,
       ...authAs(user),
     })
 
@@ -628,7 +699,7 @@ describeDb('documents', () => {
         url: `/api/v1/documents/${document.id}`,
         payload: { version: document.version, title: 'x' },
       },
-      { method: 'DELETE' as const, url: `/api/v1/documents/${document.id}` },
+      { method: 'DELETE' as const, url: `/api/v1/documents/${document.id}?version=1` },
       { method: 'GET' as const, url: `/api/v1/documents/${document.id}/reminders` },
       {
         method: 'POST' as const,

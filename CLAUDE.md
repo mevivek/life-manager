@@ -77,8 +77,10 @@ sign-out/sign-in purge in `apps/web/src/lib/session.ts`.
 **Offline WRITES exist too, via an outbox** ([ADR-0024](docs/decisions/0024-offline-writes-outbox.md),
 superseding 0013's read-only stance). Edits and captures queue in IndexedDB and replay on reconnect;
 a stale write is refused with **409** and surfaced at `/outbox` for the user to decide, never merged.
-**`DELETE` is deliberately not queued** — it has no version precondition (debt D41), so a queued
-delete could destroy a newer edit.
+**`DELETE` carries a `?version=` precondition too** (D41, closed) — a stale delete is refused with 409
+rather than destroying a newer edit. It is still **not queued offline**, but that is now a product
+choice rather than a safety gap: a delete that sits queued for hours and then conflicts is confusing,
+and unlike an edit there is nothing to re-apply.
 
 That has two consequences in the UI, and both are easy to break by writing the obvious code:
 **`useCreateDocument` and `useUpdateDocument` can return `{ queued: true }` instead of a document**, so

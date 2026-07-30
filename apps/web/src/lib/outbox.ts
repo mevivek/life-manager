@@ -24,10 +24,11 @@ import { ApiError, api, OfflineError } from './api'
  *
  * ── What is deliberately NOT queued ──
  *
- * **Deletes.** `DELETE` has no version precondition yet (debt D41), so a queued delete replayed
- * after the document was edited on another device would destroy that edit with no conflict shown —
- * precisely the failure ADR-0024 exists to prevent. Until D41 is closed, a delete attempted offline
- * fails immediately and plainly, which is the honest behaviour rather than a silent data-loss path.
+ * **Deletes.** `DELETE` now carries a `?version=` precondition of its own (D41, closed), so queueing
+ * one would be *safe*. It is still not queued, because safe is not the same as good: a delete that
+ * sits in a queue for hours and then comes back as a conflict is a confusing thing to explain, and
+ * unlike an edit there is nothing to re-apply afterwards. A delete attempted offline fails
+ * immediately and plainly. That is now a product choice, and reversing it is a small change.
  */
 
 const OUTBOX_KEY = 'life-manager-outbox'

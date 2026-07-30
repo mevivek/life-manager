@@ -580,4 +580,22 @@ export type DocumentFileUpdate = z.infer<typeof documentFileUpdateSchema>
 // ── Params ───────────────────────────────────────────────────────────────────
 
 export const documentIdParamsSchema = z.object({ id: uuidSchema })
+
+/**
+ * The version precondition for `DELETE /documents/:id` — closes debt D41.
+ *
+ * **A query parameter rather than a body**, because a `DELETE` with a body is poorly supported and
+ * `fetch` will not reliably send one. The precondition itself is the same idea as `PATCH`'s
+ * ([ADR-0024](../../../docs/decisions/0024-offline-writes-outbox.md)): the client states the version
+ * it last saw, and a delete built against stale data is refused with `409` instead of destroying an
+ * edit made somewhere else in the meantime.
+ *
+ * `z.coerce` because query parameters arrive as strings; `strictObject` because
+ * `conventions/api.md` §7 requires an unknown query parameter to be rejected rather than ignored —
+ * a typo'd `?verison=3` must not silently become an unconditional delete.
+ */
+export const documentDeleteQuerySchema = z.strictObject({
+  version: z.coerce.number().int().min(1),
+})
+export type DocumentDeleteQuery = z.infer<typeof documentDeleteQuerySchema>
 export const documentFileParamsSchema = z.object({ id: uuidSchema, fileId: uuidSchema })

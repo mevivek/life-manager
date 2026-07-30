@@ -204,7 +204,7 @@ describeDb('Idempotency-Key', () => {
 
     const first = await app.inject({
       method: 'DELETE',
-      url: `/api/v1/documents/${created.json().id}`,
+      url: `/api/v1/documents/${created.json().id}?version=${created.json().version}`,
       headers: { ...authAs(user).headers, 'idempotency-key': key },
     })
     expect(first.statusCode).toBe(204)
@@ -213,7 +213,7 @@ describeDb('Idempotency-Key', () => {
     // look like a failure. The 204 is stored and replayed.
     const retried = await app.inject({
       method: 'DELETE',
-      url: `/api/v1/documents/${created.json().id}`,
+      url: `/api/v1/documents/${created.json().id}?version=${created.json().version}`,
       headers: { ...authAs(user).headers, 'idempotency-key': key },
     })
     expect(retried.statusCode).toBe(204)

@@ -395,10 +395,32 @@ export async function update(
  * the R2 objects**. Object cleanup is a separate job so an accidental delete stays recoverable
  * (conventions/data.md §3, ADR-0008).
  */
-export async function remove(actor: ActorContext, id: string): Promise<void> {
+export async function remove(
+  actor: ActorContext,
+  id: string,
+  expectedVersion: number,
+): Promise<void> {
+  // Read before the conditional delete, so a miss can be explained. Same shape as `update`.
+  const existing = await repository.findById(actor, id)
+  if (existing === undefined) throw new NotFoundError('No such document.')
+
   await db.transaction(async (tx) => {
-    const changed = await repository.softDelete(actor, id, tx)
-    if (changed === 0) throw new NotFoundError('No such document.')
+    const newVersion = await repository.softDelete(actor, id, expectedVersion, tx)
+
+    /**
+     * Nothing matched: either the row is gone, or it moved on. Debt D41 — before this precondition
+     * existed, a delete built against a stale read destroyed whatever had been written since, with
+     * no conflict shown. A delete is unrecoverable in this app (there is no restore endpoint), which
+     * makes it the write where a lost update matters most, not least.
+     */
+    if (newVersion === null) {
+      if (existing.version !== expectedVersion) {
+        throw new ConflictError(
+          `This document was changed elsewhere after you loaded it. You tried to delete version ${expectedVersion}; it is now at version ${existing.version}. Open it and check before deleting.`,
+        )
+      }
+      throw new NotFoundError('No such document.')
+    }
 
     await repository.softDeleteFilesFor(actor, id, tx)
     await remindersRepository.softDeletePendingFor(actor, id, tx)

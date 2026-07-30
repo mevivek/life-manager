@@ -243,7 +243,10 @@ function DocumentDetailPage() {
                 className="border border-status-late"
                 disabled={remove.isPending}
                 onClick={async () => {
-                  await remove.mutateAsync(documentId)
+                  // The version this screen was rendered from — debt D41. If the document was
+                  // changed elsewhere while this confirmation was open, the delete is refused with
+                  // 409 rather than destroying the newer version.
+                  await remove.mutateAsync({ id: documentId, version: detail.version })
                   setToast('Deleted')
                   await navigate({ to: '/documents' })
                 }}
