@@ -27,7 +27,8 @@ makes the harness throw instead of skip. Do **not** write that URL into `apps/ap
 
 **R2 and VAPID are now provisioned, and the database holds real documents** (2026-07-30). Uploads
 were confirmed working from the maintainer's phone, and `node scripts/verify-deployment.mjs` passes
-**40/40** against production including a real presign → PUT → confirm round-trip against R2.
+**42/42** against production including a real presign → PUT → confirm round-trip against R2, and the
+two ADR-0028 checks that assert the maintenance trigger REFUSES an unauthenticated call.
 
 **What M1 still lacks is a notification that has actually arrived — and the code for it now exists.**
 [ADR-0028](docs/decisions/0028-external-trigger-for-the-daily-scan.md) built the way out:
@@ -66,7 +67,7 @@ created a real account with a personal space. Schema is applied to the Neon dev 
 **It is deployed, and nothing runs on the maintainer's laptop.** `app.mevivek.dev` is Cloudflare
 Pages (builds on push from `main`); `api.mevivek.dev` is Cloud Run, scale-to-zero
 ([ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md), superseding ADR-0014's Fly choice);
-Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 40 checks,
+Postgres is Neon. Re-verify any deploy with `node scripts/verify-deployment.mjs` — 42 checks,
 including the ones `localhost` structurally cannot perform.
 **Check the deployed app with `fetch`, not `curl`.** From an agent container `curl` goes through the
 agent HTTPS proxy, which has been seen returning the SPA fallback HTML for a large asset the origin
