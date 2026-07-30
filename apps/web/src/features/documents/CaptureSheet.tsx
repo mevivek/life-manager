@@ -12,7 +12,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Chip } from '@/components/ui/chip'
+import { Chip, Tag } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Eyebrow, Label } from '@/components/ui/label'
 import { Sheet } from '@/components/ui/sheet'
@@ -374,6 +374,10 @@ export function CaptureWizard({
 
         `aria-hidden`, because the "Step 3 of 5" beside it is the same fact in words, and a row of six
         unlabelled divs announces as nothing useful.
+
+        The 3px height and 2px radius are arbitrary because the bar *is* the content — there is no type
+        or spacing token for a 3px rule, and the sheet's own grab handle is drawn the same way
+        (design.md §1 permits an arbitrary value where the value is the thing).
       */}
       <div aria-hidden="true" className="mt-2 flex gap-1">
         {steps.map((each, index) => (
@@ -384,10 +388,10 @@ export function CaptureWizard({
         ))}
       </div>
 
+      {/* `Tag`, not a hand-rolled pill: it is the same shape with no behaviour, and a second copy of
+          it here would be a second place for the pill's height to drift. */}
       {intent?.forThing !== undefined && (
-        <div className="mt-3.5 inline-flex min-h-[1.875rem] items-center rounded-pill border border-rule-2 px-2.5 text-body text-ink-2">
-          {`Filing against ${intent.forThing.name}`}
-        </div>
+        <Tag className="mt-3.5">{`Filing against ${intent.forThing.name}`}</Tag>
       )}
 
       <h2 id={HEADING_ID} className="mt-4 font-heading text-title font-face-h leading-tight">
