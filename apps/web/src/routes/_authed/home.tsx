@@ -10,6 +10,7 @@ import { GettingStarted } from '@/features/documents/GettingStarted'
 import { Horizon } from '@/features/documents/Horizon'
 import { NotificationsCard } from '@/features/documents/NotificationsCard'
 import { type Ledger, toLedger, useLedger } from '@/features/documents/useLedger'
+import { useFeel } from '@/lib/useFeel'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authed/home')({ component: NowPage })
@@ -58,6 +59,7 @@ const GETTING_STARTED_MAX = 4
 function NowPage() {
   const documents = useLedger()
   const openAdd = useOpenAdd()
+  const { copy } = useFeel()
 
   return (
     /**
@@ -86,7 +88,9 @@ function NowPage() {
       */}
       <div className="flex items-center justify-between gap-3">
         <Eyebrow>
-          <time dateTime={todayIso()}>{todayLabel()}</time>
+          {/* Warm: "Thursday 30 July". Plain: "30 Jul 2026". The `dateTime` stays machine-ISO in
+              both — the register changes the human face, never the semantics. */}
+          <time dateTime={todayIso()}>{copy.todayLabel(new Date())}</time>
         </Eyebrow>
         {/*
           Add, as text with a hairline plus glyph — not the ink-filled block it was as a tab. On the
@@ -114,7 +118,7 @@ function NowPage() {
         </div>
       ) : documents.isError ? (
         <div className="pt-5">
-          <Card tone="late" className="p-4">
+          <Card tone="late" className="p-card">
             <p className="text-row font-medium">Couldn’t load your documents</p>
             <p className="mt-1 text-body leading-relaxed text-ink-2">
               {/* The real message rather than a generic one: this is a single-user private app, and
@@ -141,6 +145,7 @@ function NowPage() {
 
 function NowBody({ ledger }: { ledger: Ledger }) {
   const { needsYou, horizon, withoutScan, datedCount, loadedCount, complete } = ledger
+  const { copy } = useFeel()
 
   if (loadedCount === 0) return <ZeroState />
 
@@ -165,21 +170,26 @@ function NowBody({ ledger }: { ledger: Ledger }) {
 
   return (
     <>
-      <h1 className="mt-2.5 font-serif text-display font-normal leading-[1.15] tracking-tight-display">
-        {needsYou.length === 0
-          ? 'Nothing needs you today.'
-          : needsYou.length === 1
-            ? 'One thing needs you.'
-            : `${needsYou.length} things need you.`}
+      {/*
+        The headline and its sub are the app's VOICE — warm ("One thing needs you.") or plain
+        ("1 item due"). The words live in `lib/voice.ts`; this screen supplies the counts and the
+        next date and asks for them. The all-clear sub still answers the question in both registers —
+        "the next date is 4 March" / "Next expiry 4 Mar 2026" — because "nothing" is the one answer
+        this screen exists to avoid.
+      */}
+      <h1 className="mt-2.5 font-heading text-display font-face-h leading-[1.15] tracking-heading">
+        {copy.nowHeadline(needsYou.length, loadedCount)}
       </h1>
       <p className="mt-1.5 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">
-        {needsYou.length > 0
-          ? 'Everything else is in order.'
-          : next !== null && next.document.expires_on !== null
-            ? // The all-clear that still answers the question. "Nothing until 4 March" beats
-              // "nothing", which is the entire argument for this screen.
-              `The next date is ${formatDate(next.document.expires_on)} — ${next.expiry.label.replace('in ', '')} away.`
-            : 'No document here has an expiry date.'}
+        {copy.nowSub({
+          attention: needsYou.length,
+          total: loadedCount,
+          nextDate:
+            next !== null && next.document.expires_on !== null
+              ? formatDate(next.document.expires_on)
+              : null,
+          nextRelative: next?.expiry.label.replace('in ', '') ?? null,
+        })}
       </p>
 
       {needsYou.length > 0 && (
@@ -210,18 +220,16 @@ function NowBody({ ledger }: { ledger: Ledger }) {
 
       {needsYou.length === 0 && datedCount > 0 && (
         <section className="pt-5">
-          <Card tone="ok" className="flex gap-3.5 p-4">
+          <Card tone="ok" className="flex gap-3.5 p-card">
             <span className="flex w-3.5 shrink-0 justify-center pt-[3px]">
               {/* The ring, unpulsed, in the ok tone: the ladder's "today" glyph reused to say
                   "checked". The pulse means one thing only, so it is switched off here. */}
               <ExpiryGlyph state="today" className="text-status-ok [animation:none]" />
             </span>
             <div>
-              <p className="text-row font-medium leading-snug">
-                Nothing expires in the next {NEEDS_YOU_DAYS} days
-              </p>
+              <p className="text-row font-medium leading-snug">{copy.clearTitle(NEEDS_YOU_DAYS)}</p>
               <p className="mt-1 text-body leading-relaxed text-ink-2">
-                Every document with a date is checked once a day. We’d have told you.
+                {copy.clearBody(datedCount)}
               </p>
             </div>
           </Card>
@@ -307,19 +315,22 @@ function NowBody({ ledger }: { ledger: Ledger }) {
  * more than one tap.
  */
 function ZeroState() {
+  const { copy } = useFeel()
   return (
     <>
-      <h1 className="mt-2.5 font-serif text-display font-normal leading-[1.15] tracking-tight-display">
-        Nothing in here yet.
+      {/* The empty-ledger voice — `nowHeadline(0, 0)` and `nowSub` with a zero total both return
+          their "nothing stored yet" branch, so this screen speaks the same register as a full one. */}
+      <h1 className="mt-2.5 font-heading text-display font-face-h leading-[1.15] tracking-heading">
+        {copy.nowHeadline(0, 0)}
       </h1>
       <p className="mt-1.5 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">
-        One field, one tap. You can fill in the rest of your life later.
+        {copy.nowSub({ attention: 0, total: 0, nextDate: null, nextRelative: null })}
       </p>
 
       <Card dashed className="mt-6 p-5">
         <Eyebrow>Start here</Eyebrow>
-        <p className="mt-2.5 font-serif text-[1.25rem] leading-snug">
-          Name one thing. That’s the whole first step.
+        <p className="mt-2.5 font-heading text-[1.25rem] font-face-h leading-snug">
+          {copy.zeroLine}
         </p>
         <Link to="/documents/new" className={cn(buttonVariants({ size: 'lg' }), 'mt-3.5 w-full')}>
           Add the first one
@@ -337,16 +348,13 @@ function ZeroState() {
   )
 }
 
-/** `Wednesday 29 July` — the date, spelled the way a person would say it. */
-function todayLabel(now = new Date()): string {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(now)
-}
-
-/** The machine-readable twin for `<time datetime>`, in LOCAL date parts to match the label above. */
+/**
+ * The machine-readable twin for `<time datetime>`, in LOCAL date parts.
+ *
+ * The human label moved to `lib/voice.ts` (`copy.todayLabel`), because the register decides whether
+ * it reads "Thursday 30 July" or "30 Jul 2026" — but the ISO datetime is the same in both, so it
+ * stays here rather than joining the voice set.
+ */
 function todayIso(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }

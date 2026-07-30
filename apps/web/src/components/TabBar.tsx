@@ -125,8 +125,24 @@ export function TabBar() {
        * A hairline top border and an opaque `--paper` ground rather than the previous translucent
        * blur. ADR-0025 §3: elevation is hairline, not shadow — and a blur behind a serif list makes
        * the type under it look smeared as it scrolls past.
+       *
+       * ── The floor is 12px, and it used to be 26px ──
+       *
+       * The design handoff specifies `max(env(safe-area-inset-bottom), 12px)`. This had `1.625rem`,
+       * which is `--gutter` — the *horizontal* screen gutter, borrowed as a vertical floor. On a
+       * home-indicator iPhone it made no difference (the inset is 34px, so `max` picks the inset
+       * either way), but on a home-button iPhone, an Android with no gesture bar, or a desktop it
+       * added **14px of blank paper below the labels with no home indicator on it to explain it**.
+       *
+       * On a device that *does* have one, the band below the labels is the safe area and is supposed
+       * to be there — it is where iOS draws the swipe-up affordance. **Do not cap the inset to shrink
+       * it.** The measured bar is 94px against native iOS's 83px, so there is nothing to reclaim
+       * that is not the gesture area itself.
+       *
+       * `__root.tsx`'s bottom padding repeats this expression, and `TabBar.test.tsx` fails if the two
+       * stop agreeing.
        */
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper pb-[max(env(safe-area-inset-bottom),1.625rem)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper pb-[max(env(safe-area-inset-bottom),0.75rem)]"
     >
       <div className="mx-auto flex w-full max-w-2xl items-stretch gap-2 px-3.5 pt-2">
         {TABS.map((tab) => {

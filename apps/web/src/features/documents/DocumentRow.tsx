@@ -125,7 +125,7 @@ export function DocumentRow({
         to="/documents/$documentId"
         params={{ documentId: document.id }}
         aria-label={expiryAccessibleName(document.title, document.expires_on, today)}
-        className="flex min-w-0 flex-1 items-center gap-3.5 py-3.5 active:bg-sunken"
+        className="flex min-w-0 flex-1 items-center gap-3.5 py-row-pad active:bg-sunken"
       >
         {/* A fixed 14px column so titles line up whichever glyph a row happens to carry — the gauge is
             14px wide and the dash is 2px tall, and without the column the text would shift per state. */}

@@ -124,7 +124,7 @@ function DocumentPage({
 
   if (documents.isError) {
     return (
-      <Card tone="late" className="p-4">
+      <Card tone="late" className="p-card">
         <p className="text-row font-medium">Couldn’t load your documents</p>
         <p className="mt-1 text-body leading-relaxed text-ink-2">{documents.error.message}</p>
         <Button

@@ -33,7 +33,7 @@ function OutboxPage() {
 
   return (
     <div>
-      <h1 className="font-serif text-title font-normal leading-tight">Unsent changes</h1>
+      <h1 className="font-heading text-title font-face-h leading-tight">Unsent changes</h1>
 
       {conflicts.length === 0 && pending.length === 0 && (
         <p className="mt-2 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">
@@ -62,7 +62,7 @@ function OutboxPage() {
           </div>
           {/* Listed but not actionable: these need no decision, only a connection. Offering a
               "send now" button would invite tapping it repeatedly while offline. */}
-          <Card tone="sunken" className="border-rule p-4">
+          <Card tone="sunken" className="border-rule p-card">
             <ul className="flex list-none flex-col gap-2">
               {pending.map((entry) => (
                 <li key={entry.id} className="text-body text-ink-2">
@@ -110,7 +110,7 @@ function ConflictCard({ entry }: { entry: OutboxEntry }) {
   const current = useDocument(documentId ?? '')
 
   return (
-    <Card tone="late" className="p-4">
+    <Card tone="late" className="p-card">
       <p className="text-row font-medium leading-snug">This was changed somewhere else</p>
       <p className="mt-1 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">{entry.error}</p>
 

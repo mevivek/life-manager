@@ -123,7 +123,7 @@ export function DocumentFiles({
   return (
     <div>
       {confirmed.length === 0 && !uploading && rejected === null && (
-        <Card dashed className="p-4">
+        <Card dashed className="p-card">
           <p className="text-row leading-snug">No scan yet</p>
           <p className="mt-1 text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
             That’s fine — the record still works. A photo makes it useful when you’re not home.

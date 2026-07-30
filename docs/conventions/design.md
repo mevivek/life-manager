@@ -57,8 +57,17 @@ guesses, and it guesses wrong in **two opposite directions**:
   `cn('rounded-2', 'rounded-pill')` keeps **both** and CSS emission order decides which applies. A
   `className` override silently coexists instead of winning.
 
-`utils.test.ts` walks the exported `TEXT_SIZES` and `RADII` lists. Extend the list, and the test
-covers the new token automatically. Debt **D42**.
+`utils.test.ts` walks the exported `TEXT_SIZES`, `RADII` and `NAMED_SPACING` lists. Extend the list,
+and the test covers the new token automatically. Debt **D42**.
+
+The feel work added two more traps of the same shape, both now declared and walked:
+
+- **`--spacing-row-pad`, `-card`, `-stack`** (the density tokens) are named spacing, so `p-card`
+  and `gap-stack` need their axes (`p`, `gap`, …) grouped or a `className` override coexists instead
+  of winning.
+- **`font-heading` (a family) and `font-face-h` (a weight)** both start `font-`, and tailwind-merge's
+  built-in groups only know the stock names. Undeclared, a headline's family and a variant's weight
+  land ungrouped and their precedence is emission order — so both are declared as their own groups.
 
 ---
 
@@ -95,6 +104,13 @@ and if they do the ladder is cosmetically off while the reminders stay right (in
 | **Newsreader** (serif) | What a human wrote — titles, headlines, a document's name on the horizon | `text-display` `text-title` `text-serif-row` |
 | **IBM Plex Sans** | What the interface says — rows, body, buttons, status | `text-head` `text-row` `text-body` `text-meta` |
 | **IBM Plex Mono** | What the machine names — eyebrow labels, the mask, a revealed identifier, serials, counts | `text-label` `text-mask` `text-number` |
+
+**Every heading uses `font-heading` / `font-face-h`, never `font-serif` directly.** The
+[Feel preference](#12-feel-preferences) *Headings* swaps the heading face between the serif and the
+grotesk by moving `--face-h` — so a headline hardcoded to `font-serif` silently opts out of that
+preference. `font-heading` resolves to the serif by default, so this changed nothing on screen; it is
+purely what lets the preference reach the headline. The remaining literal `font-serif` in the codebase
+is inside `styles.css` (the token definition) and the `--font-serif` fallback stack.
 
 Rules that are not preferences:
 
@@ -269,12 +285,52 @@ Assert non-zero counts. `file_count` was 0 for the whole of M1 because every tes
 
 ---
 
-## 11. Where things live
+## 12. Feel preferences
+
+Three device-scoped preferences set on the **You** screen — **Density**, **Headings**, **Voice**.
+They default to what the app looked like before they existed (generous · serif · warm), so a user who
+never opens the Feel card sees no change. Stored in `localStorage`, not the account, for the same
+reason as the theme: someone may well want compact on a phone and generous on a laptop, and syncing
+would drag them through the `persister.ts` allowlist for nothing. `lib/feel.ts` holds the
+storage-and-DOM half; `lib/useFeel.tsx` the React half; `index.html` resolves density and face before
+first paint, exactly like the theme.
+
+Each is a **different kind of thing**, and that is the load-bearing distinction:
+
+| Preference | What it moves | How |
+|---|---|---|
+| **Density** generous · compact | `--gutter` `--row-min` `--t-display` `--row-pad` `--card-pad` `--stack` | Pure token swap on `[data-density]`. The first three read straight through existing utilities; the last three exist *only* so density has something to change (they were `py-3.5`, `p-4`, `gap-5`). |
+| **Headings** serif · grotesk | `--face-h` `--h-weight` `--h-track` | Token swap on `[data-face]`. Reaches every headline via `font-heading` / `font-face-h` / `tracking-heading` — a headline hardcoded to `font-serif` opts out. |
+| **Voice** warm · plain | ~9 sentences | **Not** a token — CSS cannot rewrite a sentence. Threaded through `lib/voice.ts` and read by the components that speak prose. |
+
+Rules that will bite a session that skips this section:
+
+1. **Density and face apply as `data-*` attributes, never as inline `style.setProperty`.** The comp
+   does the latter; copying it would beat the `@media (min-width: 430px)` block and silently kill the
+   app's responsiveness, including in the *default* density. The `[data-density="compact"]` and
+   `[data-face="grotesk"]` blocks come **after** the 430px query in `styles.css`, because equal
+   specificity makes source order the tiebreak — that is what keeps compact holding at every width.
+2. **Voice lives in one module so the *set* can be tested.** A ternary per call site would only ever
+   exercise the plain register on whatever screen someone happened to open; `voice.test.ts` walks
+   every sentence in both registers. **Plain must differ from warm, and never say less** — it may drop
+   a reassurance, never a fact. Where warm says "Everything else is in order", plain gives the count.
+3. **Voice is device state read as a value, so it is a React *context*, not a bare hook.** The setter
+   is on You and the sentences are on Now; two `useState`s seeded from storage would agree only until
+   one is set, and whether that showed up would depend on whether the router kept both mounted.
+   `useFeel` falls back to the warm defaults outside a provider so bare component tests need no wrapper.
+4. **The all-clear threshold is passed to `voice.clearTitle`, not hardcoded** — so the sentence
+   follows `NEEDS_YOU_DAYS` and cannot drift from the glyph it sits beside.
+
+---
+
+## 13. Where things live
 
 ```
 apps/web/src/styles.css                      tokens, both themes, the app-shell rules, keyframes
 apps/web/src/lib/utils.ts                    cn() — the tailwind-merge class groups (see §1)
 apps/web/src/lib/theme.ts                    light/dark resolution; index.html mirrors it pre-paint
+apps/web/src/lib/feel.ts + useFeel.tsx       density / face / voice preferences (§12)
+apps/web/src/lib/voice.ts                    the two copy registers (§12)
 apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton
 apps/web/src/components/TabBar.tsx           three tabs, forever (§8)
 apps/web/src/features/documents/

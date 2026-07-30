@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { AuthMark } from '@/features/auth/AuthMark'
 import { SignInForm } from '@/features/auth/SignInForm'
 import { beginSession } from '@/lib/session'
+import { useFeel } from '@/lib/useFeel'
 
 export const Route = createFileRoute('/login')({ component: LoginPage })
 
@@ -24,6 +25,7 @@ export const Route = createFileRoute('/login')({ component: LoginPage })
 function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { copy } = useFeel()
 
   return (
     // `flex-1` rather than its own `min-h-dvh`: the shell in `__root.tsx` already owns the viewport
@@ -31,16 +33,17 @@ function LoginPage() {
     <div className="flex w-full flex-1 flex-col justify-between gap-8">
       <div className="flex flex-1 flex-col justify-center">
         <AuthMark />
-        <h1 className="mt-4 font-serif text-display font-normal leading-[1.15] tracking-tight-display">
-          The paperwork of a life,
-          <br />
-          with the dates attached.
+        {/* The hand-placed line break is gone on purpose: the plain register is a different length
+            ("Documents, with their expiry dates."), so a fixed `<br/>` would break the wrong line.
+            `[text-wrap:balance]` gives an even two-line wrap in whichever register is active. */}
+        <h1 className="mt-4 font-heading text-display font-face-h leading-[1.15] tracking-heading [text-wrap:balance]">
+          {copy.authHeadline}
         </h1>
         <p className="mt-2 max-w-[19rem] text-row leading-relaxed text-ink-2 [text-wrap:pretty]">
           {/* "Private, single-user" is a real property of the product rather than a marketing line:
               this is one person's archive on their own infrastructure, and saying so is what earns the
               password field. */}
-          Private, single-user. We tell you what’s expiring before it does.
+          {copy.authSub}
         </p>
       </div>
 

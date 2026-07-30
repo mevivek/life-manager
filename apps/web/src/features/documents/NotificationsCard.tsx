@@ -119,7 +119,7 @@ export function NotificationsCard({
   // ── Denied: recoverable, so name the path. ──
   if (Notification.permission === 'denied') {
     return (
-      <Card tone="soon" className="p-4">
+      <Card tone="soon" className="p-card">
         <div className="flex gap-2.5">
           <ExpiryGlyph state="expired" className="mt-1 text-status-soon" />
           <div>
@@ -150,7 +150,7 @@ export function NotificationsCard({
   const key = publicKey.data
 
   return (
-    <Card className="p-4">
+    <Card className="p-card">
       {error !== null && <Alert className="mb-3">{error}</Alert>}
       <p className="text-row font-medium leading-snug">
         Want us to tell you, or will you check back?
