@@ -12,7 +12,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,6 +26,7 @@ import { cycleLabel, ServiceHistory } from './ServiceHistory'
 import { ageOf, coverSpan, ThingCoverCard } from './ThingCoverCard'
 import { ThingDetail } from './ThingDetail'
 import { ThingSerial } from './ThingSerial'
+import { thingDetailKey } from './useThings'
 
 /**
  * The **Thing detail screen** — one file per screen, alongside `things.test.tsx` (the list and the row)
@@ -788,7 +789,15 @@ describe('ownership on the screen', () => {
         return HttpResponse.json(detail({ ownership: 'lent', ownership_who: 'Priya', version: 2 }))
       }),
     )
-    await renderDetail(detail())
+    /**
+     * Version **4**, not the fixture's default `1`.
+     *
+     * `1` is the value a defaulted or forgotten version coincidentally has, so asserting it proved only
+     * that *a* number arrived. Four proves the client read it off the record. Which of the two candidate
+     * versions it read is a separate claim, and it needs a divergence — see "the detail screen's version
+     * preconditions" below.
+     */
+    await renderDetail(detail({ version: 4 }))
 
     await userEvent.click(screen.getByRole('button', { name: 'It’s not with me any more' }))
     await userEvent.type(screen.getByLabelText('Who has it'), 'Priya')
@@ -804,7 +813,7 @@ describe('ownership on the screen', () => {
      * on something it cannot see. The version is the ADR-0024 precondition.
      */
     expect(patched[0]).toEqual({
-      version: 1,
+      version: 4,
       ownership: 'lent',
       ownership_who: 'Priya',
       ownership_since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -933,6 +942,191 @@ describe('deleting a thing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/changed somewhere else/i)
+  })
+})
+
+// ── The version preconditions ────────────────────────────────────────────────
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  WHICH version a write carries, when the two candidates differ. ADR-0024.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The sibling of `documents.test.tsx`'s block of the same name, and the tests are only worth anything
+ * because of the middle step: the query is **advanced underneath the open control** and the screen is
+ * asserted to have *observed* it. Every test above renders a record whose version never moves, so all of
+ * them pass just as happily against a component that reads `thing.version` at the moment of the tap —
+ * which is precisely the bug ADR-0024's precondition exists to prevent, and which cannot be caught
+ * without a divergence to catch it with.
+ *
+ * The real divergence is `useThing`'s refetch on window focus: a panel or a confirmation left open while
+ * the phone was elsewhere comes back holding somebody else's edit. Sending *that* version makes the
+ * server's `where version = :expected` match, so the edit nobody here has seen is overwritten in silence.
+ * Sending the version the control was populated at makes the server able to answer 409 — the only safe
+ * outcome, and the one the user is then shown.
+ */
+describe('the detail screen’s version preconditions', () => {
+  /** The thing as the screen first read it. */
+  const atSeven = detail({ version: 7 })
+
+  /**
+   * The same thing after somebody else edited it on another device — a new **name** as well as a new
+   * version, so a test can *see* that the advance landed rather than trusting that it did. `ownership`
+   * is untouched, because `OwnershipPanel` unmounts itself for anything but `here`.
+   */
+  const atNine = detail({ version: 9, name: 'Renamed on the other device' })
+
+  /**
+   * The window-focus refetch, landing.
+   *
+   * Written straight into the cache rather than by swapping the MSW handler and waiting: this is the
+   * *effect* of a refetch, it is synchronous, and it leaves nothing for a `waitFor` to race with.
+   */
+  function theQueryAdvances(next: ThingDetailResponse) {
+    act(() => {
+      queryClient.setQueryData(thingDetailKey(THING_ID), next)
+    })
+  }
+
+  /** The heading is drawn from the query, so it is the proof that the advance reached the screen. */
+  async function theScreenObserved(name: string) {
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(name))
+  }
+
+  it('PATCHes the version the PANEL WAS OPENED at, not the one the query has now', async () => {
+    const patched: unknown[] = []
+    server.use(
+      http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json(detail({ ownership: 'lent', version: 10 }))
+      }),
+    )
+    await renderDetail(atSeven)
+
+    await userEvent.click(screen.getByRole('button', { name: 'It’s not with me any more' }))
+    // Opening it is the moment the user read the screen and decided — the moment the precondition is
+    // taken (`OwnershipPanel`'s `opened`, which holds the version rather than a boolean).
+    expect(screen.getByLabelText('Who has it')).toBeInTheDocument()
+
+    theQueryAdvances(atNine)
+    // The divergence, proven: the heading redraws from version 9 while the panel below it still holds the
+    // version 7 the user opened it against. Without this the test would pass against a cache that never
+    // moved, and so would prove nothing at all about which of the two is sent.
+    await theScreenObserved('Renamed on the other device')
+    expect(screen.getByLabelText('Who has it')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Lent out — still mine' }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    /**
+     * `7`. Sending `9` would satisfy the server's precondition and destroy the rename in silence; sending
+     * `7` is what lets the server refuse, and the refusal is what the user is shown
+     * ("surfaces a refused write rather than appearing to have saved", above).
+     */
+    expect(patched[0]).toMatchObject({ version: 7, ownership: 'lent' })
+  })
+
+  it('DELETEs with the version the confirmation was RAISED at, not the one it closed on', async () => {
+    const deleted: string[] = []
+    server.use(
+      http.delete(`*/api/v1/things/${THING_ID}`, ({ request }) => {
+        deleted.push(new URL(request.url).search)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    await renderDetail(atSeven)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete this thing' }))
+    theQueryAdvances(atNine)
+    await theScreenObserved('Renamed on the other device')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }))
+
+    await waitFor(() => expect(deleted).toHaveLength(1))
+    /**
+     * Debt D41, and the stakes are highest here: a delete is the one write this app cannot undo — there is
+     * no restore endpoint — so a delete carrying a version nobody looked at destroys an unseen edit with
+     * no way back. `?version=7` is what makes the server able to say no.
+     */
+    expect(deleted[0]).toBe('?version=7')
+  })
+
+  /**
+   * The banner is the one control with no opening step, so its snapshot is keyed to the ownership triple
+   * it **renders** — see `useVersionShown`. These two tests are the two halves of that, and they pull in
+   * opposite directions on purpose: freezing at mount breaks the second, and reading live breaks the first.
+   */
+  it('brings a thing back with the version the SENTENCE arrived with', async () => {
+    const patched: unknown[] = []
+    server.use(
+      http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json(detail({ version: 6 }))
+      }),
+    )
+    const lentAtTwo = detail({
+      ownership: 'lent',
+      ownership_who: 'Priya',
+      ownership_since: '2026-07-30',
+      version: 2,
+    })
+    await renderDetail(lentAtTwo)
+
+    // A different name and a much later version, but the SAME ownership triple — so the sentence on the
+    // banner is unchanged and the version it was populated from is still 2.
+    theQueryAdvances({ ...lentAtTwo, version: 5, name: 'Renamed on the other device' })
+    await theScreenObserved('Renamed on the other device')
+    expect(screen.getByText('Lent to Priya · 30 Jul 2026')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'It’s back with me' }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    expect(patched[0]).toMatchObject({ version: 2, ownership: 'here' })
+  })
+
+  it('RE-SEEDS when the away-state itself changes, so a bring-back cannot 409 by construction', async () => {
+    /**
+     * The other half, and the reason the snapshot is not simply frozen at mount.
+     *
+     * The banner only appears *because* something set the thing away, and that write advanced the version.
+     * A version captured when this component first mounted would therefore be the pre-handover one, and
+     * **every** "It's back with me" would be refused with a 409 the user could do nothing about. Keying on
+     * the displayed triple means each away-state's banner carries the version that state arrived with.
+     */
+    const patched: unknown[] = []
+    server.use(
+      http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json(detail({ version: 9 }))
+      }),
+    )
+    await renderDetail(
+      detail({
+        ownership: 'lent',
+        ownership_who: 'Priya',
+        ownership_since: '2026-07-30',
+        version: 2,
+      }),
+    )
+    expect(screen.getByText('With someone else')).toBeInTheDocument()
+
+    // The handover the user just made elsewhere: a new away-state, at a new version.
+    theQueryAdvances(
+      detail({
+        ownership: 'gone',
+        ownership_who: 'Sam',
+        ownership_since: '2026-07-30',
+        version: 8,
+      }),
+    )
+    await waitFor(() => expect(screen.getByText('No longer yours')).toBeInTheDocument())
+
+    // "Undo" rather than "It's back with me" — `gone` has no event that reverses it.
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    // `8`, the version the sentence now on screen was populated from — not the stale `2`.
+    expect(patched[0]).toMatchObject({ version: 8, ownership: 'here' })
   })
 })
 

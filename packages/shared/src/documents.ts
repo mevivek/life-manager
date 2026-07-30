@@ -317,9 +317,22 @@ export const documentSchema = z.object({
    * its job, and silently defaulting would hide real drift (ADR-0004). The test is whether absence and
    * the default are genuinely indistinguishable to the consumer. Here they are.
    *
-   * It also closes the stale-cache half of debt **D46**: the persisted cache rehydrates **without**
-   * re-running Zod, so a document cached by an older build arrives missing this key. That is the same
-   * failure that crashed the app at its root error boundary when ADR-0026 added `identifier`.
+   * ── What this closes is the **D54** half, NOT the D46 half. Debt D68 ──
+   *
+   * This comment used to claim it closed "the stale-cache half of debt **D46**", and that reading has
+   * already misled one session. It cannot: a Zod default fires only when the schema **runs**, and D46's
+   * entire premise is that the persisted cache is rehydrated **without** re-running Zod — a restore is
+   * not a parse. A document cached by an older build therefore reaches the component untouched, with the
+   * key still absent, no matter what default sits here.
+   *
+   * What the tolerance does close is **D54**: an older *server* omitting the key, which is a real request
+   * that really does run this schema.
+   *
+   * The stale-**cache** half is closed at the consuming component instead, by comparing `== null` rather
+   * than `!== null` so that `undefined` reads as absence — see `BelongsTo.tsx` and `IdentifierCard.tsx`,
+   * where `undefined !== null` being `true` is what drew a linked card for a document linked to nothing.
+   * That is the same failure that crashed the app at its root error boundary when ADR-0026 added
+   * `identifier`. Two independent fixes for two independent paths; neither substitutes for the other.
    */
   thing_id: uuidSchema.nullish().default(null),
   issued_on: isoDateSchema.nullable(),
