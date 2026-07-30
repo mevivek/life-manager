@@ -139,10 +139,18 @@
   --t-meta: 0.8125rem; /*   13px */
   --t-label: 0.6875rem; /*  11px */
   --t-mask: 1.125rem; /*    18px */
+  /*
+    19px — the revealed identifier. Its own step rather than reusing `--t-mask`, because the two are
+    shown in the same slot at different lengths: four masked characters can afford 18px with 0.14em
+    tracking, and twelve revealed digits at that tracking run off a 390px screen. Same size family,
+    tighter letter-spacing (`--track-number`).
+  */
+  --t-number: 1.1875rem;
 
   --track-tight: -0.01em;
   --track-label: 0.09em;
   --track-mask: 0.14em;
+  --track-number: 0.06em;
 
   /* 4px base. */
   --s-1: 0.25rem;
@@ -257,6 +265,7 @@
   --text-meta: var(--t-meta);
   --text-label: var(--t-label);
   --text-mask: var(--t-mask);
+  --text-number: var(--t-number);
 
   --spacing-gutter: var(--gutter);
   --spacing-tap: var(--tap-min);
@@ -275,6 +284,7 @@
   --tracking-tight-display: var(--track-tight);
   --tracking-label: var(--track-label);
   --tracking-mask: var(--track-mask);
+  --tracking-number: var(--track-number);
 }
 
 @layer base {

@@ -15,6 +15,13 @@ import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
+import {
+  COMMON_PRESETS,
+  GENERIC_NUMBER_LABEL,
+  numberLabelFor,
+  PRESETS,
+  presetByName,
+} from './presets'
 import { useIssuers } from './useDocuments'
 
 /**
@@ -62,12 +69,12 @@ const documentFormSchema = documentCreateSchema.extend({
   expires_on: z.union([blank, documentCreateSchema.shape.expires_on]),
   notes: z.union([blank, documentCreateSchema.shape.notes]),
   /**
-   * The last four of the number, which the previous form did not offer at all.
+   * The document's number, stored in full since ADR-0026.
    *
-   * `identifier` is what the wire schema calls it, and the API **truncates** rather than rejecting
-   * (business rule 6) — so pasting a full passport number stores four characters and discards the
-   * rest server-side. `maxLength={4}` on the field makes that visible before it happens; it is a
-   * guardrail, not the enforcement.
+   * It used to be captured as "last four" because the API discarded the rest at the boundary. It no
+   * longer does, so this field takes the whole value and the server derives the mask — see
+   * `identifierColumns` in the API service. The blank-to-null transform matters here as much as
+   * anywhere: an emptied field must clear both columns rather than fail `min(1)`.
    */
   identifier: z.union([blank, documentCreateSchema.shape.identifier]),
   /**
@@ -151,7 +158,19 @@ export function DocumentForm({
   const [serverError, setServerError] = useState<string | null>(null)
   // Open by default when editing: if a document already has detail, hiding it looks like data loss.
   const [showMore, setShowMore] = useState(defaultShowMore ?? initial !== undefined)
+  /** The chosen preset's NAME, not the object — so the selected pill survives a re-render by value. */
+  const [preset, setPreset] = useState('')
+  const [allPresets, setAllPresets] = useState(false)
   const issuers = useIssuers()
+
+  const activePreset = presetByName(preset)
+  /**
+   * The number field's label: the real name of the number when a preset is in play, and on an EDIT
+   * form the name derived from the document's own title. "Identifier" is never shown to anyone.
+   */
+  const numberLabel =
+    activePreset?.numLabel ??
+    (initial === undefined ? GENERIC_NUMBER_LABEL : numberLabelFor(initial.title, initial.doc_type))
 
   /**
    * Three generics, not one, and it is not optional.
@@ -166,6 +185,7 @@ export function DocumentForm({
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<DocumentFormValues, unknown, DocumentCreate>({
     resolver: zodResolver(documentFormSchema),
@@ -175,7 +195,16 @@ export function DocumentForm({
       issuer: initial?.issuer ?? '',
       issued_on: initial?.issued_on ?? '',
       expires_on: initial?.expires_on ?? '',
-      identifier: initial?.identifier_last4 ?? '',
+      /**
+       * The FULL identifier, not the mask — ADR-0026.
+       *
+       * This read `initial?.identifier_last4` while the API stored only four characters. Now that it
+       * stores the whole value, populating the form from the mask would mean **opening a document,
+       * saving nothing, and having its number silently replaced by its own last four digits** — the
+       * edit form quietly destroying the field it was showing. `identifier` is on
+       * `DocumentDetailResponse` and nowhere else, which is exactly the shape this prop has.
+       */
+      identifier: initial?.identifier ?? '',
       country: initial?.country ?? '',
       notes: initial?.notes ?? '',
       tags: initial?.tags ?? [],
@@ -217,6 +246,81 @@ export function DocumentForm({
         </Alert>
       )}
 
+      {/*
+        ═══════════════════════════════════════════════════════════════════════════════════
+         The preset chooser — creating only, and always skippable.
+        ═══════════════════════════════════════════════════════════════════════════════════
+
+        Above the title field so it can be ignored rather than answered: the eye reaches it first,
+        recognises a document or does not, and moves on. `initial === undefined` gates it to creation —
+        on an edit form a preset tap would overwrite the title of a document that already has one,
+        which is a shortcut turning into a data loss.
+
+        See `presets.ts` for why the list is client-side data and why it is India-only.
+      */}
+      {initial === undefined && (
+        <fieldset className="flex flex-col gap-2 border-0 p-0">
+          <div className="flex items-baseline justify-between gap-2.5">
+            {/* A `<legend>`, so each pill announces as "Common documents, Aadhaar" rather than a bare
+                "Aadhaar" — design.md §6. A `div role="group"` does not do this. */}
+            <legend className="float-left font-mono text-label tracking-label text-ink-3 uppercase">
+              Common documents · optional
+            </legend>
+            <Button
+              variant="quiet"
+              size="bare"
+              className="px-1 text-meta"
+              onClick={() => setAllPresets((previous) => !previous)}
+              aria-expanded={allPresets}
+            >
+              {allPresets ? 'Show fewer' : `All ${PRESETS.length}`}
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(allPresets ? PRESETS : COMMON_PRESETS).map((option) => (
+              <Chip
+                key={option.name}
+                selected={preset === option.name}
+                onClick={() => {
+                  const next = preset === option.name ? '' : option.name
+                  setPreset(next)
+                  if (next === '') return
+                  /**
+                   * `shouldDirty`, and deliberately overwriting.
+                   *
+                   * Tapping a second preset must replace the first one's values, not merge with them —
+                   * otherwise picking Aadhaar then Passport leaves UIDAI as the issuer of a passport.
+                   * The issuer is written even when blank, for the same reason: the presets that leave
+                   * it empty (insurers, banks) do so because we must not guess, and carrying over the
+                   * previous pick's issuer would be exactly that guess.
+                   */
+                  setValue('title', option.name, { shouldDirty: true })
+                  setValue('doc_type', option.type, { shouldDirty: true })
+                  setValue('issuer', option.issuer, { shouldDirty: true })
+                }}
+              >
+                {option.name}
+              </Chip>
+            ))}
+          </div>
+          {activePreset !== null && (
+            <p className="rounded-2 border border-rule bg-sunken px-3 py-2.5 text-meta leading-relaxed text-ink-2 [text-wrap:pretty]">
+              {activePreset.issuer === ''
+                ? 'Issuer left blank — insurers and banks vary, so we won’t guess.'
+                : `Issuer prefilled: ${activePreset.issuer}.`}{' '}
+              {activePreset.numLabel}
+              {activePreset.shape === '' ? '.' : ` (${activePreset.shape}).`}{' '}
+              {/* Advisory copy only. It sets no date and creates no reminder — those come from
+                  `expires_on` server-side, and a preset that implied otherwise would produce a
+                  document that looks watched and is not (invariant 5). */}
+              {activePreset.expires
+                ? 'This one usually expires — worth adding the date so we can remind you.'
+                : 'Usually no expiry, so it’ll stay silent. That’s correct, not missing.'}
+            </p>
+          )}
+        </fieldset>
+      )}
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="title">Title</Label>
         <Input
@@ -231,6 +335,37 @@ export function DocumentForm({
           {...register('title')}
         />
         {errors.title && <p className="text-body text-status-late">{errors.title.message}</p>}
+      </div>
+
+      {/*
+        The number, promoted out of "Add more now" to the second field — ADR-0026. Asked every time,
+        required never: `Save` works with it empty, which the copy under the button says out loud.
+
+        No `maxLength`. It was 4 because the API discarded everything but the last four under the old
+        business rule 6, so the cap made the truncation visible *before* it happened. Now that the whole
+        value is stored, a cap would be the only thing throwing it away — silently, mid-typing, on a
+        twelve-digit Aadhaar number.
+
+        Mono without `tracking-mask`: that 0.14em is for a four-character mask, and on twelve digits it
+        pushes the value past the field at 390px.
+      */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-2.5">
+          <Label htmlFor="identifier">{numberLabel}</Label>
+          {activePreset?.shape !== undefined && activePreset.shape !== '' && (
+            <span className="text-meta text-ink-3">{activePreset.shape}</span>
+          )}
+        </div>
+        <Input
+          id="identifier"
+          placeholder={activePreset?.placeholder ?? 'Number on the document'}
+          className="font-mono"
+          {...register('identifier')}
+        />
+        <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
+          Stored in full, shown as the last four until you tap Reveal. Leave it blank if you don’t
+          have it to hand.
+        </p>
       </div>
 
       <Button type="submit" size="lg" disabled={isSubmitting || !canSave} className="w-full">
@@ -343,19 +478,8 @@ export function DocumentForm({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="identifier">Last four of the number</Label>
-            <Input
-              id="identifier"
-              maxLength={4}
-              placeholder="4471"
-              className="font-mono tracking-mask"
-              {...register('identifier')}
-            />
-            <p className="text-meta leading-snug text-ink-3">
-              Four characters, that’s all we’ll take. The scan is the record.
-            </p>
-          </div>
+          {/* The number field used to live here, behind "Add more now". ADR-0026 promotes it to the
+              second field in the form — see the block under Title. */}
 
           {!compact && (
             <>

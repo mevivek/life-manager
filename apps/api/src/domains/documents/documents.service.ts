@@ -149,14 +149,50 @@ export async function getDetail(actor: ActorContext, id: string): Promise<Docume
 
   return {
     ...toDocument(row),
+    /**
+     * The full identifier, on this response and no other — ADR-0026.
+     *
+     * `toDocument` deliberately does not carry it, so it cannot leak into the list by someone adding
+     * a field to the shared mapper. Being spread in *here* is the enforcement: a new list endpoint
+     * gets the mask and has to opt in explicitly to get more.
+     */
+    identifier: row.identifier,
     files: files.map(toFile),
     reminders: reminders.map(toReminder),
   }
 }
 
 /**
+ * Both identifier columns, from one input value — the only place either is written.
+ *
+ * `identifier_last4` is **derived**, never supplied: a client cannot send a mask that disagrees with
+ * the number it masks. Keeping the derivation in one function used by both create and update is what
+ * stops the two drifting, which is the failure mode where an edit updates the full value and leaves
+ * yesterday's last four on the row for every list to render.
+ *
+ * Trimmed first, because a number typed on a phone arrives with a trailing space more often than not
+ * and the mask is taken from the *end* of the string — so an untrimmed value would mask to " 109 "
+ * rather than "8109", visibly wrong in the one place the mask is shown.
+ *
+ * An empty string collapses to `null` rather than being stored. `identifierInputSchema` is `min(1)`,
+ * so the wire rejects `''` before it arrives and `DocumentForm` maps a blank field to `null` anyway —
+ * this branch is for a value that trims down to nothing (`"   "`), which passes `min(1)` and is not an
+ * identifier.
+ */
+function identifierColumns(value: string | null | undefined): {
+  identifier: string | null
+  identifierLast4: string | null
+} {
+  if (value === null || value === undefined) return { identifier: null, identifierLast4: null }
+  const trimmed = value.trim()
+  if (trimmed === '') return { identifier: null, identifierLast4: null }
+  return { identifier: trimmed, identifierLast4: truncateToLast4(trimmed) }
+}
+
+/**
  * Business rule 1 (title required, everything else optional), 2 (date order), 6 (identifier
- * truncated), 8 (default reminders for identity and certificate types).
+ * stored in full, masked for display — ADR-0026), 8 (default reminders for identity and
+ * certificate types).
  *
  * One transaction, because rule 8's reminders must not survive a rolled-back document — that is
  * the "enqueue inside the transaction" rule from ADR-0012 applied to rows rather than jobs.
@@ -178,11 +214,9 @@ export async function create(actor: ActorContext, input: DocumentCreate): Promis
         title: input.title,
         docType: input.doc_type,
         issuer: input.issuer ?? null,
-        // Business rule 6: the full value never reaches the column.
-        identifierLast4:
-          input.identifier === null || input.identifier === undefined
-            ? null
-            : truncateToLast4(input.identifier),
+        // Business rule 6 as revised by ADR-0026: the full value is stored, and the mask derived
+        // from it in the same breath.
+        ...identifierColumns(input.identifier),
         issuedOn,
         expiresOn,
         country: input.country ?? null,
@@ -259,14 +293,8 @@ export async function update(
     ...(patch.title === undefined ? {} : { title: patch.title }),
     ...(patch.doc_type === undefined ? {} : { docType: patch.doc_type }),
     ...('issuer' in patch ? { issuer: patch.issuer ?? null } : {}),
-    ...('identifier' in patch
-      ? {
-          identifierLast4:
-            patch.identifier === null || patch.identifier === undefined
-              ? null
-              : truncateToLast4(patch.identifier),
-        }
-      : {}),
+    // Both columns move together or neither does — see `identifierColumns`.
+    ...('identifier' in patch ? identifierColumns(patch.identifier) : {}),
     ...('issued_on' in patch ? { issuedOn } : {}),
     ...('expires_on' in patch ? { expiresOn } : {}),
     ...('country' in patch ? { country: patch.country ?? null } : {}),

@@ -1,3 +1,4 @@
+import type { DocumentDetailResponse } from '@life-manager/shared'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -20,6 +21,8 @@ import {
 } from './ExpiryStatus'
 import { GettingStarted } from './GettingStarted'
 import { Horizon } from './Horizon'
+import { IdentifierCard } from './IdentifierCard'
+import { COMMON_PRESETS, numberLabelFor, PRESETS } from './presets'
 
 /**
  * Web tests for Documents.
@@ -43,6 +46,35 @@ function iso(days: number): string {
   const date = new Date(TODAY)
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
+}
+
+/**
+ * A detail response, for the tests that need `DocumentForm` in **edit** mode.
+ *
+ * `initial` being present is what distinguishes editing from creating, and several behaviours hang off
+ * that distinction — the preset row is hidden, the optional fields open by default, and the number
+ * field populates from `identifier` rather than the mask.
+ */
+const detailFixture: DocumentDetailResponse = {
+  id: '00000001-0000-4000-8000-000000000000',
+  space_id: '22222222-2222-4222-8222-222222222222',
+  title: 'Passport',
+  doc_type: 'identity',
+  issuer: 'Ministry of External Affairs',
+  identifier: 'FAKEM1234567',
+  identifier_last4: '4567',
+  issued_on: null,
+  expires_on: null,
+  country: 'IN',
+  notes: null,
+  tags: [],
+  custom_attrs: {},
+  file_count: 0,
+  version: 1,
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+  files: [],
+  reminders: [],
 }
 
 describe('daysUntil', () => {
@@ -216,6 +248,97 @@ describe('formatDate', () => {
  * Neither component renders a `<Link>`, so both mount without a router. That is a property worth
  * keeping: it is what makes them testable at all.
  */
+describe('the identifier card', () => {
+  it('masks by default and reveals on request', async () => {
+    render(<IdentifierCard identifier="999988887777" last4="7777" label="Aadhaar number" />)
+
+    // Masked first. The full value is already in the DOM's props — the mask is a display state, not a
+    // boundary (see the component's own note) — but it must not be the thing on screen.
+    expect(screen.getByText('•••• 7777')).toBeInTheDocument()
+    expect(screen.queryByText(/9999 8888 7777/)).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reveal Aadhaar number' }))
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Aadhaar number' }))
+    expect(screen.getByText('•••• 7777')).toBeInTheDocument()
+  })
+
+  it('groups an all-digit number in fours, and leaves an alphanumeric one alone', async () => {
+    // 9999 8888 7777 is how an Aadhaar number is printed and read back aloud. A PAN is not grouped,
+    // because inserting spaces into an alphanumeric code invents a format the document does not use.
+    const { unmount } = render(<IdentifierCard identifier="999988887777" last4="7777" />)
+    await userEvent.click(screen.getByRole('button', { name: /Reveal/ }))
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+    unmount()
+
+    render(<IdentifierCard identifier="ABCDE1234F" last4="234F" />)
+    await userEvent.click(screen.getByRole('button', { name: /Reveal/ }))
+    expect(screen.getByText('ABCDE1234F')).toBeInTheDocument()
+  })
+
+  it('renders nothing at all when the document has no number', () => {
+    // An empty bordered box under "Details" reads as a field that failed to load.
+    const { container } = render(<IdentifierCard identifier={null} last4={null} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('never claims the value is encrypted, because it is not', () => {
+    // The comp's copy is "Stored in full, encrypted at rest, hidden until you ask." Nothing here is
+    // encrypted — invariant 7 and ADR-0009 keep application-level encryption for the vault — and this
+    // is the one paragraph whose whole job is telling the user how their Aadhaar number is handled.
+    render(<IdentifierCard identifier="999988887777" last4="7777" />)
+    expect(screen.queryByText(/encrypted/i)).toBeNull()
+    expect(screen.getByText(/stored in full/i)).toBeInTheDocument()
+  })
+})
+
+describe('numberLabelFor', () => {
+  it('names the real number when the title matches a preset', () => {
+    expect(numberLabelFor('Aadhaar', 'identity')).toBe('Aadhaar number')
+    expect(numberLabelFor('PAN card', 'identity')).toBe('PAN')
+    expect(numberLabelFor('Vehicle RC', 'legal')).toBe('Registration number')
+    // Case and surrounding space are the user's, not the table's.
+    expect(numberLabelFor('  aadhaar  ', 'identity')).toBe('Aadhaar number')
+  })
+
+  it('does not match on a substring, which would mislabel a related document', () => {
+    // A loose `includes()` would label "Passport photos" as carrying a passport number, and
+    // "Old passport" as the current one. Exact-after-trim is the whole point.
+    expect(numberLabelFor('Passport photos', 'other')).toBe('Number')
+    expect(numberLabelFor('Old passport', 'identity')).toBe('Number')
+    expect(numberLabelFor('Dishwasher receipt', 'receipt')).toBe('Number')
+  })
+})
+
+describe('the preset table', () => {
+  it('offers nine common presets out of 22', () => {
+    // The counts are in the UI's copy ("All 22"), so a preset added without the `common` flag would
+    // silently change what the row shows. Asserted non-zero and exact — D33.
+    expect(PRESETS).toHaveLength(22)
+    expect(COMMON_PRESETS).toHaveLength(9)
+  })
+
+  it('leaves the issuer blank exactly where it genuinely varies', () => {
+    // Insurers, banks and landlords. Prefilling a guess there is worse than prefilling nothing,
+    // because the user has to notice it is wrong before correcting it.
+    const blankIssuer = PRESETS.filter((preset) => preset.issuer === '').map((p) => p.name)
+    expect(blankIssuer).toEqual([
+      'Vehicle insurance',
+      'Health insurance',
+      'Rent agreement',
+      'Bank passbook',
+    ])
+  })
+
+  it('gives every preset a number label, so the field is never called "Identifier"', () => {
+    for (const preset of PRESETS) {
+      expect(preset.numLabel.length).toBeGreaterThan(0)
+      expect(preset.numLabel).not.toMatch(/identifier/i)
+    }
+  })
+})
+
 describe('useOpenAdd', () => {
   it('throws without a provider rather than handing back a no-op', () => {
     // Add is reachable from two places now that it is not a tab — the Now header and the Documents
@@ -394,18 +517,73 @@ describe('DocumentForm', () => {
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ doc_type: 'other' })
   })
 
-  it('captures the last four of the number, which the old form could not', async () => {
+  it('captures the whole number, and does not make the user open "Add more" to reach it', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
 
     await userEvent.type(screen.getByLabelText('Title'), 'Passport')
-    await userEvent.click(screen.getByRole('button', { name: 'Add more now (all optional)' }))
-    await userEvent.type(screen.getByLabelText('Last four of the number'), '4471')
+    // No "Add more now" click. ADR-0026 promotes the number to the second field, because a document's
+    // number is one of the two things a person actually has to hand when they photograph it.
+    await userEvent.type(screen.getByLabelText('Number'), 'FAKEM1234567')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    // The wire field is `identifier`; the API truncates to the last four (business rule 6).
-    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ identifier: '4471' })
+    // The FULL value goes over the wire now; the server derives `identifier_last4` from it. The old
+    // version of this test asserted '4471' from a `maxLength={4}` field — that cap is gone, since it
+    // would now be the only thing discarding the number.
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ identifier: 'FAKEM1234567' })
+  })
+
+  it('renames the number field and prefills from a preset, in one tap', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
+
+    // Before: the generic label, because no preset is in play.
+    expect(screen.getByLabelText('Number')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Aadhaar' }))
+
+    // After: the field is called what the document calls it, and title/type/issuer are filled.
+    expect(screen.getByLabelText('Aadhaar number')).toBeInTheDocument()
+    expect(screen.getByLabelText('Title')).toHaveValue('Aadhaar')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      title: 'Aadhaar',
+      doc_type: 'identity',
+      issuer: 'UIDAI',
+    })
+  })
+
+  it('replaces the previous preset rather than merging with it', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithQuery(<DocumentForm onSubmit={onSubmit} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Aadhaar' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Vehicle insurance' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    // UIDAI must not survive as the issuer of an insurance policy. The presets that leave `issuer`
+    // blank do so because insurers vary and we must not guess — carrying the previous pick over
+    // would be exactly that guess, arriving without the user typing anything.
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      title: 'Vehicle insurance',
+      doc_type: 'financial',
+      issuer: null,
+    })
+  })
+
+  it('offers no presets when editing, where a tap would overwrite a real title', async () => {
+    // A shortcut that destroys existing data is not a shortcut. `initial` present means editing.
+    const existing = {
+      ...detailFixture,
+      title: 'My actual passport',
+    }
+    renderWithQuery(<DocumentForm initial={existing} onSubmit={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Aadhaar' })).toBeNull()
+    expect(screen.getByLabelText('Title')).toHaveValue('My actual passport')
   })
 
   it('uppercases a country code so the server does not reject it', async () => {
@@ -433,7 +611,6 @@ describe('DocumentForm', () => {
     expect(screen.queryByLabelText('Notes')).not.toBeInTheDocument()
     // ...while the ones the design does show are still there.
     expect(screen.getByLabelText('Expires')).toBeInTheDocument()
-    expect(screen.getByLabelText('Last four of the number')).toBeInTheDocument()
   })
 
   it("surfaces the server's message rather than inventing its own", async () => {

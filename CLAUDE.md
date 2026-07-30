@@ -92,8 +92,11 @@ anything visual; the ADR is there for *why*. Five things will bite a session tha
    (`ExpiryStatus.tsx`). Colour is the fourth wheel — the ladder must stay readable in greyscale.
 3. **45 days is the only threshold in the client**, and it decides a glyph and a sentence. Reminders
    still fire at 90/30/7 server-side; the two are allowed to disagree.
-4. **Three tabs, forever.** ADR-0025 §4 reverses the old one-tab-per-domain plan: domains become a
-   switcher on the Documents title, and that switcher **must not be drawn until domain two exists**.
+4. **Three tabs, forever — now Now · Documents · You.** ADR-0025 §4 reversed the old one-tab-per-domain
+   plan; the second design handoff then replaced **Add** with **You**, because a tab is a *place* and Add
+   was a sheet. Add lives in the Now header and as the one emphatic pill on Documents. Domains still
+   become a switcher on the Documents title, and that switcher **must not be drawn until domain two
+   exists**.
 5. **A screen whose content can be short needs `flex-1` and a footer with `mt-auto`.** The shell is
    `min-h-dvh`, so without it a sparse archive leaves a screen of dead space above the tab bar —
    reported from a real phone, invisible to every twelve-document fixture.
@@ -104,7 +107,7 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D43 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D45 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -145,6 +148,7 @@ Four things worth knowing before you touch anything:
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
 | **Anything visual — a screen, a component, a colour, a size** | [`conventions/design.md`](docs/conventions/design.md) — the practical rules; [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) for why they exist. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0025 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
+| **Anything touching a document's NUMBER** | [`ADR-0026`](docs/decisions/0026-store-the-full-identifier.md) — the full value is stored and returned on the **detail response only**; `identifier_last4` is DERIVED, never sent by a client. `IdentifierCard`'s Reveal is a display state, **not** an authorization boundary, and the value is in the DOM before any tap |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it |
 | **Calling a document mutation from a new place** | `useDocuments.ts` — `useCreateDocument` and `useUpdateDocument` may return `{ queued: true }` rather than a document (ADR-0024), so every call site branches; an edit must send the version the form was **read** at |
@@ -157,7 +161,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D42, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D45, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**
@@ -185,7 +189,9 @@ Non-negotiable. Breaking one is a bug even if tests pass. Each links to its reas
 6. **The API chooses every storage object key.** Clients never supply one.
    ([ADR-0008](docs/decisions/0008-object-storage-r2.md))
 7. **No application-level encryption of ordinary data.** Encryption is vault-only, and that
-   is what keeps OCR, search, and reminders possible.
+   is what keeps OCR, search, and reminders possible. **This still holds after
+   [ADR-0026](docs/decisions/0026-store-the-full-identifier.md)**, which stores full document
+   identifiers — in *plaintext*. No copy in the app may say "encrypted" (debt D44).
    ([ADR-0009](docs/decisions/0009-sensitivity-tiers.md))
 8. **Never hand-roll crypto.** Fixed primitives in
    [security-model.md](docs/security-model.md) §5.

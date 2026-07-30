@@ -199,6 +199,8 @@ export type DocumentInsert = {
   title: string
   docType: DocumentType
   issuer: string | null
+  /** Full value — ADR-0026. Derived together with the mask by `identifierColumns` in the service. */
+  identifier: string | null
   identifierLast4: string | null
   issuedOn: string | null
   expiresOn: string | null

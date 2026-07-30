@@ -68,21 +68,40 @@ export const tagSchema = z
   .transform((tag) => tag.toLowerCase())
 
 /**
- * **Last 4 characters only** — business rule 6. Never a full passport or account number: the
- * full number is on the scan, which is access-controlled, so a plaintext column is a needless
- * liability.
+ * The identifier a document carries: a passport number, an Aadhaar number, a policy number.
  *
- * The wire schema accepts up to 64 characters because §4 rule 6 says the API *truncates* at
- * the boundary rather than rejecting — a client that sends more gets the last 4 stored, not an
- * error. `truncateToLast4()` below is that truncation, and it runs server-side (invariant 5).
- * These fields are in pino's redaction list so the discarded prefix never reaches a log.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  Rule 6 REVERSED: the full value is now stored. See ADR-0026.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * This used to truncate to four characters at the API boundary, on the argument that the full number
+ * is on the scan anyway so a plaintext column was a needless liability. That argument had a hole: **a
+ * number you cannot read is a number you go and dig the original out for**, which is the exact
+ * errand this app exists to remove. And for the documents its user actually owns — Aadhaar, PAN,
+ * a vehicle registration — the number *is* the thing you need at a counter, far more often than the
+ * scan is.
+ *
+ * So the full value is stored, and `identifier_last4` stays as the **display** form: it is what the
+ * list and every row show, and what the detail screen shows until you tap Reveal. Two fields, one
+ * derived from the other, because masking is a display state and not a storage decision.
+ *
+ * **It is stored as plaintext, by explicit decision.** Invariant 7 and ADR-0009 reserve
+ * application-level encryption for the vault, and this is not the vault — so nothing here is
+ * encrypted, and no copy in the app may claim it is. The fields stay in pino's redaction list, which
+ * now matters more rather than less: the value that must not reach a log is a whole number instead of
+ * four digits.
  */
 export const identifierInputSchema = z.string().min(1).max(64)
 
-/** The stored form: at most 4 characters. */
+/** The masked display form, derived from the stored value: at most 4 characters. */
 export const identifierLast4Schema = z.string().max(4)
 
-/** Business rule 6, as the one function that implements it. */
+/**
+ * The mask, as the one function that produces it.
+ *
+ * Still the only way `identifier_last4` is ever computed — the difference since ADR-0026 is that the
+ * argument is no longer discarded afterwards.
+ */
 export function truncateToLast4(value: string): string {
   return value.slice(-4)
 }
@@ -401,6 +420,21 @@ export type DocumentListResponse = z.infer<typeof documentListResponseSchema>
 
 /** `GET /api/v1/documents/:id` — includes files and reminders (§5). */
 export const documentDetailResponseSchema = documentSchema.extend({
+  /**
+   * The **full** identifier, and the only response that carries it — ADR-0026.
+   *
+   * Deliberately not on `documentSchema`, so it is absent from the list. A list of 100 documents has
+   * no use for 100 full numbers, and putting them there would mean every archive fetch, every
+   * offline cache write and every service-worker precache carried the lot. One document at a time,
+   * asked for by id, is the smallest surface that still answers "what is my Aadhaar number".
+   *
+   * Space scoping is the repository's job and is unchanged: this field is only reachable through a
+   * query already filtered by `space_id IN actor.spaceIds` (invariant 3), so a cross-space read 404s
+   * before it can return one (invariant 4). Revealing it in the UI is a display state and **not** an
+   * authorization boundary — the server does not gate it, because the caller who can read the
+   * document is by definition the caller entitled to its number.
+   */
+  identifier: z.string().nullable(),
   files: z.array(documentFileSchema),
   reminders: z.array(reminderSchema),
 })

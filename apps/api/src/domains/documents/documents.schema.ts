@@ -63,9 +63,23 @@ export const documents = pgTable(
     issuer: text('issuer'),
 
     /**
-     * **Last 4 characters only** — business rule 6. The full passport or account number lives
-     * on the scan, which is access-controlled. A plaintext column holding the whole number is
-     * a needless liability, so the API truncates before this ever sees a value.
+     * The **full** identifier — passport number, Aadhaar number, policy number. **ADR-0026 reversed
+     * business rule 6**, which used to truncate this to four characters at the API boundary.
+     *
+     * Plaintext, by explicit decision. Invariant 7 and ADR-0009 keep application-level encryption for
+     * the vault, and this is not the vault. That makes the pino redaction list load-bearing rather
+     * than tidy: what must never reach a log is now a whole Aadhaar number, not its last four digits.
+     * It is returned on the **detail** response only, never in a list.
+     */
+    identifier: text('identifier'),
+
+    /**
+     * The masked display form, derived from `identifier` by `truncateToLast4` on every write.
+     *
+     * Kept as its own column rather than computed in the query, because it is what the **list**
+     * returns — and the list must not carry the full value (see `documentDetailResponseSchema`). A
+     * generated column would be tidier; a plain one keeps the derivation in the one service function
+     * that already owns it, next to the value it derives from.
      */
     identifierLast4: text('identifier_last4'),
 

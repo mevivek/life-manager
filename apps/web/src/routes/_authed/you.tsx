@@ -130,15 +130,28 @@ function YouPage() {
       {/* ── Reminders ── */}
       <PushStatus />
 
-      {/*
-        ── The comp's "Numbers are stored, and hidden by default" card is NOT here yet ──
-
-        It describes storing the full identifier and revealing it on tap. The API currently keeps only
-        the last four (`documents.schema.ts`), so every sentence in that card would be false today —
-        and it is a card *about how the user's Aadhaar number is handled*, which is the worst possible
-        place to be approximately right. It ships with the identifier work, in the same commit that
-        makes it true.
-      */}
+      {/* ── Numbers ── */}
+      <Card tone="sunken" className="mt-5 p-4">
+        <p className="text-row font-medium leading-snug">
+          Numbers are stored, and hidden by default
+        </p>
+        <p className="mt-1.5 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">
+          Passport, Aadhaar, licence and policy numbers are kept in full, because a number you can’t
+          read is a number you’ll go and dig the original out for. On a document you see the last
+          four until you tap Reveal.
+        </p>
+        {/*
+          The comp says "kept in full and **encrypted at rest**". They are kept in full — ADR-0026 —
+          but nothing here is encrypted: invariant 7 and ADR-0009 reserve application-level encryption
+          for the vault. This paragraph is that sentence made true, and it is not a footnote: it is the
+          only place the app tells its user how their Aadhaar number is actually held, so stating the
+          limitation is what makes the sentence above it worth believing.
+        */}
+        <p className="mt-2 text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
+          They are not encrypted — the database holds them as text, like every other field. Hiding
+          them is about shoulders near your screen, not about the server.
+        </p>
+      </Card>
 
       {/* ── App ── */}
       <section className="mt-5">
