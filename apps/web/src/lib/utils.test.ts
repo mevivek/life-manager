@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cn, RADII, TEXT_SIZES } from './utils'
+import { cn, NAMED_SPACING, RADII, TEXT_SIZES } from './utils'
 
 /**
  * Regression tests for `cn`.
@@ -62,6 +62,29 @@ describe('cn', () => {
     // to win. Without the named scale declared, both would survive.
     expect(cn('min-h-field', 'min-h-[3.375rem]')).toBe('min-h-[3.375rem]')
     expect(cn('min-h-tap', 'min-h-field')).toBe('min-h-field')
+  })
+
+  it('lets an override win for every named spacing token, on every axis it is grouped under', () => {
+    // The density preference moves `--spacing-row-pad`, `-card` and `-stack`, and the call sites that
+    // use them (`p-card`, `py-row-pad`, `gap-stack`) sometimes also pass an override. A token added to
+    // NAMED_SPACING and forgotten in a class group would coexist rather than override — the
+    // `rounded` coin-flip again, this time silently unresponsive to a `className`.
+    for (const token of NAMED_SPACING) {
+      expect(cn(`p-4 p-${token}`)).toContain(`p-${token}`)
+      expect(cn(`p-${token}`, 'p-2')).toBe('p-2')
+      expect(cn(`gap-4 gap-${token}`)).toContain(`gap-${token}`)
+    }
+  })
+
+  it('keeps the heading FACE and the heading WEIGHT apart, though both start font-', () => {
+    // `font-heading` is a family and `font-face-h` is a weight — the face preference sets one, a
+    // headline the other, and they must both survive. Without their groups declared they land
+    // ungrouped and their real precedence is stylesheet emission order.
+    expect(cn('font-heading font-face-h')).toContain('font-heading')
+    expect(cn('font-heading font-face-h')).toContain('font-face-h')
+    // And each still overrides its own kind.
+    expect(cn('font-serif', 'font-heading')).toBe('font-heading')
+    expect(cn('font-normal', 'font-face-h')).toBe('font-face-h')
   })
 
   it('merges ordinary conflicting utilities as before', () => {

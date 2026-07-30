@@ -33,7 +33,7 @@ export function GettingStarted({ count }: { count: number }) {
       <div className="pb-2.5">
         <Eyebrow>Getting started</Eyebrow>
       </div>
-      <p className="font-serif text-title font-normal leading-snug [text-wrap:pretty]">
+      <p className="font-heading text-title font-face-h leading-snug [text-wrap:pretty]">
         {/*
           The serif, because this is the app talking to a person rather than labelling a field — and
           the count is stated rather than hidden, so the sentence is honest about how early it is.

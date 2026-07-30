@@ -21,7 +21,7 @@ function SignUpPage() {
     <div className="flex w-full flex-1 flex-col justify-between gap-8">
       <div className="flex flex-1 flex-col justify-center">
         <AuthMark />
-        <h1 className="mt-4 font-serif text-display font-normal leading-[1.15] tracking-tight-display">
+        <h1 className="mt-4 font-heading text-display font-face-h leading-[1.15] tracking-heading">
           One account,
           <br />
           one person’s paperwork.

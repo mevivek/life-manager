@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Eyebrow } from '@/components/ui/label'
 import { Sheet } from '@/components/ui/sheet'
+import { useFeel } from '@/lib/useFeel'
 import { DocumentForm } from './DocumentForm'
 import { ExpiryGlyph } from './ExpiryStatus'
 import { useCreateDocument } from './useDocuments'
@@ -66,7 +67,7 @@ export function AddDocumentSheet({ open, onClose }: { open: boolean; onClose: ()
           <div className="flex items-baseline justify-between gap-3">
             <h2
               id="add-document-heading"
-              className="font-serif text-[1.4375rem] font-normal leading-tight"
+              className="font-heading text-[1.4375rem] font-face-h leading-tight"
             >
               Add a document
             </h2>
@@ -130,6 +131,7 @@ function SavedStep({
   onDone: () => void
 }) {
   const savedId = step.id
+  const { copy } = useFeel()
 
   return (
     <div className="pt-1.5 pb-1">
@@ -141,13 +143,15 @@ function SavedStep({
         <Eyebrow id="add-document-heading">Saved</Eyebrow>
       </div>
 
-      <h2 className="mt-3 font-serif text-[1.4375rem] font-normal leading-snug">{step.title}</h2>
+      <h2 className="mt-3 font-heading text-[1.4375rem] font-face-h leading-snug">{step.title}</h2>
       <p className="mt-1.5 text-row leading-relaxed text-ink-2 [text-wrap:pretty]">
         {step.id === null
           ? // Queued offline. "It's in" would be a small lie — it is in the outbox, not the
-            // archive — and this app's whole claim is that it tells you the truth about dates.
+            // archive — and this app's whole claim is that it tells you the truth about dates. This
+            // sentence is deliberately outside the voice set: it states a fact the register must not
+            // soften away, so it reads the same in warm and plain.
             'Saved on this device. It’ll be sent the next time you’re online.'
-          : 'It’s in. Add anything else now, or close this and get on with your day.'}
+          : copy.savedBody}
       </p>
 
       <div className="mt-4 flex flex-col gap-2">

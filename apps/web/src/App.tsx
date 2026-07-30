@@ -3,6 +3,7 @@ import { useIsRestoring } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import type { ReactNode } from 'react'
 import { cacheBuster, dehydrateOptions, MAX_AGE, queryCachePersister } from '@/lib/persister'
+import { FeelProvider } from '@/lib/useFeel'
 
 /**
  * The provider tree, split out of `main.tsx` so that a test can mount the REAL one.
@@ -57,7 +58,24 @@ export function App({ queryClient, children }: { queryClient: QueryClient; child
         dehydrateOptions,
       }}
     >
-      <RestoreGate>{children}</RestoreGate>
+      <RestoreGate>
+        {/*
+          Inside the persist provider, outside the router — the position this arrived in from the Feel
+          work, kept verbatim in spirit: the voice register is read as a *value* by route components
+          (`home.tsx`, `login.tsx`, `you.tsx`, `AddDocumentSheet.tsx`), so the context has to sit above
+          them, and above the router is the shallowest place that covers every screen.
+
+          It lives HERE rather than in `main.tsx` for the same reason the persist provider does: a tree
+          assembled in `main.tsx` is a tree no test can mount, and `useFeel` deliberately falls back to
+          `DEFAULT_FEEL` outside a provider — so a missing provider does not throw, it quietly renders
+          the default voice. That is the failure mode a test would never notice.
+
+          Below `RestoreGate` costs nothing: it reads `localStorage`, not the query cache, and density
+          and face are stamped on `<html>` by the pre-paint bootstrap in `index.html` rather than by
+          this provider.
+        */}
+        <FeelProvider>{children}</FeelProvider>
+      </RestoreGate>
     </PersistQueryClientProvider>
   )
 }

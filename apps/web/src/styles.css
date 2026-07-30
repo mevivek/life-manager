@@ -168,6 +168,29 @@
   --row-min: 4.5rem; /*  72px */
   --field-h: 3.25rem; /* 52px */
 
+  /*
+   * The three the DENSITY preference moves, alongside `--gutter`, `--row-min` and `--t-display`.
+   *
+   * They exist as tokens purely so density has something to change: each was a hardcoded utility
+   * (`py-3.5` on a row, `p-4` on a card, `gap-5` on the shell) and a preference cannot reach into a
+   * compiled class name. Their generous values are exactly what those utilities were, so naming them
+   * changed nothing on screen — verified by the fact that no screenshot moved.
+   */
+  --row-pad: 0.875rem; /*  14px — a row's vertical breathing room */
+  --card-pad: 1rem; /*     16px */
+  --stack: 1.25rem; /*     20px — the gap between a screen's sections */
+
+  /*
+   * The heading FACE, which the `face` preference flips between the serif and the grotesk.
+   *
+   * Three tokens rather than one, because a grotesk set at the serif's weight and tracking looks like
+   * a mistake rather than a choice: Newsreader carries a display size at 400, and IBM Plex Sans at
+   * the same size and weight reads thin and too loose. The design's own numbers.
+   */
+  --face-h: var(--font-serif);
+  --h-weight: 400;
+  --h-track: var(--track-tight);
+
   --r-1: 3px;
   --r-2: 10px;
   --r-3: 12px;
@@ -199,6 +222,39 @@
     --gutter: 1.625rem; /* 26px */
     --t-display: 1.9375rem; /* 31px */
   }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  The FEEL preferences — density and face. `lib/feel.ts` stamps the attributes.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Two things about the placement are load-bearing.
+ *
+ * **1. These blocks come AFTER the 430px media query, on purpose.** `[data-density="compact"]` and
+ * `:root` have identical specificity — an attribute selector and a pseudo-class are both (0,1,0) — so
+ * source order is the whole tiebreak. Compact therefore holds at every width, and the Pro Max step-up
+ * applies to generous only, which is what "compact" should mean on a big screen: more rows, not a
+ * bigger headline.
+ *
+ * **2. Only compact and grotesk are written.** The generous serif values are the `:root` defaults
+ * above, so the default costs no CSS and cannot drift from what the app looked like before the
+ * preference existed. `applyFeel` still stamps `data-density="generous"` — see its note on why an
+ * attribute nothing matches is better than an absence two files can disagree about.
+ */
+[data-density="compact"] {
+  --gutter: 1rem; /*        16px, from 22 */
+  --row-min: 3.625rem; /*   58px, from 72 */
+  --row-pad: 0.5625rem; /*   9px, from 14 */
+  --t-display: 1.4375rem; /* 23px, from 30 */
+  --card-pad: 0.8125rem; /* 13px, from 16 */
+  --stack: 1.125rem; /*     18px, from 20 */
+}
+
+[data-face="grotesk"] {
+  --face-h: var(--font-sans);
+  --h-weight: 600;
+  --h-track: -0.02em;
 }
 
 @theme inline {
@@ -255,6 +311,12 @@
   --font-serif: var(--font-serif);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  /*
+    `font-heading` — the face the `face` preference flips. Every headline uses it INSTEAD of
+    `font-serif`, which is now reserved for the two places the serif is the point regardless of
+    preference rather than a heading (see the note in `feel.ts`).
+  */
+  --font-heading: var(--face-h);
 
   --text-display: var(--t-display);
   --text-title: var(--t-title);
@@ -271,6 +333,16 @@
   --spacing-tap: var(--tap-min);
   --spacing-row: var(--row-min);
   --spacing-field: var(--field-h);
+  /* The three the density preference moves. Named in `utils.ts`'s NAMED_SPACING, or `cn()` cannot
+     tell `p-card` from `p-4` and a call-site override becomes a coin flip (debt D42). */
+  --spacing-row-pad: var(--row-pad);
+  --spacing-card: var(--card-pad);
+  --spacing-stack: var(--stack);
+
+  /* The heading weight and tracking, which move with the face. `font-face-h` rather than
+     `font-heading`, because that name is already the family above and Tailwind derives the utility
+     from the token name — two tokens wanting one class name is a silent collision. */
+  --font-weight-face-h: var(--h-weight);
 
   --radius-1: var(--r-1);
   --radius-2: var(--r-2);
@@ -281,6 +353,9 @@
   --shadow-sheet: var(--e-sheet);
   --shadow-toast: var(--e-toast);
 
+  /* `tracking-heading` moves with the face; `tracking-tight-display` is the fixed serif value it
+     replaced on headlines. Both exist because not every tight thing is a heading. */
+  --tracking-heading: var(--h-track);
   --tracking-tight-display: var(--track-tight);
   --tracking-label: var(--track-label);
   --tracking-mask: var(--track-mask);

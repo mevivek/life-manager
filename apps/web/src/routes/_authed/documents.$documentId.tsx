@@ -79,7 +79,9 @@ function DocumentDetailPage() {
             aria-hidden="true"
             className="mx-auto mb-4 h-[19px] w-[15px] rounded-1 border-[1.5px] border-ink-3"
           />
-          <p className="font-serif text-[1.25rem] leading-snug">This document isn’t here</p>
+          <p className="font-heading text-[1.25rem] font-face-h leading-snug">
+            This document isn’t here
+          </p>
           <p className="mt-2 text-body leading-relaxed text-ink-3 [text-wrap:pretty]">
             It may have been deleted, or the link is wrong. Nothing else to read into it.
           </p>
@@ -103,13 +105,13 @@ function DocumentDetailPage() {
 
       <div className="pt-1.5">
         <Eyebrow>{detail.doc_type === 'other' ? 'No type' : capitalise(detail.doc_type)}</Eyebrow>
-        <h1 className="mt-2 font-serif text-[1.6875rem] font-normal leading-[1.18] tracking-tight-display">
+        <h1 className="mt-2 font-heading text-[1.6875rem] font-face-h leading-[1.18] tracking-heading">
           {detail.title}
         </h1>
       </div>
 
       {/* ── 1. Status ── */}
-      <Card className={cn('mt-4 p-4', STATUS_BG[expiry.state])}>
+      <Card className={cn('mt-4 p-card', STATUS_BG[expiry.state])}>
         <div className="flex items-center gap-3">
           <ExpiryGlyph state={expiry.state} size={15} />
           <div>

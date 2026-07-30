@@ -12,9 +12,9 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 316 tests — 316/0 measured on
+build` are green. **The suite is 342 tests: web 206 · api 107 · shared 29 — 342/0 measured on
 2026-07-30 against a real Postgres**, not inferred from a green pipeline. A container with no Docker
-measures **216 passed / 95 skipped**; all 95 skipped are the API's.
+measures **244 passed / 98 skipped**; all 98 skipped are the API's.
 
 **You can run the database-backed suites in this container without Docker.** Postgres 16 is installed
 at `/usr/lib/postgresql/16/bin`, and `initdb` refuses to run as root, so:
@@ -68,8 +68,9 @@ pipeline. See [README.md](README.md) § Deploying.
 What M1 added, so you do not go looking for it: `documents`, `document_files`, `reminders`,
 `push_subscriptions`, `idempotency_keys`; full-text search; presigned R2 upload/download with
 versioning; Web Push; three pg-boss handlers; cursor pagination; `Idempotency-Key`. Then, from the
-design handoffs: `identifier` (ADR-0026/0027), and `holder` + `relation` with
-`GET /api/v1/documents/holders`.
+design handoffs: `identifier` (ADR-0026/0027), `holder` + `relation` with
+`GET /api/v1/documents/holders`, and the three device-scoped **Feel** preferences on You — density,
+heading face, and a two-register **voice** (`lib/feel.ts`, `lib/voice.ts`; design.md §12).
 
 **The offline read cache from [ADR-0013](docs/decisions/0013-read-only-offline-v1.md) is built** —
 pulled ahead of M1's "done when" by an explicit product call, so the app can be iterated on without
@@ -163,8 +164,8 @@ Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   **307/0 is the target; 212/95 is what a container with no Docker shows you** — the 95 skipped are
-   all the API's, and 174 of the 212 that do run are web tests needing no database. Cheaper than
+   **338/0 is the target; 240/98 is what a container with no Docker shows you** — the 98 skipped are
+   all the API's, and 202 of the 240 that do run are web tests needing no database. Cheaper than
    trusting a green deploy: start the local Postgres 16 as described under Status and run it properly.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
@@ -184,6 +185,7 @@ Four things worth knowing before you touch anything:
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
 | **Anything visual — a screen, a component, a colour, a size** | [`conventions/design.md`](docs/conventions/design.md) — the practical rules; [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) for why they exist. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
+| **A headline's FACE, screen DENSITY, or the app's VOICE/copy** | [`conventions/design.md`](docs/conventions/design.md) §12 — the three device-scoped Feel preferences. `lib/feel.ts` + `useFeel.tsx` (density/face as `data-*`, never inline `style`), `lib/voice.ts` (two copy registers, walked by `voice.test.ts` — plain never says LESS than warm). **Every headline uses `font-heading`, not `font-serif`**, or it opts out of the face preference |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0025 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
 | **Anything touching a document's NUMBER** | [`ADR-0026`](docs/decisions/0026-store-the-full-identifier.md) then [`ADR-0027`](docs/decisions/0027-identifier-in-the-list-response.md) — the full value is stored **plaintext** and returned on **every** document response, list included (0027 reversed 0026's detail-only rule). `identifier_last4` is DERIVED, never sent by a client. Reveal is a display state, **not** an authorization boundary. The cache now holds every number on the device — debt **D47** |
 | **Anything touching `holder` — the people picker, the Whose filter, the row pill** | [`documents.md`](docs/domains/documents.md) §4 rule 13. **A holder is a LABEL, never a permission** — `space_id` is still the only thing deciding who can read a document. `null` is "mine" and is drawn as *absence*, so there is no "Me" badge on a row. `relation` cannot outlive `holder` (one helper writes both). The `?holder=` filter's "mine" is the literal sentinel `HOLDER_MINE`, not `''`. And in `DocumentForm` the name fields' openness is **derived, not stored** — storing it lit two chips at once |
