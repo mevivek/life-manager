@@ -233,4 +233,49 @@ describe('the persisted cache across a session boundary', () => {
     // `me` alone would refetch `me` while the document lists rendered from the restored cache.
     expect(store.has(CACHE_KEY)).toBe(false)
   })
+
+  /**
+   * **Deleting the file is not the same as it being gone**, and until 2026-07-30 this suite only
+   * asserted the first.
+   *
+   * `persister.ts` gives its persister `throttleTime: 1_000`, which does not delay a write — it keeps
+   * ONE queued write and runs it a second after the previous one finished. So a live session almost
+   * always has a write already scheduled, and `purgePersistedCache()` cannot see it. Measured against
+   * the real provider tree before the fix: purge at +501ms, **file back at +1448ms**. The three
+   * existing assertions above all passed throughout, because every one of them looks at the instant
+   * after the purge and never again.
+   *
+   * The wait below is the persister's own `throttleTime` plus a margin, which is why this test carries
+   * an explicit timeout: the wait is a documented constant rather than a guess, and the allowance is
+   * there so a loaded machine cannot turn a real assertion into a flake. It is not a retry, and it is
+   * not covering for something that never settles — remove `sealed` from `persister.ts` and this fails
+   * every time.
+   */
+  it('stays deleted when the throttled write that was already queued lands', async () => {
+    const { queryCachePersister, purgePersistedCache, resumePersisting, cacheBuster } =
+      await import('./persister')
+    const snapshot = {
+      buster: cacheBuster,
+      timestamp: Date.now(),
+      clientState: { mutations: [], queries: [] },
+    }
+
+    // Two calls inside the throttle window: the first executes at once, the second is QUEUED. This is
+    // the state the app is in whenever anything at all is fetching.
+    void queryCachePersister.persistClient(snapshot)
+    void queryCachePersister.persistClient(snapshot)
+    await vi.waitFor(() => expect(store.has(CACHE_KEY)).toBe(true))
+
+    await purgePersistedCache()
+    expect(store.has(CACHE_KEY)).toBe(false)
+
+    await new Promise((resolve) => setTimeout(resolve, 1_400))
+
+    // The queued write arrived in here somewhere. On disk, the user is still signed out.
+    expect(store.has(CACHE_KEY)).toBe(false)
+
+    // Not an assertion — the seal is module state on a singleton, so leaving it set would switch
+    // persistence off for every test after this one (conventions/testing.md §5).
+    resumePersisting()
+  }, 10_000)
 })

@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { meQueryKey } from '@/features/spaces/useMe'
 import { signOut } from './auth-client'
 import * as outbox from './outbox'
-import { purgePersistedCache } from './persister'
+import { purgePersistedCache, resumePersisting } from './persister'
 
 /**
  * The two session boundaries, in one place because both of them have to purge the on-disk cache and
@@ -24,7 +24,11 @@ import { purgePersistedCache } from './persister'
  * is fully within our control is the local copy.
  *
  * Order matters. `clear()` first, so that if the persister's throttled write lands after the delete
- * below, the only thing it can possibly write is an empty cache.
+ * below, the only thing it can possibly write is an empty cache. That is now the *second* line of
+ * defence rather than the only one — `purgePersistedCache()` seals writes outright, because the
+ * reasons this ordering worked turned out to be three layers deep in a dependency. See `sealed` in
+ * lib/persister.ts. Keep the ordering anyway: it costs nothing and it is what makes the payload
+ * harmless in the window before the seal is set.
  */
 export async function endSession(queryClient: QueryClient): Promise<void> {
   try {
@@ -52,4 +56,7 @@ export async function beginSession(queryClient: QueryClient): Promise<void> {
   await Promise.all([purgePersistedCache(), outbox.clear()])
   queryClient.clear()
   await queryClient.invalidateQueries({ queryKey: meQueryKey })
+  // LAST, and not by accident — `purgePersistedCache` above sealed writes, and the reasoning for why
+  // this line belongs here rather than three lines up is on `resumePersisting` in lib/persister.ts.
+  resumePersisting()
 }
