@@ -1,4 +1,5 @@
 import type { DocumentType } from '@life-manager/shared'
+import type { NumberFormat } from './numberFormat'
 
 /**
  * The documents a person in India actually owns, as data.
@@ -36,14 +37,27 @@ export type Preset = {
   issuer: string
   /** What the document itself calls its number. This is the label the field takes. */
   numLabel: string
-  /** The shape, where stating it helps the user check what they typed. Blank where it varies. */
+  /**
+   * Shown beside the number's label. **An example wherever one exists** — `ABCDE1234F` teaches the
+   * shape of a PAN in a way "10 characters" does not, and it can be compared to the card directly.
+   * A description only where the format genuinely varies by state or issuer.
+   */
   shape: string
   /** Advisory only — one sentence of copy. Never a reminder, never a date. */
   expires: boolean
   /** In the default row of nine. The rest are behind "All 22". */
   common?: boolean
-  /** Only where a real example clarifies the format more than a description does. */
+  /** Defaults to `shape`, which is an example for most presets. */
   placeholder?: string
+  /**
+   * How the number is grouped or masked as it is typed — see `numberFormat.ts`.
+   *
+   * On the preset rather than in a lookup keyed by name, because the comp listed the same names in
+   * three places (a digits-only list, a masked list, and a format map) and they can disagree.
+   * Absent means free text: the format of a policy or consumer number is the issuer's business, and
+   * reshaping one we do not know would mangle a value typed correctly.
+   */
+  format?: NumberFormat
 }
 
 export const PRESETS: Preset[] = [
@@ -52,30 +66,30 @@ export const PRESETS: Preset[] = [
     type: 'identity',
     issuer: 'UIDAI',
     numLabel: 'Aadhaar number',
-    shape: '12 digits',
+    shape: '1234 5678 9012',
     expires: false,
     common: true,
-    placeholder: '7294 8103 8109',
+    format: { kind: 'digits', digits: 12, groups: [4, 4, 4] },
   },
   {
     name: 'PAN card',
     type: 'identity',
     issuer: 'Income Tax Department',
     numLabel: 'PAN',
-    shape: '10 characters',
+    shape: 'ABCDE1234F',
     expires: false,
     common: true,
-    placeholder: 'ABCDE1234F',
+    format: { kind: 'mask', mask: 'AAAAA####A' },
   },
   {
     name: 'Passport',
     type: 'identity',
     issuer: 'Ministry of External Affairs',
     numLabel: 'Passport number',
-    shape: '1 letter + 7 digits',
+    shape: 'M1234567',
     expires: true,
     common: true,
-    placeholder: 'M1234567',
+    format: { kind: 'mask', mask: 'A#######' },
   },
   {
     name: 'Driving licence',
@@ -91,19 +105,20 @@ export const PRESETS: Preset[] = [
     type: 'identity',
     issuer: 'Election Commission of India',
     numLabel: 'EPIC number',
-    shape: '3 letters + 7 digits',
+    shape: 'ABC1234567',
     expires: false,
     common: true,
+    format: { kind: 'mask', mask: 'AAA#######' },
   },
   {
     name: 'Vehicle RC',
     type: 'legal',
     issuer: 'Regional Transport Office',
     numLabel: 'Registration number',
-    shape: 'e.g. MH12AB1234',
+    shape: 'MH12AB1234',
     expires: false,
     common: true,
-    placeholder: 'MH12AB1234',
+    format: { kind: 'mask', mask: 'AA##AA####' },
   },
   {
     name: 'Vehicle insurance',
@@ -193,24 +208,27 @@ export const PRESETS: Preset[] = [
     type: 'financial',
     issuer: 'Employer',
     numLabel: 'TAN of deductor',
-    shape: '10 characters',
+    shape: 'ABCD12345E',
     expires: false,
+    format: { kind: 'mask', mask: 'AAAA#####A' },
   },
   {
     name: 'ITR acknowledgement',
     type: 'financial',
     issuer: 'Income Tax Department',
     numLabel: 'Acknowledgement no.',
-    shape: '15 digits',
+    shape: '12345 67890 12345',
     expires: false,
+    format: { kind: 'digits', digits: 15, groups: [5, 5, 5] },
   },
   {
     name: 'EPF / UAN',
     type: 'financial',
     issuer: 'EPFO',
     numLabel: 'UAN',
-    shape: '12 digits',
+    shape: '1234 5678 9012',
     expires: false,
+    format: { kind: 'digits', digits: 12, groups: [4, 4, 4] },
   },
   {
     name: 'Degree certificate',

@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DocumentListSkeleton } from '@/components/ui/skeleton'
 import { DocumentRow } from './DocumentRow'
+import { groupForReading } from './numberFormat'
+import { numberLabelFor } from './presets'
 import { useDocuments } from './useDocuments'
 
 /**
@@ -27,9 +29,30 @@ export type DocumentListProps = {
   emptyState?: React.ReactNode
   /** `divided` runs rows full-bleed with a rule between; `card` groups them in one bordered panel. */
   variant?: 'divided' | 'card'
+  /**
+   * The row-level number display — ADR-0027. Absent means no numbers are drawn, which is what the
+   * Now screen's cards want.
+   *
+   * The revealed set is owned **above** this component because the archive header has a toggle that
+   * reveals every row at once. Local state per row could not be reached by it, and a boolean threaded
+   * down from the page is simpler than a context for two consumers.
+   */
+  numbers?: {
+    /** Ids currently revealed. A page-wide toggle is expressed by `revealAll`, not by filling this. */
+    revealedIds: ReadonlySet<string>
+    revealAll: boolean
+    onToggle: (documentId: string) => void
+    /** Called with the number's label after a successful copy, so the page can say so. */
+    onCopied: (label: string) => void
+  }
 }
 
-export function DocumentList({ query, emptyState, variant = 'divided' }: DocumentListProps) {
+export function DocumentList({
+  query,
+  emptyState,
+  variant = 'divided',
+  numbers,
+}: DocumentListProps) {
   /**
    * One `useQuery` per page, keyed by its cursor, rather than `useInfiniteQuery`.
    *
@@ -66,6 +89,7 @@ export function DocumentList({ query, emptyState, variant = 'divided' }: Documen
           isLast={index === pages.length - 1}
           emptyState={emptyState}
           variant={variant}
+          numbers={numbers}
           onLoadMore={(next) => setCursors((previous) => [...previous, next])}
         />
       ))}
@@ -79,6 +103,7 @@ function DocumentPage({
   isLast,
   emptyState,
   variant,
+  numbers,
   onLoadMore,
 }: {
   query: Partial<DocumentListQuery>
@@ -86,6 +111,7 @@ function DocumentPage({
   isLast: boolean
   emptyState?: React.ReactNode
   variant: 'divided' | 'card'
+  numbers?: DocumentListProps['numbers']
   onLoadMore: (cursor: string) => void
 }) {
   const documents = useDocuments(query)
@@ -123,6 +149,30 @@ function DocumentPage({
       document={document}
       divided={variant === 'card' && index > 0}
       chevron={variant === 'card'}
+      number={
+        numbers === undefined || document.identifier === null
+          ? undefined
+          : {
+              label: numberLabelFor(document.title, document.doc_type),
+              revealed: numbers.revealAll || numbers.revealedIds.has(document.id),
+              grouped: groupForReading(document.identifier),
+              onToggleReveal: () => numbers.onToggle(document.id),
+              onCopy: () => {
+                // `document.identifier` is non-null in this branch; the closure captures the narrowed
+                // value rather than re-reading it, so a re-render cannot make it null underneath.
+                const value = document.identifier ?? ''
+                void navigator.clipboard
+                  .writeText(value)
+                  .then(() => numbers.onCopied(numberLabelFor(document.title, document.doc_type)))
+                  .catch(() => {
+                    // Clipboard access can be refused (insecure origin, denied permission). Revealing
+                    // is the fallback that always works, because the value becomes selectable — never
+                    // a silent no-op.
+                    numbers.onToggle(document.id)
+                  })
+              },
+            }
+      }
       // The archive's rows run full-bleed to the screen edges with a rule below each, so the list
       // reads as a ledger page rather than as a stack of cards. The negative margin undoes the
       // shell's gutter for the rule only; the content keeps it.

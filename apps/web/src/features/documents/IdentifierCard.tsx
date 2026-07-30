@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { groupForReading } from './numberFormat'
 
 /**
  * The document's number: masked by default, revealed on request, copyable.
@@ -30,12 +31,6 @@ import { Card } from '@/components/ui/card'
  * (`ABCDE1234F`) is not grouped, because inserting spaces into an alphanumeric code invents a format
  * the document does not use.
  */
-
-/** Digits only, and long enough that grouping helps rather than fragments. */
-function groupDigits(value: string): string {
-  if (!/^\d+$/.test(value) || value.length < 8) return value
-  return value.replace(/(\d{4})(?=\d)/g, '$1 ')
-}
 
 export function IdentifierCard({
   /**
@@ -93,7 +88,7 @@ export function IdentifierCard({
               : 'min-w-0 flex-1 font-mono text-number font-medium tracking-mask'
           }
         >
-          {revealed ? groupDigits(identifier) : `•••• ${last4 ?? identifier.slice(-4)}`}
+          {revealed ? groupForReading(identifier) : `•••• ${last4 ?? identifier.slice(-4)}`}
         </span>
         <Button
           variant="secondary"

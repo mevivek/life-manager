@@ -6,7 +6,7 @@ import {
   documentCreateSchema,
   documentTypeSchema,
 } from '@life-manager/shared'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Alert } from '@/components/ui/alert'
@@ -15,6 +15,16 @@ import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/utils'
+import {
+  autoCapitalizeFor,
+  caretForSignificant,
+  carryNumber,
+  formatNumber,
+  inputModeFor,
+  numberHint,
+  significant,
+} from './numberFormat'
 import {
   COMMON_PRESETS,
   GENERIC_NUMBER_LABEL,
@@ -163,15 +173,6 @@ export function DocumentForm({
   const [allPresets, setAllPresets] = useState(false)
   const issuers = useIssuers()
 
-  const activePreset = presetByName(preset)
-  /**
-   * The number field's label: the real name of the number when a preset is in play, and on an EDIT
-   * form the name derived from the document's own title. "Identifier" is never shown to anyone.
-   */
-  const numberLabel =
-    activePreset?.numLabel ??
-    (initial === undefined ? GENERIC_NUMBER_LABEL : numberLabelFor(initial.title, initial.doc_type))
-
   /**
    * Three generics, not one, and it is not optional.
    *
@@ -186,6 +187,7 @@ export function DocumentForm({
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<DocumentFormValues, unknown, DocumentCreate>({
     resolver: zodResolver(documentFormSchema),
@@ -209,6 +211,53 @@ export function DocumentForm({
       notes: initial?.notes ?? '',
       tags: initial?.tags ?? [],
     },
+  })
+
+  const activePreset = presetByName(preset)
+  /**
+   * The number field's label: the real name of the number when a preset is in play, and on an EDIT
+   * form the name derived from the document's own title. "Identifier" is never shown to anyone.
+   */
+  const numberLabel =
+    activePreset?.numLabel ??
+    (initial === undefined ? GENERIC_NUMBER_LABEL : numberLabelFor(initial.title, initial.doc_type))
+
+  /**
+   * `register('identifier')` split apart, so this field's `onChange` and `ref` can be wrapped.
+   *
+   * Spreading `register()` after a hand-written `onChange` would silently overwrite it — the last
+   * prop wins — so the pieces are pulled out by name and reattached explicitly below. RHF still owns
+   * validation and the value; this only reshapes the string on its way in and restores the caret.
+   */
+  const {
+    ref: registerIdentifierRef,
+    onChange: registerIdentifierChange,
+    ...identifierField
+  } = register('identifier')
+  const identifierElement = useRef<HTMLInputElement | null>(null)
+  /** Caret position in SIGNIFICANT characters, pending a re-render. See the `onChange` note. */
+  const pendingCaret = useRef<number | null>(null)
+
+  const numberProgress = numberHint(activePreset?.format, watch('identifier') ?? '')
+
+  /**
+   * Restore the caret after the reformat re-rendered the field.
+   *
+   * No dependency array: it must run after **every** render that had a pending caret, and the pending
+   * value is cleared as it is consumed so a render without one costs a single null check.
+   */
+  useEffect(() => {
+    const wanted = pendingCaret.current
+    if (wanted === null) return
+    pendingCaret.current = null
+    const element = identifierElement.current
+    if (element === null) return
+    const index = caretForSignificant(element.value, wanted)
+    try {
+      element.setSelectionRange(index, index)
+    } catch {
+      // A field whose type does not support selection ranges. Nothing to restore, nothing to report.
+    }
   })
 
   /**
@@ -297,6 +346,19 @@ export function DocumentForm({
                   setValue('title', option.name, { shouldDirty: true })
                   setValue('doc_type', option.type, { shouldDirty: true })
                   setValue('issuer', option.issuer, { shouldDirty: true })
+                  /**
+                   * A part-typed number survives the switch only if the new shape keeps every
+                   * significant character it had. Otherwise the field clears.
+                   *
+                   * Reshaping it regardless would leave the first five characters of an Aadhaar number
+                   * sitting under a label reading "PAN" — a value the user never typed, in the one
+                   * field where a wrong value is worse than a blank one. `carryNumber` decides.
+                   */
+                  setValue(
+                    'identifier',
+                    carryNumber(option.format, String(getValues('identifier') ?? '')),
+                    { shouldDirty: true },
+                  )
                 }}
               >
                 {option.name}
@@ -352,15 +414,70 @@ export function DocumentForm({
       <div className="flex flex-col gap-1.5">
         <div className="flex items-baseline justify-between gap-2.5">
           <Label htmlFor="identifier">{numberLabel}</Label>
-          {activePreset?.shape !== undefined && activePreset.shape !== '' && (
-            <span className="text-meta text-ink-3">{activePreset.shape}</span>
-          )}
+          <div className="flex items-baseline gap-2">
+            {/*
+              The progress counter — "7 of 12", then "Complete". Mono, so the number reads as a count
+              rather than a word, and it goes quiet (`--ink-3`) until the value is full.
+
+              It is NOT validation. "Complete" says the value is the right *length* for this document,
+              nothing more; `identifier` stays optional forever (Q2) and Save never waits for it.
+            */}
+            {numberProgress !== '' && (
+              <span
+                className={cn(
+                  'font-mono text-meta',
+                  numberProgress === 'Complete' ? 'text-status-ok' : 'text-ink-3',
+                )}
+              >
+                {numberProgress}
+              </span>
+            )}
+            {activePreset?.shape !== undefined && activePreset.shape !== '' && (
+              <span className="text-meta text-ink-3">{activePreset.shape}</span>
+            )}
+          </div>
         </div>
         <Input
           id="identifier"
-          placeholder={activePreset?.placeholder ?? 'Number on the document'}
+          placeholder={activePreset?.placeholder ?? activePreset?.shape ?? 'Number on the document'}
           className="font-mono"
-          {...register('identifier')}
+          /*
+            Keyboard hints, per preset. `numeric` on a digits-only number saves a keyboard switch on
+            every capture; the rest keep a full keyboard because their masks mix letters and digits.
+            Autocorrect and spellcheck are off on all of them — an identifier is not a word, and iOS
+            will happily "correct" one.
+          */
+          inputMode={inputModeFor(activePreset?.format)}
+          autoCapitalize={autoCapitalizeFor(activePreset?.format)}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          {...identifierField}
+          ref={(element) => {
+            registerIdentifierRef(element)
+            identifierElement.current = element
+          }}
+          onChange={(event) => {
+            const element = event.target
+            /**
+             * Reformat, then put the caret back where it was in **significant** terms.
+             *
+             * Counting significant characters rather than string indices is the whole trick: the
+             * reformat inserts and removes grouping spaces underneath the caret, so a naive
+             * controlled input sends the caret to the end of the field on the 5th digit of an Aadhaar
+             * number — which makes correcting a mistyped digit impossible.
+             */
+            const caretBefore = significant(
+              element.value.slice(0, element.selectionStart ?? element.value.length),
+            ).length
+            const formatted = formatNumber(activePreset?.format, element.value)
+            pendingCaret.current = caretBefore
+            element.value = formatted
+            // RHF's onChange returns a promise (it may run async validation). Nothing here depends on
+            // it settling — the value is already in the DOM and the caret is restored by an effect —
+            // so it is explicitly voided rather than left floating.
+            void registerIdentifierChange(event)
+          }}
         />
         <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
           Stored in full, shown as the last four until you tap Reveal. Leave it blank if you don’t
