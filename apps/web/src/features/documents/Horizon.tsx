@@ -15,9 +15,13 @@ import type { LedgerRow } from './useLedger'
  * ("is anything on fire?") and withholds the one they did ("when is the next thing?").
  *
  * So Now **always** shows the forward timeline — the next expiry however far away — which means the
- * answer is never *nothing*, it is "nothing until 4 March". That is why this component has no empty
- * variant worth speaking of: if there are no dated documents at all it renders nothing and the
- * headline carries the message instead, because a timeline with no entries is furniture.
+ * answer is never *nothing*, it is "nothing until 4 March".
+ *
+ * It has **one** empty variant, and the distinction is the whole point: with no dated documents at
+ * all it renders nothing, because the headline already says so and a timeline with no entries is
+ * furniture. With dated documents that are *all* urgent, it says "nothing else has a date we watch"
+ * — the horizon is empty because everything is in Needs you, which is information rather than
+ * absence. See the branch below.
  *
  * ── Four entries, five at 430px ──
  *
@@ -49,7 +53,42 @@ export function Horizon({
   datedTotal: number
   complete: boolean
 }) {
-  if (rows.length === 0) return null
+  /**
+   * Empty, but for two different reasons — and only one of them is furniture.
+   *
+   * `datedTotal === 0` means nothing in the archive has a date at all. The headline already says so
+   * ("No document here has an expiry date"), so a timeline saying it again is decoration: render
+   * nothing.
+   *
+   * `datedTotal > 0` with no rows means every dated document is *already* in Needs you — so the
+   * horizon is empty because everything is urgent, not because nothing is tracked. That is a real
+   * fact about the archive and the screen should state it, or a person reading a 6-day passport
+   * warning is left wondering what comes after it. Reported from a real phone: two documents, one
+   * dated, and the lower half of the screen was blank because this branch returned `null`.
+   *
+   * Deliberately not the timeline treatment — no rule, no dots. A line of prose, because there is no
+   * sequence to draw.
+   */
+  if (rows.length === 0) {
+    if (datedTotal === 0) return null
+    return (
+      <section className="pt-1.5">
+        <div className="pb-2.5">
+          <Eyebrow>The horizon</Eyebrow>
+        </div>
+        <p className="text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
+          {/*
+            "Nothing else" is the load-bearing word, and it is true in every shape of this state: the
+            dated documents all sit in Needs you above, so no OTHER document carries a date. Note it
+            cannot use `beyond` below — that arithmetic would report the urgent ones as "further
+            out", which is the opposite of where they are.
+          */}
+          Nothing else has a date we watch
+          {complete ? '.' : ' on this page.'}
+        </p>
+      </section>
+    )
+  }
 
   const shown = rows.slice(0, horizonCount())
   const beyond = datedTotal - shown.length

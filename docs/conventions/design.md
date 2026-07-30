@@ -179,6 +179,17 @@ problems in four cards read as four sections.
   component that returns a fragment in a `<div>` silently restores the gap; and this applies only to
   a page with a **foot** — a list that simply runs out (Documents, an empty state) is meant to end
   where it ends, and stretching it would be worse.
+- **A screen with too little content gets more content, not more stretch.** Pinning a footer to the
+  foot relocates a void; it does not remove one. The Now screen at two documents had *every*
+  space-filling section render nothing — empty horizon, absent notifications card — so the fix was to
+  say something true in the gap (`Horizon`'s "nothing else has a date we watch", and
+  `GettingStarted`), not to distribute the emptiness more evenly. **Before stretching a layout, check
+  what returned `null`.**
+- **An empty section has two reasons and usually two different answers.** `Horizon` renders nothing
+  when no document is dated — the headline already said so, and repeating it is furniture — but a
+  sentence when every dated document is *already urgent*, because "the horizon is empty" is then a
+  fact rather than an absence. Collapsing both into one `if (rows.length === 0) return null` is how
+  the blank half-screen shipped.
 - **At 430px nothing reflows.** The gutter and the display size step up via tokens, and the horizon
   shows five entries instead of four. Row heights are unchanged: a taller row on a bigger phone just
   means more scrolling.
