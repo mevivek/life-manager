@@ -182,10 +182,9 @@ document↔thing link. [ADR-0029](decisions/0029-the-things-domain.md),
 [ADR-0030](decisions/0030-capture-as-a-stepped-wizard.md),
 [domains/things.md](domains/things.md).
 
-**There is no Things API.** No tables, no repository, no service, no routes — so every Things screen
-renders its error state against the deployed app. That is deliberate: the contract in
-`packages/shared/src/things.ts` was written first precisely so the server half implements it rather
-than inventing a second shape. The server half is M4 step 1.
+**The Things API followed on the same day** — see M4 step 1 below, which is now done. The contract in
+`packages/shared/src/things.ts` was written first precisely so the server half would implement it
+rather than invent a second shape, and it did: not a line of that file changed.
 
 **This did not make M1 done either**, and it did not change the priority: steps 2–7 above still come
 first. What it did change is that the handoff also **rewrote capture** for both domains
@@ -199,10 +198,12 @@ Only after step 7. M2's remaining scope is OCR and previews — the offline read
 agreements name first: "one domain at a time — finish and actually use it before starting the next"
 ([product/brain.md](product/brain.md) §5).
 
-**That agreement is under strain and it is worth saying so plainly.** Things is a second domain begun
-before the first is finished. The mitigation is that only the *client* half exists and the server half
-is deferred to M4 rather than raced — but a session tempted to keep going on Things instead of
-finishing M1's last observation should read §5 of the brain again first.
+**That agreement is under strain and it is worth saying so plainly.** Things is a second domain
+finished — both halves — before the first is done. The mitigation that used to be recorded here was
+that only the client half existed; that mitigation is gone. **M1's last observation is still
+outstanding**, and a session tempted to keep going on Things (the outbox, the photo client, §9(2))
+instead of turning reminders on from the You screen and watching one arrive should read §5 of the brain
+again first.
 
 ---
 
@@ -312,29 +313,41 @@ amended with what was missed.
 
 ## M4 — Second and third domains
 
-**Assets arrived early, as "Things", and only half of it.** The fourth design handoff
+**Assets arrived early, as "Things", and it is now complete.** The fourth design handoff
 specified the domain in full, so the client half was built against it ahead of schedule —
-[ADR-0029](decisions/0029-the-things-domain.md), [domains/things.md](domains/things.md).
-What exists is the shared contract, both screens, the capture track, the cross-domain
-horizon and the document↔thing link. **What does not exist is the server half**: no
-tables, no repository, no service, no routes. `useThings` 404s until somebody writes them.
+[ADR-0029](decisions/0029-the-things-domain.md), [domains/things.md](domains/things.md) —
+and the server half followed on 2026-07-30.
 
 So M4 is now, in order:
 
-1. **The Things API**, to the spec in [domains/things.md](domains/things.md) §3–§6, using
-   [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md). Everything the UI
-   needs is already named in `packages/shared/src/things.ts` — implement that contract
-   rather than inventing a second one (invariant 9).
+1. - [x] **The Things API**, to the spec in [domains/things.md](domains/things.md) §3–§6,
+     using [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md). **Done
+     2026-07-30.** `things`, `thing_services`, `thing_photos`, the repository, two services,
+     every endpoint in §5, and the `on delete set null` foreign key on `documents.thing_id`.
+     `packages/shared/src/things.ts` was implemented **unchanged** (invariant 9). 71 new
+     tests; suite 674/0. things.md §10 lists the files.
 2. **Answer things.md §9(2)** — whether a warranty gets automatic reminders — in
    [product/open-questions.md](product/open-questions.md) before coding it. Documents only
-   auto-remind for `identity` and `certificate`, and the equivalent call here has not been
-   made.
-3. **Money**, with its own doc first.
+   auto-remind for `identity` and `certificate`, and the equivalent call here has **still not
+   been made**, so step 1 deliberately built the capability and left the switch off: nothing
+   creates a thing reminder, and `GET /things/:id` returns an empty `reminders[]` with a test
+   asserting exactly that. **Answering it is not only a `AUTO_REMINDER_TYPES`-shaped edit** —
+   the daily scan's copy is document-shaped and would announce that a warranty "expires",
+   which is the sentence ADR-0029 exists to prevent. Debt D58.
+3. **The two client gaps step 1 left**, both small and both named in things.md §10: Things
+   writes do not go through the offline outbox (one entry kind plus one `writeOrQueue` per
+   mutation), and `api.things` has no methods for the four photo verbs that now exist
+   (debt D59).
+4. **Money**, with its own doc first.
 
-The real test here is whether the playbook works: adding a domain should be mechanical.
-**This is the first measurement of ADR-0006's central promise** — that a second domain
-needs no change to the tenant filter. If it turns out to, that is an ADR-0006 failure and
-gets recorded as one rather than worked around.
+The real test here was whether the playbook works: adding a domain should be mechanical.
+**Step 1 was the first measurement of ADR-0006's central promise** — that a second domain
+needs no change to the tenant filter — and **it held: `apps/api/src/db/scoped.ts` was not
+touched.** `spaceScoped()` gives a new table the two columns `SpaceScopedTable`
+structurally requires, so `scoped(actor, things)` type-checked on first use. The playbook
+itself needed **five amendments plus two smaller ones**, each recorded with the bug that
+motivated it in its own § *If this playbook didn't work*. Two of the five were live defects
+the tests caught: a cross-space count leak, and a 500 on the second photo of any thing.
 
 Also candidates once two domains exist: email-inbox ingestion and AI-extracted expiry
 dates (both from [prior-art.md](prior-art.md) §2).

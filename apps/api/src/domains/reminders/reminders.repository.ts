@@ -19,8 +19,39 @@ export type ReminderRow = typeof reminders.$inferSelect
 
 export const DOCUMENT_ENTITY_TYPE = 'document'
 
+/**
+ * The second entity type — ADR-0029, things.md §6. The table needed **no schema change** for it,
+ * which is the whole point of it having been keyed by `entity_type` + `entity_id` from the start.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  NOTHING CREATES ONE OF THESE YET, and that is things.md §9(2), not an oversight.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Documents auto-create reminders for `identity` and `certificate` only (`AUTO_REMINDER_TYPES`). The
+ * equivalent question here — *should every warranty get a reminder?* — is **unanswered**, and
+ * things.md §6 says in as many words: "Do not decide it in a repository." So the capability exists
+ * (this constant, the entity-typed queries below, `reminders[]` on the thing detail response) and the
+ * switch is off until a human answers it in product/open-questions.md.
+ *
+ * **Before switching it on, read the note on `listDueForMaintenance`** — the scan's copy is
+ * document-shaped and would tell a user their warranty "expires", which is the one thing ADR-0029
+ * exists to prevent.
+ */
+export const THING_ENTITY_TYPE = 'thing'
+
+export type ReminderEntityType = typeof DOCUMENT_ENTITY_TYPE | typeof THING_ENTITY_TYPE
+
+/**
+ * One entity's reminders.
+ *
+ * `entityType` is an explicit parameter rather than defaulted to `'document'`: a default would let a
+ * new domain's call site silently read the *documents* reminders for an id that happens to collide,
+ * and `entity_id` is polymorphic with no foreign key (documents.md §9 q4), so a collision is
+ * expressible rather than impossible.
+ */
 export async function listForEntity(
   actor: ActorContext,
+  entityType: ReminderEntityType,
   entityId: string,
   executor: Executor = db,
 ): Promise<ReminderRow[]> {
@@ -30,7 +61,7 @@ export async function listForEntity(
     .where(
       and(
         scoped(actor, reminders),
-        eq(reminders.entityType, DOCUMENT_ENTITY_TYPE),
+        eq(reminders.entityType, entityType),
         eq(reminders.entityId, entityId),
       ),
     )
@@ -153,6 +184,18 @@ export type DueReminder = ReminderRow & { documentTitle: string | null }
  * `due_on - lead_days <= today` is the fire condition (spec §3), computed in SQL so "today" is
  * the database's date rather than the API process's — a distinction that matters exactly once a
  * year in the wrong timezone.
+ *
+ * ── This is still DOCUMENT-shaped, and it has to stay that way until things.md §9(2) is answered ──
+ *
+ * The join is to `documents`, and `jobs/reminders.ts` renders the notification as
+ * `"{title} expires {due_on}"`. A `entity_type = 'thing'` row would come through here with a null
+ * title and be announced as *"A document expires …"* — and if the join were naively widened, as
+ * *"Dishwasher expires 20 Jan"*, which is precisely the sentence ADR-0029 exists to prevent (a
+ * warranty ending is not an expiry; the dishwasher keeps washing dishes).
+ *
+ * Nothing creates a thing reminder today, so this cannot happen. **Widening the scan is part of
+ * answering §9(2)**, not a preparatory refactor: it needs a second title source and a second copy
+ * register ("Warranty ends", "Service due"), which is a product decision about wording.
  */
 export async function listDueForMaintenance(today: string): Promise<DueReminder[]> {
   return db

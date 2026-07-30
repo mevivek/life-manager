@@ -7,6 +7,7 @@ import { healthRoutes } from './domains/health/health.routes.js'
 import { maintenanceRoutes } from './domains/maintenance/maintenance.routes.js'
 import { meRoutes } from './domains/me/me.routes.js'
 import { remindersRoutes } from './domains/reminders/reminders.routes.js'
+import { thingsRoutes } from './domains/things/things.routes.js'
 import { jobsPlugin } from './jobs/jobs.plugin.js'
 import { idempotencyPlugin } from './lib/idempotency.plugin.js'
 import { loggerOptions } from './lib/logger.js'
@@ -75,6 +76,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(maintenanceRoutes)
   await app.register(meRoutes)
   await app.register(documentsRoutes)
+  await app.register(thingsRoutes)
   await app.register(remindersRoutes)
   await app.register(authRoutes)
 

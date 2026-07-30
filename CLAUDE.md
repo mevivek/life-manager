@@ -18,6 +18,13 @@ measures **248 passed / 112 skipped**; all 112 skipped are the API's — the mai
 endpoint's four constant-time-comparison tests are deliberately NOT database-backed, so they run
 everywhere.
 
+**Those numbers are M1's and are no longer the suite.** After M4 step 1 (the Things API) it is
+**674 tests: web 409 · api 213 · shared 52 — 674/0 measured on 2026-07-30** against a real Postgres,
+three consecutive runs. With no database available it is **477 passed / 197 skipped**; all 197 skipped
+are the API's. The M1 figures are kept above because the paragraph they sit in is about M1's "done
+when", and because a count in this file has been wrong before — take the measurement, don't trust
+either number.
+
 **You can run the database-backed suites in this container without Docker.** Postgres 16 is installed
 at `/usr/lib/postgresql/16/bin`, and `initdb` refuses to run as root, so:
 `chown postgres <datadir> && su postgres -c "…/initdb -D <datadir> -U postgres --auth=trust"`, start
@@ -113,6 +120,12 @@ heading face, and a two-register **voice** (`lib/feel.ts`, `lib/voice.ts`; desig
 ADR-0028's `POST /api/v1/maintenance::run-daily` — the only endpoint with no session, and the only one
 whose credential is a header rather than a cookie.
 
+What **M4 step 1** added on top: `things`, `thing_services`, `thing_photos` with their own full-text
+search and presign contract, `GET /api/v1/things/holders`, a service log whose `service_due_on` the
+server recomputes, and **the foreign key on `documents.thing_id`** — `on delete set null`, because
+deleting a car must not shred its paperwork. That constraint is why a document can no longer be linked
+to a made-up uuid, which is what `documents.test.ts` used to do.
+
 **The offline read cache from [ADR-0013](docs/decisions/0013-read-only-offline-v1.md) is built** —
 pulled ahead of M1's "done when" by an explicit product call, so the app can be iterated on without
 provisioning R2 or VAPID. The Query cache persists to IndexedDB via `apps/web/src/lib/persister.ts`;
@@ -188,14 +201,16 @@ anything visual; the ADR is there for *why*. Six things will bite a session that
 whole second domain and rewrote capture. Three things follow, and the first one will look like a bug if
 you don't know it:
 
-- **THINGS EXISTS AS UI ONLY.** [ADR-0029](docs/decisions/0029-the-things-domain.md) pulls M4's Assets
-  forward as **Things** — the physical objects a household owns, which *own the paperwork proving them*.
-  The shared contract, both screens, the capture track, the cross-domain horizon and the
-  document↔thing link are built. **There are no tables, no repository, no service and no routes**, so
-  `useThings` 404s and every Things screen renders its error state against the deployed API. That is
-  expected and temporary; the server half is M4 step 1, and it must implement
-  `packages/shared/src/things.ts` rather than inventing a second shape (invariant 9).
-  [domains/things.md](docs/domains/things.md) §10 says exactly which halves exist.
+- **THINGS IS NOW WHOLE — the server half landed 2026-07-30, and the note that used to be here said the
+  opposite.** [ADR-0029](docs/decisions/0029-the-things-domain.md) pulled M4's Assets forward as
+  **Things** — the physical objects a household owns, which *own the paperwork proving them* — and
+  shipped the client first. M4 step 1 built `things`, `thing_services`, `thing_photos`, the repository,
+  two services and every endpoint in [things.md](docs/domains/things.md) §5, implementing
+  `packages/shared/src/things.ts` **unchanged** (invariant 9). `useThings` no longer 404s.
+  **`apps/api/src/db/scoped.ts` was not touched**, which is the ADR-0006 promise ADR-0029 said this
+  domain would measure. Two things are still off: **§9(2) is unanswered so nothing creates a thing
+  reminder** (the capability is built, the switch is not — things.md §6, debt D58), and **Things writes
+  do not use the offline outbox yet**. things.md §10 lists every file and what is left.
 - **COVER IS NOT EXPIRY, and that is the one design rule most likely to be broken by accident.** A
   passport that expires is *invalid*; a dishwasher whose warranty ends **keeps washing dishes**. So
   there is a second status ladder — four states, a proportional depleting **bar** rather than the
@@ -221,7 +236,7 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D55 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D59 with triggers, so check there
 before "fixing" one. **D54 and D55 are the two newest and both are traps for a fresh session:**
 the web and API deploy on separate triggers, so a response field added to the client must never be
 *required* of the server (it took the archive down once); and `lib/outbox.test.ts` is **flaky**, so
@@ -244,14 +259,18 @@ Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   **338/0 is the target; 240/98 is what a container with no Docker shows you** — the 98 skipped are
-   all the API's, and 202 of the 240 that do run are web tests needing no database. Cheaper than
-   trusting a green deploy: start the local Postgres 16 as described under Status and run it properly.
+   **674/0 is the target; 477 passed / 197 skipped is what a container with no database shows you** —
+   every one of the 197 is the API's, and most of the 477 that do run are web tests needing no
+   database. Cheaper than trusting a green deploy: start the local Postgres 16 as described under
+   Status and run it properly.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
    [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.
 3. **When you assert a count, assert a non-zero one.** `file_count` was 0 for all of M1 because
-   every test happened to expect 0 (debt D33). The browser found it; the suite could not.
+   every test happened to expect 0 (debt D33). The browser found it; the suite could not. **It paid
+   off immediately on Things:** a `document_count` test that drove the number to 2, 1 and 2-in-another-
+   space caught a missing `space_id` predicate that let another space inflate the count — while the
+   nested `documents` list beside it was correct all along.
 4. **Q1 → expiry-only reminders; Q2 → title-only capture.** Both are decisions, not defaults
    ([open-questions.md](docs/product/open-questions.md) §2). Do not add a required field or a
    review-date column without re-answering them.
@@ -263,7 +282,7 @@ Four things worth knowing before you touch anything:
 | Task | Read |
 |---|---|
 | Anything touching **auth, ownership, or crypto** | [`docs/security-model.md`](docs/security-model.md) **in full**, first |
-| **Anything in the THINGS domain** — a warranty, a serial, a service date, an owned object | [`domains/things.md`](docs/domains/things.md) then [`ADR-0029`](docs/decisions/0029-the-things-domain.md). **The UI is built and the API is not** (things.md §10) — so `useThings` 404s and every Things screen renders its error state. That is expected, not a bug to chase |
+| **Anything in the THINGS domain** — a warranty, a serial, a service date, an owned object | [`domains/things.md`](docs/domains/things.md) then [`ADR-0029`](docs/decisions/0029-the-things-domain.md). **Both halves are built now** (things.md §10 lists every file). Three traps: a **serial** is plaintext and derives `serial_last4` server-side, so it is in `REDACTED_PATHS` and no copy may call it encrypted; the **ownership triple** moves together and returning to `here` clears the other two in one statement; and **nothing creates a thing reminder** because §9(2) is unanswered — an empty `reminders[]` is correct, not a bug |
 | **Showing a warranty or a service date anywhere** | [`conventions/design.md`](docs/conventions/design.md) §2a — the **cover ladder**, four states. **Cover is NOT expiry**: a lapsed warranty still washes dishes, so it never borrows `ExpiryStatus`'s gauge, never says "Expired", and never pulses. Its boundary is 60 days where the expiry ladder's is 45 |
 | **Touching capture / the Add sheet** | [`ADR-0030`](docs/decisions/0030-capture-as-a-stepped-wizard.md) — six steps, two tracks. **Q2 survives it: exactly one field is required per track and every other step draws a visible *Skip for now*.** Adding a validation guard to a step because a blank one looks unfinished is the regression this ADR exists to prevent |
 | **Adding a route with a `:verb` action** | [`docs/conventions/api.md`](docs/conventions/api.md) §2 — the `::` escape, and why a colon may not follow a parameter |
@@ -289,7 +308,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D53, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing. **D53 before touching `scripts/provision.*`** |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D59, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur. D50/D51 explain a slow launch — measure before re-diagnosing. **D53 before touching `scripts/provision.*`** |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**

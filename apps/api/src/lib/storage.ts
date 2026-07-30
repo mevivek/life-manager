@@ -41,6 +41,27 @@ export function objectKeyFor(args: {
 }
 
 /**
+ * `spaces/{spaceId}/things/{thingId}/{photoId}` — things.md §3, the same shape as a document file's
+ * key and for the same reasons.
+ *
+ * A separate function rather than a generalised `objectKeyFor({ kind, ownerId, fileId })`: the two
+ * keys are the *only* two, a generic one would take the collection name as a parameter, and a
+ * parameterised key is one string away from being a client-supplied path. Invariant 6 is easier to
+ * keep true when each key shape is a literal in one function.
+ *
+ * Every segment is a server-generated UUID or a value read from a row the actor already passed the
+ * space filter for, so there is no traversal to sanitise — the shape is unreachable rather than
+ * merely validated.
+ */
+export function thingPhotoKeyFor(args: {
+  spaceId: string
+  thingId: string
+  photoId: string
+}): string {
+  return `spaces/${args.spaceId}/things/${args.thingId}/${args.photoId}`
+}
+
+/**
  * Built lazily and cached, rather than at module load. Importing this module must not throw when
  * R2 is unconfigured — the whole point of the optional group in `env.ts` is that Documents works
  * without storage, and a module-level `new S3Client(...)` would take the process down at boot.

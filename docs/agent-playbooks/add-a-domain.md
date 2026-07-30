@@ -51,6 +51,19 @@ domain is the vault. Anything else needs an ADR
 - [ ] **Response schemas** for every endpoint
 - [ ] Reuse `common.ts` primitives; don't redefine cursors or timestamps
 - [ ] No imports from either app
+- [ ] Query schemas are **`z.strictObject`**, spreading `pageQueryShape` rather than `.extend()`ing a
+      schema — `.extend()` on a non-strict object produces a non-strict object, and strictness is the
+      whole of conventions/api.md §7 (debt D27)
+- [ ] **Check every schema you REUSE from another domain for an assumption that it is the only
+      domain.** Added at M4 step 1: `reminderSchema.entity_type` was `z.literal('document')`, and
+      `reminders` is a deliberately generic table — so a thing's reminders failed the *thing's own*
+      response schema, which is a 500 on a screen that draws them. Widening a response enum is not a
+      breaking change (conventions/api.md §1); leaving it narrow is a runtime error
+
+> **Adding a field to a shared response schema is a deploy-ordering hazard.** The web and API deploy on
+> separate triggers, so a field the client *requires* of the server takes the app down while the API
+> lags — debt **D54**, which happened. `.nullish().default(null)`, never `.nullable()`, for anything the
+> server might not send yet.
 
 ## 3. Database schema
 
@@ -59,6 +72,11 @@ domain is the vault. Anything else needs an ADR
 
 - [ ] Universal columns on every table, **including `space_id`** — use `spaceScoped()`,
       `timestamps()`, `softDelete()` rather than writing them out
+- [ ] **`versioned()` on every table whose rows a user can EDIT** — the ADR-0024 optimistic-concurrency
+      counter. Its `PATCH` then takes the version as a **required** field, so a forgotten precondition
+      is a type error rather than silent last-write-wins, and its `DELETE` takes `?version=` (debt
+      D41). An append-or-remove child table (a service log, a file list) does not need one, and should
+      carry a comment saying so — otherwise the next session adds it "for consistency"
 - [ ] **Re-export the tables from `db/schema/index.ts`.** That barrel is the only thing
       `drizzle.config.ts` and `db/client.ts` read, so a table missing from it does not exist as far
       as migrations or the query builder are concerned — and the failure is a silently absent table,
@@ -68,6 +86,31 @@ domain is the vault. Anything else needs an ADR
 - [ ] **Add the new tables to `truncateAll()` in `src/test/db.ts`.** Forgetting this shows up as one
       suite polluting the next, which looks like flakiness rather than a missing line
 - [ ] Migration generated; seed script extended
+
+> ### If another domain already has a column pointing at your new table
+>
+> Added at M4 step 1, because `documents.thing_id` had shipped as a bare `uuid` with no constraint
+> months before `things` existed. Three things follow, and none is obvious:
+>
+> 1. **The importing direction decides whether you get a cycle.** `documents.schema.ts` imports
+>    `things.schema.ts` for its `.references()`, and nothing on `things` points back — the whole
+>    relationship is that one column. Keep it that way: a mutual reference between two domain schema
+>    files is an import cycle Drizzle will not save you from.
+> 2. **Choose `on delete` from the domain doc, not from habit.** `set null` was a business rule
+>    (things.md §4 rule 5 — deleting a car must not shred its paperwork, and the delete control's copy
+>    says so). `cascade` is the default people reach for and would have made that copy a lie.
+> 3. **A pre-existing column may already hold values your new constraint rejects.** Adding the foreign
+>    key to a table that has been accepting arbitrary uuids fails on the first dangling row — and
+>    ADR-0023 applies migrations **on boot**, so that is a production outage rather than a failed
+>    build. Add a `UPDATE … SET fk = NULL WHERE NOT EXISTS (…)` statement to the generated migration
+>    *before* the `ADD CONSTRAINT`, with a comment saying it is hand-added and why. It is expected to
+>    change zero rows; "expected to change zero rows" and "cannot take the API down" are different
+>    claims.
+>
+> **Also update `migrations.test.ts`**: every constraint a domain doc states as a rule should be
+> asserted at the database level there, the way the one-primary-file and one-personal-space indexes are.
+> A soft delete does not fire `on delete set null`, so an API-level test cannot reach that constraint at
+> all — it needs a hard `delete from` in that file.
 
 > **Generated columns must be IMMUTABLE, which is narrower than it looks.** M1 lost time to this:
 > `array_to_string(tags, ' ')` is **STABLE**, and Postgres rejects the entire table with
@@ -92,6 +135,19 @@ domain is the vault. Anything else needs an ADR
 > `db.$count(table, where)`, which qualifies by construction. This cost M1 a bug that 136 tests
 > missed — debt D33.
 
+> ### A correlated count over ANOTHER domain's table needs its own space predicate
+>
+> Added at M4 step 1, where it was a real (caught) cross-space leak. `things.document_count` counts
+> rows in `documents`, and the outer query being `scoped()` does **not** scope the subquery. The
+> tempting argument — *"they are in the same space by construction"* — is false wherever the linking
+> column is client-settable: a foreign key checks that the parent **exists** and cannot check whose
+> space it is in, so a caller in space B can file a row against space A's id and inflate space A's
+> count. Write `eq(child.spaceId, parent.spaceId)` into the `db.$count` predicate.
+>
+> The tell that this survives a suite: the *nested list* beside the count goes through `scoped()` and is
+> correct, so the row says "3 documents" above a section listing two. Assert both, in one test, with a
+> second space involved.
+
 ## 5. Service
 
 `<domain>.service.ts` — business rules, owns transactions, no HTTP.
@@ -99,6 +155,23 @@ domain is the vault. Anything else needs an ADR
 - [ ] Every numbered rule from domain doc §4 is implemented
 - [ ] Typed domain errors, not status codes
 - [ ] pg-boss jobs enqueued inside the transaction where rollback must cancel them
+- [ ] **Columns that must move together get ONE helper that writes all of them**, called from create and
+      update alike. `documents.service.ts` has `identifierColumns` and `holderColumns`; Things added
+      `serialColumns` and `ownershipColumns`. The failure a helper prevents is silent and only visible
+      in a list: a patch clearing `holder` leaves "Wife" behind, or an edit updates a value and leaves
+      yesterday's derived mask on the row. A `.refine()` is **not** the tool for this — a refine can
+      only reject the bad combination, and the useful behaviour is usually to fix it
+- [ ] **A rule that is a question the product has not answered gets the CAPABILITY and not the switch.**
+      Build the plumbing, leave nothing that creates the row, and put a test on the *absence* naming the
+      open question and which test to change. Things' §9(2) (automatic warranty reminders) is the worked
+      example — the domain doc said in as many words "do not decide it in a repository"
+
+> **A partial unique index is checked per statement, not at commit — so order the statements.** Added at
+> M4 step 1: `confirmPhotoUpload` confirmed the incoming photo and *then* demoted the old hero, which
+> meant one statement's worth of two confirmed heroes and a flat rejection from Postgres. Symptom was a
+> 500 on the second photo of any thing. Demote first, promote second. The same shape as
+> `documents.files.service.ts`'s demote-then-promote, which had it right — **read the sibling service
+> before writing yours.**
 
 ## 6. Routes
 
@@ -169,3 +242,27 @@ playbook in the same commit.**
 That is not optional politeness. The playbook is the mechanism by which the next session
 does this consistently; leaving it stale means the next session improvises differently, and
 the domains diverge. [roadmap.md](../roadmap.md) M4 treats this as a real test.
+
+### The M4 step 1 measurement — Things, 2026-07-30
+
+The first domain added by following this file rather than by writing it. **The structure worked**: one
+folder, the four layers in order, and — the thing ADR-0006 said would be measured — **`db/scoped.ts` was
+not touched.** `spaceScoped()` gave the three new tables the columns `SpaceScopedTable` structurally
+requires, so `scoped(actor, things)` type-checked on first use.
+
+Five things had to be improvised, and each is now a checklist item or a note above:
+
+1. `versioned()` was not mentioned at all (§3), though ADR-0024 requires it on any editable table.
+2. Nothing covered **a foreign key from a domain that already exists into the new one** — the import
+   direction, choosing `on delete` from the domain doc, and the migration guard against pre-existing
+   dangling values (§3).
+3. Nothing warned that a **correlated count over another domain's table needs its own space
+   predicate** (§4). This was a real cross-space leak, caught only because the count test drove a
+   non-zero value with a second space present.
+4. Nothing said that a **partial unique index is checked per statement**, so demote-then-promote
+   ordering matters (§5). This was a 500.
+5. Nothing said to check **reused shared schemas for single-domain assumptions** (§2) — a `z.literal`
+   on a generic table's discriminator.
+
+Two smaller ones, folded into §3: adding the new tables' constraints to `migrations.test.ts`, and the
+`z.strictObject` requirement on query schemas (which conventions/api.md §7 has but this file did not).

@@ -556,6 +556,83 @@ export async function distinctIssuers(actor: ActorContext, limit = 50): Promise<
   return rows.flatMap((row) => (row.issuer === null ? [] : [row.issuer]))
 }
 
+// ── The link to a thing (ADR-0029) ───────────────────────────────────────────
+//
+// Both of these live here rather than in `things.repository.ts` because the column lives here:
+// `documents.thing_id` is the whole relationship, read from both sides but owned by one
+// (things.md §3). A things repository writing to `documents` would put two owners on one column.
+
+/**
+ * The documents filed against one thing — the *"Its documents"* section of the Thing detail screen.
+ *
+ * Returns a **summary**, not whole documents, and that is a decision rather than a saving:
+ * `documentSchema` carries the full plaintext `identifier` on every response (ADR-0027), and nesting
+ * it here would put every linked document's number on a Things response for no gain — the section
+ * draws a title, a type, an issuer and a status, and tapping a row navigates to the document itself.
+ * See the note on `linkedDocumentSchema` in `packages/shared/src/things.ts`.
+ *
+ * `scoped()` still applies, so a caller who somehow knows a thing id in another space gets nothing.
+ */
+export async function listLinkedToThing(
+  actor: ActorContext,
+  thingId: string,
+  executor: Executor = db,
+): Promise<
+  {
+    id: string
+    title: string
+    docType: DocumentType
+    issuer: string | null
+    expiresOn: string | null
+  }[]
+> {
+  return (
+    executor
+      .select({
+        id: documents.id,
+        title: documents.title,
+        docType: documents.docType,
+        issuer: documents.issuer,
+        expiresOn: documents.expiresOn,
+      })
+      .from(documents)
+      .where(and(scoped(actor, documents), eq(documents.thingId, thingId)))
+      // `expires_on` first, nulls last — the same order the archive uses, so the section reads as
+      // "what needs doing about this car" rather than as insertion order.
+      .orderBy(sql`${documents.expiresOn} asc nulls last`, documents.title)
+  )
+}
+
+/**
+ * Clears the link on every document filed against one thing — things.md §4 rule 5.
+ *
+ * Called by `things.service.ts` inside the transaction that soft-deletes the thing. **The documents
+ * themselves are untouched**: the copy on the delete control promises *"its documents stay in
+ * Documents — deleting the thing doesn't shred the paperwork"*, and a `cascade` on the foreign key
+ * would have made that a lie.
+ *
+ * Why application code and not the constraint: `on delete set null` fires only on a hard delete, and
+ * a user delete is a soft one (conventions/data.md §3). Without this, a document would keep pointing
+ * at a thing that answers 404, and the detail screen's *Belongs to* card would draw a dead link.
+ *
+ * Deliberately **not** version-checked. This is a consequence of a delete the caller already passed
+ * a version precondition for, not an edit of its own — refusing it because some linked document had
+ * moved on would leave the thing deleted and its documents dangling, which is strictly worse.
+ */
+export async function unlinkFromThing(
+  actor: ActorContext,
+  thingId: string,
+  executor: Executor = db,
+): Promise<number> {
+  const changed = await executor
+    .update(documents)
+    .set({ thingId: null, updatedAt: new Date() })
+    .where(and(scoped(actor, documents), eq(documents.thingId, thingId)))
+    .returning({ id: documents.id })
+
+  return changed.length
+}
+
 /** Counts live documents in the actor's spaces. Used by the dashboard and by tests. */
 export async function countAll(actor: ActorContext): Promise<number> {
   const rows = await db.select({ total: count() }).from(documents).where(scoped(actor, documents))

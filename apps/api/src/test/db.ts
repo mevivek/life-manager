@@ -34,6 +34,7 @@ export const describeDb: typeof describe | typeof describe.skip = hasTestDatabas
 export async function truncateAll(): Promise<void> {
   await db.execute(
     sql`truncate table reminders, push_subscriptions, document_files, documents,
+                       thing_photos, thing_services, things,
                        idempotency_keys, space_members, spaces,
                        sessions, accounts, verifications, users
         restart identity cascade`,

@@ -132,6 +132,13 @@ mono kicker for a thing event, the existing **round** dot and no kicker for a do
   another session's work. Until then `useThings` 404s and every Things screen renders its error state.
   That is a deliberate, temporary state and it is the reason `packages/shared/src/things.ts` exists
   first: whichever session builds the API implements *this* contract rather than inventing a second.
+
+  > **Resolved the same day, 2026-07-30.** The server half landed as M4 step 1 and implemented
+  > `packages/shared/src/things.ts` **unchanged** — the contract-first bet paid off exactly as stated.
+  > The ADR-0006 measurement this ADR asked for also came out clean: `apps/api/src/db/scoped.ts` was not
+  > touched. What did *not* come free was the playbook, which needed five amendments — see
+  > [add-a-domain.md](../agent-playbooks/add-a-domain.md) § *If this playbook didn't work*.
+  > Two client gaps remain (offline outbox, photo verbs); [things.md](../domains/things.md) §10 has them.
 - **Sum insured is computed in the client**, which means the number is only as complete as the page
   loaded — exactly the `complete` caveat the Now footer already carries. It is drawn only when a
   contents policy is found, so the common case is that the card is absent rather than wrong.

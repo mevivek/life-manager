@@ -117,6 +117,47 @@ export async function createDocument(
 }
 
 /**
+ * Creates a thing through the **real endpoint**, for the same reason `createDocument` does: a fixture
+ * that inserted rows directly would keep passing after the service's business rules broke.
+ *
+ * This is also the fixture `documents.test.ts` needs now that `documents.thing_id` has a **real
+ * foreign key** (things.md §4 rule 5). Before the constraint existed those tests linked to
+ * fabricated uuids; a document can only point at a thing that exists, so they create one first.
+ */
+export async function createThing(
+  app: FastifyInstance,
+  user: UserFixture,
+  overrides: Record<string, unknown> = {},
+): Promise<{ id: string; version: number; body: Record<string, unknown> }> {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/things',
+    ...authAs(user),
+    payload: { name: 'Dishwasher', ...overrides },
+  })
+
+  if (response.statusCode !== 201) {
+    throw new Error(`createThing: expected 201, got ${response.statusCode}: ${response.body}`)
+  }
+
+  const body = response.json<Record<string, unknown>>()
+  const id = body.id
+  if (typeof id !== 'string') throw new Error(`createThing: no id in ${response.body}`)
+
+  /**
+   * Asserted to be a real starting version rather than merely present — the same reasoning as
+   * `createDocument`'s. A `?? 1` here would let the response schema stop returning `version`
+   * entirely while the whole suite carried on passing against a hard-coded guess (debt D33).
+   */
+  const version = body.version
+  if (typeof version !== 'number' || version < 1) {
+    throw new Error(`createThing: expected a version >= 1, got ${JSON.stringify(version)}`)
+  }
+
+  return { id, version, body }
+}
+
+/**
  * Two users in two separate spaces — the fixture every cross-space test needs.
  *
  * conventions/testing.md §2: "a test with a single user cannot catch a missing space filter." This

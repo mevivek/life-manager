@@ -49,6 +49,19 @@ export const REDACTED_PATHS = [
    */
   'identifier',
   '*.identifier',
+
+  /**
+   * A thing's serial — IMEI, vehicle registration, hallmark, order number. things.md §4 rule 7 puts
+   * it in this list by name, for exactly the reason `identifier` is here: it is stored **in full**
+   * and in plaintext (invariant 7, ADR-0009), so a request body or a detail response caught in a log
+   * line is a whole registration number.
+   *
+   * `serial_last4` is deliberately NOT redacted, on the same reasoning as `identifier_last4`: it is
+   * the display form, it is on every list row, and censoring it would make request logs unreadable
+   * while protecting nothing.
+   */
+  'serial',
+  '*.serial',
 ] as const
 
 export const loggerOptions = {

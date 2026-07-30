@@ -159,7 +159,7 @@ export async function getDetail(actor: ActorContext, id: string): Promise<Docume
 
   const [files, reminders] = await Promise.all([
     repository.listFiles(actor, id),
-    remindersRepository.listForEntity(actor, id),
+    remindersRepository.listForEntity(actor, remindersRepository.DOCUMENT_ENTITY_TYPE, id),
   ])
 
   return {
@@ -251,9 +251,15 @@ export async function create(actor: ActorContext, input: DocumentCreate): Promis
         ...holderColumns(input.holder, input.relation),
         /**
          * Settable at capture because that is where it is usually known: a vehicle's papers
-         * checklist opens the form already aware of which thing it is filing against
-         * (things.md §7). Unvalidated against a `things` row on purpose — there is no such table
-         * yet, and the schema's note on `thingId` says what the session that adds it must do.
+         * checklist opens the form already aware of which thing it is filing against (things.md §7).
+         *
+         * **Now backed by a real foreign key** (`on delete set null` — things.md §4 rule 5), so an id
+         * that names no thing is rejected by Postgres rather than stored as a dangling link. There is
+         * deliberately **no space check** on top of that: a `thing_id` is a *label on a row*, exactly
+         * like `holder`, and `scoped()` is still the only thing deciding what anyone can read. A
+         * caller who supplies a thing id from another space gets a link that resolves to nothing on
+         * their own screen and reveals nothing about the other space, which is the same outcome as
+         * before the constraint existed and is what `documents.test.ts` asserts.
          */
         thingId: input.thing_id ?? null,
         issuedOn,

@@ -2,7 +2,14 @@ import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { buildApp } from '../../app.js'
 import { describeDb, withCleanDatabase } from '../../test/db.js'
-import { authAs, createDocument, seedTwoUsers, seedUserWithSpace } from '../../test/factories.js'
+import {
+  authAs,
+  createDocument,
+  createThing,
+  seedTwoUsers,
+  seedUserWithSpace,
+  type UserFixture,
+} from '../../test/factories.js'
 
 /**
  * Documents integration tests, against a real Postgres.
@@ -414,24 +421,34 @@ describeDb('documents', () => {
   /**
    * ── ADR-0029: `thing_id`, the link to a thing ─────────────────────────────
    *
-   * The column has **no foreign key yet** and that is deliberate: `things` does not exist, and
-   * ADR-0023 migrates on boot, so a constraint on a missing table would take the API down rather
-   * than fail a build (see the block comment on `thingId` in `documents.schema.ts`). So these
-   * tests use plain fabricated uuids and there is nothing to insert first — the session that
-   * creates `things` adds the constraint with `on delete set null` (things.md §4 rule 5).
+   * **These tests used fabricated uuids until the Things API landed**, because the column shipped
+   * with no foreign key: `things` did not exist, and ADR-0023 migrates on boot, so a constraint on a
+   * missing table would have taken the API down rather than failing a build.
+   *
+   * The constraint now exists, `on delete set null` (things.md §4 rule 5), so a document can only
+   * point at a thing that really exists and every test here creates one first. **Nothing was
+   * weakened to get there** — the assertions are the same or stronger, and the cross-space test in
+   * particular is now two-sided against *real* rows rather than two invented uuids.
    *
    * The link is written from the **document** side, because that is where the column is
    * (things.md §5): `PATCH /api/v1/documents/:id { thing_id }`. Both screens draw it, one
    * endpoint sets it.
    */
 
-  // Obvious fakes (conventions/testing.md §5). Two of them, because half of what is worth
-  // asserting here is that a filter EXCLUDES the other one.
-  const THING_A = '2a000000-0000-4000-8000-00000000000a'
-  const THING_B = '2b000000-0000-4000-8000-00000000000b'
+  /**
+   * Two things per test, because half of what is worth asserting here is that a filter EXCLUDES the
+   * other one. A local helper rather than shared state — conventions/testing.md §5: each test seeds
+   * what it needs.
+   */
+  async function twoThings(user: UserFixture) {
+    const a = await createThing(app, user, { name: 'Car', kind: 'vehicle' })
+    const b = await createThing(app, user, { name: 'Laptop', kind: 'laptop' })
+    return { THING_A: a.id, THING_B: b.id }
+  }
 
   it('ADR-0029: stores thing_id on create and returns it on the response', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A } = await twoThings(user)
 
     const created = await app.inject({
       method: 'POST',
@@ -474,6 +491,7 @@ describeDb('documents', () => {
 
   it('ADR-0029: returns thing_id on the LIST response, not only on detail', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A } = await twoThings(user)
     await createDocument(app, user, { title: 'Boiler warranty', thing_id: THING_A })
 
     const list = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
@@ -490,6 +508,7 @@ describeDb('documents', () => {
 
   it('ADR-0029: a patch sets the link on a document that had none', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A } = await twoThings(user)
     const document = await createDocument(app, user, { title: 'Service record' })
     expect(document.body.thing_id).toBeNull()
 
@@ -506,6 +525,7 @@ describeDb('documents', () => {
 
   it('ADR-0029: an explicit null clears the link, and an absent key leaves it alone', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A } = await twoThings(user)
     const document = await createDocument(app, user, { title: 'Receipt', thing_id: THING_A })
 
     /**
@@ -537,6 +557,7 @@ describeDb('documents', () => {
 
   it('ADR-0029: ?thing_id= lists that thing’s documents and excludes the rest', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A, THING_B } = await twoThings(user)
     await createDocument(app, user, { title: 'Car registration', thing_id: THING_A })
     await createDocument(app, user, { title: 'Car insurance', thing_id: THING_A })
     await createDocument(app, user, { title: 'Laptop receipt', thing_id: THING_B })
@@ -565,6 +586,7 @@ describeDb('documents', () => {
 
   it('ADR-0029: rejects a non-uuid thing_id filter rather than reading the whole table', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A } = await twoThings(user)
     await createDocument(app, user, { title: 'Car insurance', thing_id: THING_A })
 
     // `uuidSchema` inside a `z.strictObject` — debt D27. A malformed filter must fail loudly; the
@@ -579,20 +601,23 @@ describeDb('documents', () => {
 
   it('ADR-0029: a thing_id filter cannot cross a space boundary, and a patch is 404', async () => {
     const { alice, bob } = await seedTwoUsers(app)
+    const { THING_A, THING_B } = await twoThings(alice)
     const document = await createDocument(app, alice, {
       title: 'Alice car insurance',
       thing_id: THING_A,
     })
 
     /**
-     * Bob files something against the **same** id — which he can, because there is no foreign key
-     * and nothing stops two spaces naming the same uuid. That is what makes this two-sided rather
-     * than vacuous: an empty answer would also be produced by a caller who owns nothing at all, so
-     * the assertion is "Bob sees his own row and *only* his own".
+     * Bob files something against **Alice's** thing id — which he can, and that is the point.
      *
-     * The link is a *label on a row*, exactly like `holder`: `scoped()` is still the only thing
-     * deciding what a caller may read (invariants 2 and 3). Knowing a thing's id — which a client in
-     * another space could guess or be told — must buy nothing.
+     * The foreign key checks that a thing *exists*; it does not and cannot check whose space it is
+     * in. So this is the sharp version of the case: Bob holds a real id belonging to another space
+     * (guessed, or told to him), and it must buy him **nothing**. The link is a *label on a row*,
+     * exactly like `holder` — `scoped()` is still the only thing deciding what a caller may read
+     * (invariants 2 and 3), and the filter answers only from Bob's own space.
+     *
+     * Two-sided rather than vacuous: an empty answer would also be produced by a caller who owns
+     * nothing at all, so the assertion is "Bob sees his own row and *only* his own".
      */
     await createDocument(app, bob, { title: 'Bob car insurance', thing_id: THING_A })
     // Plus one of his own that is linked to nothing, so a dropped filter fails here too rather than
@@ -631,6 +656,7 @@ describeDb('documents', () => {
 
   it('ADR-0029: the version precondition still governs a thing_id patch', async () => {
     const user = await seedUserWithSpace(app)
+    const { THING_A, THING_B } = await twoThings(user)
     const document = await createDocument(app, user, { title: 'Car insurance' })
 
     const linked = await app.inject({

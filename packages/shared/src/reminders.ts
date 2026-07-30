@@ -1,20 +1,32 @@
 import { z } from 'zod'
 import { isoDateSchema, uuidSchema } from './common.js'
-import { reminderChannelSchema, reminderSchema } from './documents.js'
+import { reminderChannelSchema, reminderEntityTypeSchema, reminderSchema } from './documents.js'
 
 /**
  * Reminders are **generic on purpose** — keyed by `entity_type` + `entity_id` rather than owned
  * by Documents, so Assets and Money (M4) reuse this table instead of each inventing their own
  * (domains/documents.md §3).
  *
- * `reminderSchema` itself lives in `documents.ts` because that is where the only current
- * `entity_type` is defined and re-exporting it from two places would be worse. When the second
- * entity type arrives, move `reminderSchema` here and widen `entity_type` from a literal to an
- * enum — that is the one edit this split costs, and it is cheaper than a circular import today.
+ * `reminderSchema` itself lives in `documents.ts` because that is where the `entity_type` enum and
+ * the channel enum are defined and re-exporting them from two places would be worse.
+ *
+ * ── The second entity type has arrived, and the predicted edit was made ──
+ *
+ * This note used to say: *"when the second entity type arrives, move `reminderSchema` here and widen
+ * `entity_type` from a literal to an enum — that is the one edit this split costs."* ADR-0029's
+ * Things API is that arrival. **Half of it was done:** `entity_type` is now
+ * `reminderEntityTypeSchema` (`document | thing`), which is what a thing's detail response needs to
+ * validate at all.
+ *
+ * The **move** was deliberately not done. `documentDetailResponseSchema` nests `reminderSchema`, so
+ * moving it here would make `documents.ts` import `reminders.ts` while `reminders.ts` imports
+ * `reminderChannelSchema` from `documents.ts` — the circular import the original note was avoiding,
+ * now real rather than hypothetical. `things.ts` imports it from `documents.ts` for the same reason.
+ * Moving it needs the channel enum moved too, which is a bigger, separate change.
  */
 
-export type { Reminder, ReminderChannel } from './documents.js'
-export { reminderChannelSchema, reminderSchema }
+export type { Reminder, ReminderChannel, ReminderEntityType } from './documents.js'
+export { reminderChannelSchema, reminderEntityTypeSchema, reminderSchema }
 
 /**
  * `POST /api/v1/documents/:id/reminders`.

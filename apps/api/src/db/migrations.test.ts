@@ -148,6 +148,179 @@ describeDb('schema', () => {
     )
   })
 
+  it('created the Things tables', async () => {
+    const result = await db.execute<{ table_name: string }>(
+      sql`select table_name from information_schema.tables
+          where table_schema = 'public' and table_type = 'BASE TABLE'`,
+    )
+
+    const names = result.rows.map((row) => row.table_name)
+    expect(names).toEqual(expect.arrayContaining(['things', 'thing_services', 'thing_photos']))
+  })
+
+  it('rule 5: documents.thing_id is ON DELETE SET NULL, not cascade', async () => {
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  things.md §4 rule 5, asserted at the DATABASE level rather than through the API.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * `things.test.ts` covers the delete a user can actually perform, which is a **soft** delete —
+     * the service clears `documents.thing_id` in application code, because `on delete set null` does
+     * not fire for an `UPDATE … SET deleted_at`.
+     *
+     * That leaves the constraint itself untested by any API-level test, and it is the half that
+     * matters if a row is ever genuinely purged (account deletion, conventions/data.md §3). So this
+     * hard-deletes the row and checks the outcome. A `cascade` here would let one purge destroy a
+     * passport-adjacent archive because somebody sold a car — and the copy on the delete control
+     * ("its documents stay in Documents") would be a lie.
+     */
+    const userId = '88888888-8888-4888-8888-888888888888'
+    await db.execute(
+      sql`insert into users (id, name, email, email_verified)
+          values (${userId}, 'Fixture', 'fixture5@example.test', false)`,
+    )
+    const space = await db.execute<{ id: string }>(
+      sql`insert into spaces (name, kind) values ('S', 'shared') returning id`,
+    )
+    const spaceId = space.rows[0]?.id
+    const thing = await db.execute<{ id: string }>(
+      sql`insert into things (space_id, created_by, name, kind)
+          values (${spaceId}, ${userId}, 'Car', 'vehicle') returning id`,
+    )
+    const thingId = thing.rows[0]?.id
+    expect(thingId).toBeDefined()
+
+    await db.execute(
+      sql`insert into documents (space_id, created_by, title, thing_id)
+          values (${spaceId}, ${userId}, 'Car registration', ${thingId})`,
+    )
+
+    await db.execute(sql`delete from things where id = ${thingId}`)
+
+    const survivors = await db.execute<{ title: string; thing_id: string | null }>(
+      sql`select title, thing_id from documents where space_id = ${spaceId}`,
+    )
+    // The document SURVIVES, with the link cleared. Both halves matter: an empty result set would
+    // mean a cascade, and a non-null `thing_id` is impossible but would mean the FK is absent.
+    expect(survivors.rows).toEqual([{ title: 'Car registration', thing_id: null }])
+  })
+
+  it('rejects a document linked to a thing that does not exist', async () => {
+    // The other direction of the same constraint. Before it existed, `documents.thing_id` could hold
+    // any uuid — which is why `documents.test.ts` used fabricated ones and why migration 0007 nulls
+    // any dangling value before adding the constraint.
+    const userId = '99999999-9999-4999-8999-999999999999'
+    await db.execute(
+      sql`insert into users (id, name, email, email_verified)
+          values (${userId}, 'Fixture', 'fixture6@example.test', false)`,
+    )
+    const space = await db.execute<{ id: string }>(
+      sql`insert into spaces (name, kind) values ('S', 'shared') returning id`,
+    )
+    const spaceId = space.rows[0]?.id
+
+    const failure = await db
+      .execute(
+        sql`insert into documents (space_id, created_by, title, thing_id)
+            values (${spaceId}, ${userId}, 'Orphan',
+                    '2a000000-0000-4000-8000-00000000000a')`,
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+
+    expect(failure, 'a dangling thing_id was accepted').toBeDefined()
+    const cause = (failure as { cause?: { constraint?: string } }).cause
+    expect(cause?.constraint).toBe('documents_thing_id_things_id_fk')
+  })
+
+  it('enforces at most one CONFIRMED hero photo per thing, at the database level', async () => {
+    /**
+     * things.md §3's partial unique index, and the `uploaded_at is not null` half of it — which is not
+     * decoration. `make_hero` is declared at presign time, so an unconfirmed row carries the flag as
+     * an *intention*; if the index looked at `is_hero` alone, one abandoned upload would occupy the
+     * hero slot forever and the next real upload would be rejected by Postgres.
+     *
+     * So this asserts both: two unconfirmed heroes are fine, two confirmed ones are not.
+     */
+    const userId = '12121212-1212-4212-8212-121212121212'
+    await db.execute(
+      sql`insert into users (id, name, email, email_verified)
+          values (${userId}, 'Fixture', 'fixture7@example.test', false)`,
+    )
+    const space = await db.execute<{ id: string }>(
+      sql`insert into spaces (name, kind) values ('S', 'shared') returning id`,
+    )
+    const spaceId = space.rows[0]?.id
+    const thing = await db.execute<{ id: string }>(
+      sql`insert into things (space_id, created_by, name)
+          values (${spaceId}, ${userId}, 'Dishwasher') returning id`,
+    )
+    const thingId = thing.rows[0]?.id
+
+    const insertHero = (key: string, confirmed: boolean) =>
+      db.execute(
+        sql`insert into thing_photos
+              (space_id, created_by, thing_id, storage_key, mime, size_bytes, is_hero, uploaded_at)
+            values (${spaceId}, ${userId}, ${thingId}, ${key}, 'image/jpeg', 100, true,
+                    ${confirmed ? sql`now()` : sql`null`})`,
+      )
+
+    // Two unconfirmed intentions: allowed, because neither can be displayed.
+    await insertHero('k-unconfirmed-1', false)
+    await insertHero('k-unconfirmed-2', false)
+
+    await insertHero('k-confirmed-1', true)
+    const failure = await insertHero('k-confirmed-2', true).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+
+    expect(failure, 'a second confirmed hero was accepted').toBeDefined()
+    const cause = (failure as { cause?: { constraint?: string } }).cause
+    expect(cause?.constraint).toBe('thing_photos_one_hero_key')
+  })
+
+  it('maintains things.search_vector as a generated column, with the name outranking notes', async () => {
+    // conventions/data.md §6 requires this to be GENERATED, not trigger-maintained, so that no
+    // application code can forget to refresh it. The way to prove that is to write a row with raw SQL
+    // that says nothing about search_vector, then search for it.
+    const userId = '13131313-1313-4313-8313-131313131313'
+    await db.execute(
+      sql`insert into users (id, name, email, email_verified)
+          values (${userId}, 'Fixture', 'fixture8@example.test', false)`,
+    )
+    const space = await db.execute<{ id: string }>(
+      sql`insert into spaces (name, kind) values ('S', 'shared') returning id`,
+    )
+    const spaceId = space.rows[0]?.id
+
+    await db.execute(
+      sql`insert into things (space_id, created_by, name, brand, kept_at)
+          values (${spaceId}, ${userId}, 'Dishwasher', 'Bosch', 'Kitchen')`,
+    )
+    await db.execute(
+      sql`insert into things (space_id, created_by, name, notes)
+          values (${spaceId}, ${userId}, 'Extended cover', 'covers the dishwasher')`,
+    )
+
+    // Both rows mention "dishwasher" — one in its name (weight A), one in its notes (weight C).
+    const ranked = await db.execute<{ name: string }>(
+      sql`select name from things
+          where search_vector @@ websearch_to_tsquery('english', 'dishwasher')
+          order by ts_rank(search_vector, websearch_to_tsquery('english', 'dishwasher')) desc`,
+    )
+    expect(ranked.rows.map((row) => row.name)).toEqual(['Dishwasher', 'Extended cover'])
+
+    // `brand` (weight B) and `kept_at` (weight C) are in the vector too — things.md §3.
+    const byBrand = await db.execute<{ name: string }>(
+      sql`select name from things
+          where search_vector @@ websearch_to_tsquery('english', 'bosch')`,
+    )
+    expect(byBrand.rows.map((row) => row.name)).toEqual(['Dishwasher'])
+  })
+
   it('maintains documents.search_vector as a generated column, with title outranking notes', async () => {
     // conventions/data.md §6 requires this to be GENERATED, not trigger-maintained — so that
     // no application code can forget to refresh it. The way to prove that is to write a row

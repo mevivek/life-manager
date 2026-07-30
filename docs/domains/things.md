@@ -1,7 +1,8 @@
 # Domain: Things
 
-- **Status:** **UI built, API not.** The screens, the contract and the client hooks exist; there are no
-  endpoints and no tables yet. See §10.
+- **Status:** **built.** Both halves. The screens, the contract and the client hooks landed first; the
+  tables, repository, service and routes followed (M4 step 1). See §10 for the file list and the two
+  things that are still open.
 - **Milestone:** pulled forward from M4 by the fourth design handoff —
   [ADR-0029](../decisions/0029-the-things-domain.md), [roadmap.md](../roadmap.md)
 - **Sensitivity tier:** **0 — server-readable.** Same reasoning as Documents
@@ -215,9 +216,10 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
 
 ## 5. API surface
 
-**None of this exists yet** (§10). It is written down because `packages/shared/src/things.ts` is the
-contract the client already codes against, and whichever session builds the API implements *this*
-rather than inventing a second shape (invariant 9).
+**All of this exists** — `apps/api/src/domains/things/things.routes.ts`, and §10 lists the files. It
+was written down before it was built because `packages/shared/src/things.ts` is the contract the client
+already coded against, and the session that built the API implemented *this* rather than inventing a
+second shape (invariant 9). It did, unchanged.
 
 Universal rules — pagination, `problem+json`, `Idempotency-Key`, auth, the `::` escape for a `:verb`
 ([conventions/api.md](../conventions/api.md) §2) — are not restated.
@@ -261,7 +263,7 @@ though Fastify routes it correctly. That is why the photo is named in the **body
 
 `reminders` is already generic — keyed by `entity_type` + `entity_id`
 ([documents.md](./documents.md) §3), which is the whole point of it having been built that way. Things
-sets `entity_type = 'thing'` and needs **no schema change**.
+sets `entity_type = 'thing'` and needed **no schema change**. That prediction held exactly.
 
 Two kinds of due date, and they want different lead times:
 
@@ -270,11 +272,29 @@ Two kinds of due date, and they want different lead times:
 | Cover ending | `warranty_ends_on` | 60, 14 |
 | Service due | `service_due_on` | 30, 7 |
 
-Neither is automatic yet. Documents create reminders automatically for `identity` and `certificate`
-only (`AUTO_REMINDER_TYPES`), and the equivalent question for things — *should every warranty get a
-reminder?* — is **unanswered** and belongs in
-[open-questions.md](../product/open-questions.md) before it is coded. Do not decide it in a
+**Neither is automatic, and that is still true after the API landed.** Documents create reminders
+automatically for `identity` and `certificate` only (`AUTO_REMINDER_TYPES`), and the equivalent
+question for things — *should every warranty get a reminder?* — is **§9(2), unanswered**, and belongs
+in [open-questions.md](../product/open-questions.md) before it is coded. Do not decide it in a
 repository.
+
+So the API session built the **capability** and left the switch off:
+
+- `THING_ENTITY_TYPE` exists in `reminders.repository.ts`, and `listForEntity` now takes the entity
+  type as an explicit parameter rather than defaulting to `'document'`.
+- `reminderSchema.entity_type` is an enum (`document | thing`) rather than the literal `'document'` it
+  was. That was not optional: `reminderSchema` is nested in *both* detail responses, so a thing's own
+  reminders would have failed their own response schema.
+- `GET /things/:id` returns `reminders[]`, and a test asserts it is **empty** — with a comment saying
+  which test to change when the switch is flipped.
+- Nothing anywhere creates one.
+
+**Read the note on `listDueForMaintenance` before switching it on.** The daily scan joins `documents`
+for a title and renders `"{title} expires {due_on}"`, so a thing reminder would be announced as *"A
+document expires …"* — or, if the join were naively widened, *"Dishwasher expires 20 Jan"*, which is
+precisely the sentence §4 rule 2 and ADR-0029 exist to prevent. Widening the scan needs a second title
+source and a second copy register ("Warranty ends", "Service due"), which is part of answering §9(2)
+rather than a preparatory refactor. Debt **D58**.
 
 ## 7. Screens
 
@@ -338,18 +358,52 @@ delete.
 4. **`other` as a tenth kind.** Present in the contract so nothing is unfileable, absent from the
    capture chips so it is never *chosen* — the same shape as `doc_type: 'other'`.
 
-## 10. What is built, and what is not
+## 10. Files, and what is still open
 
-**Built (this branch):** the shared contract, the client hooks, the cover ladder, both screens, the
-capture track, the cross-domain horizon, and the document-side link.
+**Both halves are built.** This section used to say the API did not exist; it does.
 
-**Not built:** any of §5. There are **no tables, no repository, no service and no routes** — so
-`useThings` 404s against the deployed API and every Things screen renders its error state until another
-session builds the server half.
+### Server (M4 step 1)
 
-That is deliberate and it is the reason this file and `packages/shared/src/things.ts` were written
-first. A session picking up the API work should read
-[agent-playbooks/add-a-domain.md](../agent-playbooks/add-a-domain.md) and treat §3–§6 above as the
-spec — **and ADR-0006's promise is what is being measured**: if adding this domain turns out to need
-the tenant filter rewritten, that is an ADR-0006 failure and gets recorded as one rather than worked
-around.
+| File | What |
+|---|---|
+| `apps/api/src/domains/things/things.schema.ts` | `things`, `thing_services`, `thing_photos`, the two enums, the generated `tsvector` |
+| `apps/api/src/domains/things/things.repository.ts` | the only SQL. `scoped()` used **unchanged** |
+| `apps/api/src/domains/things/things.service.ts` | §4's rules, and `addMonthsClamped` for rule 3 |
+| `apps/api/src/domains/things/things.photos.service.ts` | presign → PUT → confirm, and the hero slot |
+| `apps/api/src/domains/things/things.routes.ts` | §5 exactly, `::` escapes and all |
+| `apps/api/src/domains/things/things.test.ts` | 49 tests, one per rule, plus the cross-space sweep |
+| `apps/api/src/domains/things/things.photos.test.ts` | 22 tests |
+| `apps/api/drizzle/0007_nasty_leech.sql` | the tables **and** the `documents.thing_id` foreign key |
+
+`documents.repository.ts` grew two functions for the link — `listLinkedToThing` and `unlinkFromThing`
+— because the column lives on `documents` and one column should have one owner.
+
+### Client (the fourth design handoff)
+
+The shared contract, the client hooks, the cover ladder, both screens, the capture track, the
+cross-domain horizon, and the document-side link. All unchanged by the server work: the API implemented
+`packages/shared/src/things.ts` rather than editing it (invariant 9).
+
+### ADR-0006's promise, which was the thing being measured
+
+**`apps/api/src/db/scoped.ts` was not touched.** Adding a second domain needed no change to the tenant
+filter: `spaceScoped()` gives every new table the two columns `SpaceScopedTable` structurally requires,
+so `scoped(actor, things)` type-checked on first use. That is the claim ADR-0006 made and it held.
+
+### Still open
+
+1. **§9(2) — automatic warranty reminders.** Unanswered, so the capability is built and the switch is
+   off. §6 has the detail, including why the daily scan must not simply be widened (debt **D58**).
+2. **Offline writes.** `useThings` deliberately does not route through the outbox: `lib/outbox.ts`'s
+   entry union is document-shaped, and widening it was left with the endpoints rather than done before
+   them. Now that the endpoints exist, this is one outbox kind plus one `writeOrQueue` per mutation —
+   see the note at the top of `apps/web/src/features/things/useThings.ts`.
+3. **No client for the photo verbs.** The four endpoints exist and are tested; `api.things` has no
+   method for them and `ThingPhotos.tsx` says so on screen. Debt **D59**.
+4. **Two comments in `apps/web/` are now false**, and were left alone deliberately because the API
+   session's brief was not to touch the client: the header block in
+   `apps/web/src/features/things/useThings.ts` and the `things:` block in `apps/web/src/lib/api.ts`
+   both still announce in a banner that *"none of these endpoints exist yet"* and that every call
+   answers 404. They do exist. Fix those banners in whichever pass closes items 2 and 3 — a confident
+   false comment costs a session more than a missing one.
+5. **Money**, which is M4 step 3 and has no doc yet.

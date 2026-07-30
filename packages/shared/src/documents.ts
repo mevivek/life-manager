@@ -384,9 +384,25 @@ export type DocumentFile = z.infer<typeof documentFileSchema>
 export const reminderChannelSchema = z.enum(['web_push', 'email', 'fcm', 'apns'])
 export type ReminderChannel = z.infer<typeof reminderChannelSchema>
 
+/**
+ * What a reminder can be attached to.
+ *
+ * **This was `z.literal('document')` until the Things API landed**, and widening it is the one edit
+ * `reminders.ts` predicted this split would cost: `reminderSchema` is nested in *both*
+ * `documentDetailResponseSchema` and `thingDetailResponseSchema`, so a literal would have made a
+ * thing's own reminders fail their own response schema — a 500 on a screen that draws them.
+ *
+ * An enum rather than a plain `z.string()`, so a third entity type has to be added here rather than
+ * arriving as an unannounced value a client has never seen. Widening a response enum is not a
+ * breaking change (conventions/api.md §1), and it stays safe in the D54 direction too: the server
+ * still sends `'document'` for everything a client asked about before Things existed.
+ */
+export const reminderEntityTypeSchema = z.enum(['document', 'thing'])
+export type ReminderEntityType = z.infer<typeof reminderEntityTypeSchema>
+
 export const reminderSchema = z.object({
   id: uuidSchema,
-  entity_type: z.literal('document'),
+  entity_type: reminderEntityTypeSchema,
   entity_id: uuidSchema,
   due_on: isoDateSchema,
   lead_days: z.number().int().min(0).max(3650),

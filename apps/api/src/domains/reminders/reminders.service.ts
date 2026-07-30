@@ -39,7 +39,7 @@ export async function listForDocument(
   const document = await documentsRepository.findById(actor, documentId)
   if (document === undefined) throw new NotFoundError('No such document.')
 
-  const rows = await repository.listForEntity(actor, documentId)
+  const rows = await repository.listForEntity(actor, repository.DOCUMENT_ENTITY_TYPE, documentId)
   return rows.map(toReminder)
 }
 

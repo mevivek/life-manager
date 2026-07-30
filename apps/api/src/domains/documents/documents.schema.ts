@@ -17,6 +17,7 @@ import {
 import { primaryId, timestamps, timestamptz, versioned } from '../../db/columns.js'
 import { spaceScoped, spaceScopedIndex } from '../../db/schema/scoped-columns.js'
 import { tsvector } from '../../db/schema/tsvector.js'
+import { things } from '../things/things.schema.js'
 
 /**
  * The Documents tables. Spec: domains/documents.md §3.
@@ -123,28 +124,28 @@ export const documents = pgTable(
      * [things.md](../../../../../docs/domains/things.md) §3.
      *
      * ═══════════════════════════════════════════════════════════════════════════════════════
-     *  Deliberately NO `.references()` yet, and that is a temporary state with a trigger.
+     *  `on delete SET NULL`, never cascade. That is business rule 5, not a detail.
      * ═══════════════════════════════════════════════════════════════════════════════════════
      *
-     * A `things` table does not exist. The design handoff specified the domain in full and its
-     * client half was built from it, so the *link* has to be storable — but a foreign key to a
-     * missing table is a migration that cannot apply, and ADR-0023 runs migrations on boot, so it
-     * would take the API down rather than fail a build.
+     * things.md §4 rule 5: **deleting a thing does not delete its documents.** The copy on the
+     * delete control promises exactly that — *"Its documents stay in Documents — deleting the thing
+     * doesn't shred the paperwork."* A `cascade` here would let one tap destroy a
+     * passport-adjacent archive because somebody sold a car, and would make that sentence a lie.
      *
-     * So: a plain `uuid` with an index, and **the session that creates `things` adds the constraint**
-     * in the same migration, with `on delete set null`. That last part is business rule 5 and it is
-     * not a detail — deleting a car must not shred its paperwork, and the copy on the delete control
-     * promises exactly that. A `cascade` here would make it a lie.
+     * This column shipped **without** the constraint, deliberately: `things` did not exist, and a
+     * foreign key to a missing table is a migration that cannot apply — which under ADR-0023's
+     * migrate-on-boot is a production outage rather than a failed build. The session that created
+     * `things` added it, which is what the note that used to be here asked for.
      *
-     * Until then nothing writes a value that could dangle: the only writer is the client's link
-     * picker, which offers ids it just read from `GET /things` — an endpoint that also does not exist.
-     * The column is inert, which is why shipping it early is safe rather than merely convenient.
+     * Note the direction of the import that makes this possible: `documents.schema.ts` depends on
+     * `things.schema.ts` and not the reverse, so there is no cycle. Nothing on `things` points back
+     * at a document; the whole relationship is this one column.
      *
      * One nullable column rather than a join table. A receipt belongs to one object; an object
      * collects many papers. ADR-0029 § *Alternatives considered* records the trigger for revisiting
      * that (one invoice covering three appliances).
      */
-    thingId: uuid('thing_id'),
+    thingId: uuid('thing_id').references(() => things.id, { onDelete: 'set null' }),
 
     issuedOn: date('issued_on'),
 

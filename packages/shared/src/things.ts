@@ -15,13 +15,18 @@ import { holderSchema, relationSchema, reminderSchema, versionSchema } from './d
  * (entities) and §4 (business rules) before changing anything here.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
- *  THIS CONTRACT EXISTS BEFORE ITS API DOES, AND THAT IS THE POINT.
+ *  THIS CONTRACT EXISTED BEFORE ITS API DID, AND IT WORKED.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
- * There are no `things` tables, no repository, no service and no routes — see things.md §10. The web
- * client already codes against these schemas, so a session building the server half implements
- * *this* rather than inventing a second shape. That is invariant 9 doing the job it exists for: the
- * alternative is two definitions of a thing that agree until they don't.
+ * This note used to say there were no `things` tables, no repository, no service and no routes.
+ * **All four exist now** (things.md §10), and the session that built them implemented *this* file
+ * rather than inventing a second shape — **without changing a single schema in it.** That is
+ * invariant 9 doing the job it exists for: the alternative is two definitions of a thing that agree
+ * until they don't.
+ *
+ * One thing the server half did have to widen, and it was predicted: `reminderSchema.entity_type`
+ * was `z.literal('document')`, which a thing's own reminders could not satisfy. It is an enum now —
+ * see the note in `reminders.ts`. Nothing in *this* file moved.
  *
  * Three project decisions are baked in and are not stylistic:
  *

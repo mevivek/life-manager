@@ -30,7 +30,7 @@ that must be read exhaustively are no better than no docs
 |---|---|
 | **Just arrived, no specific task** | [`CLAUDE.md`](../CLAUDE.md) → this file → [architecture.md](architecture.md) |
 | **Working on the Documents domain** | [domains/documents.md](domains/documents.md) → [conventions/api.md](conventions/api.md) → the relevant playbook |
-| **Working on the Things domain** | [domains/things.md](domains/things.md) → [ADR-0029](decisions/0029-the-things-domain.md). **The UI exists and the API does not** — §10 |
+| **Working on the Things domain** | [domains/things.md](domains/things.md) → [ADR-0029](decisions/0029-the-things-domain.md). **Both halves are built** (M4 step 1) — §10 lists every file and the four things still open, of which the useful one to know is that **nothing creates a thing reminder** because §9(2) is unanswered |
 | **Adding an endpoint** | [agent-playbooks/add-an-endpoint.md](agent-playbooks/add-an-endpoint.md) → the domain doc |
 | **Adding a whole new domain** | [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md) → [domains/_template.md](domains/_template.md) |
 | **Changing the database schema** | [agent-playbooks/change-the-schema.md](agent-playbooks/change-the-schema.md) → [conventions/data.md](conventions/data.md) |
@@ -91,8 +91,8 @@ its **rejected alternatives**, which is usually the part you need.
 
 - [**domains/documents.md**](domains/documents.md) — the first domain, fully specified
 - [**domains/things.md**](domains/things.md) — the second, pulled forward from M4 by the fourth design
-  handoff ([ADR-0029](decisions/0029-the-things-domain.md)). Specified in full; **the UI is built and
-  the API is not** — §10 says exactly which halves
+  handoff ([ADR-0029](decisions/0029-the-things-domain.md)). Specified in full, and **built in full**
+  as of M4 step 1 — §10 lists the files and what is still open
 - [**domains/_template.md**](domains/_template.md) — the fixed shape every domain doc follows
 
 Planned: Money, People, Notes, Vault. Each gets a doc before it gets code.
