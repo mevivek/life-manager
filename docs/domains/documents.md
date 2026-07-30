@@ -55,7 +55,8 @@ The logical document — "my passport" — independent of any particular scan of
 | `title` | `text not null` | Free text. The only field required at capture — see [Q2](../product/open-questions.md) |
 | `doc_type` | `enum not null` | `identity` · `financial` · `legal` · `warranty` · `receipt` · `certificate` · `other` |
 | `issuer` | `text null` | Who issued it. Free text with autocomplete — see §9 |
-| `identifier_last4` | `text null` | **Last 4 characters only.** Never store a full passport or account number — §4 rule 6 |
+| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on the DETAIL response only. In pino's redaction list |
+| `identifier_last4` | `text null` | The **display** form, derived from `identifier` on every write. This is what lists show — §4 rule 6 |
 | `issued_on` | `date null` | |
 | `expires_on` | `date null` | **`date`, not timestamp.** A passport expires on a day, not an instant |
 | `country` | `char(2) null` | ISO 3166-1 alpha-2 |
@@ -87,10 +88,12 @@ is the bigger risk than incomplete records
 
 Two rules that are easy to get wrong:
 
-- **Never a full number.** `document_number_last4`, `account_last4`, and
-  `payment_method_last4` are truncated at the API boundary, same as the top-level
-  `identifier_last4` (§4 rule 6). A full passport or card number in JSONB is exactly the
-  liability that column exists to avoid, and JSONB makes it easy to slip in unnoticed.
+- **Still no full number in JSONB.** `document_number_last4`, `account_last4` and
+  `payment_method_last4` remain truncated at the API boundary, and ADR-0026 does **not**
+  extend to them. The top-level `identifier` is one named column, in one redaction path, on
+  one detail response; JSONB is freeform, unredacted and easy to slip a card number into
+  unnoticed. If a second full number is ever needed, it gets its own column and its own line
+  in `REDACTED_PATHS` — not a key in here.
 - **Money keys carry a `currency`** and are `numeric`, never float
   ([conventions/data.md](../conventions/data.md) §4). These are the natural join points to
   the future Money domain (§8), so getting the type right now avoids a conversion later.
@@ -158,9 +161,15 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
 4. `version` is assigned by the server, monotonically per document. Clients never supply it.
 5. **The API always chooses `storage_key`.** A request containing a storage key, path, or
    destination filename is rejected ([ADR-0008](../decisions/0008-object-storage-r2.md)).
-6. **Never store a full identifier.** Passport numbers, account numbers, and national IDs
-   are truncated to `identifier_last4` at the API boundary. The full number is on the scan,
-   which is access-controlled; a plaintext column is a needless liability.
+6. **Store the full identifier; mask it for display.** Reversed by
+   [ADR-0026](../decisions/0026-store-the-full-identifier.md) — this rule previously truncated
+   to four characters at the API boundary. It now keeps the whole value in `identifier` and
+   **derives** `identifier_last4` from it server-side, so a client cannot send a mask that
+   disagrees with its number. **The full value is returned on the detail response only**; the
+   list carries the mask, and `documentSchema` has no field for anything else. Plaintext, by
+   explicit decision: encryption stays vault-only (invariant 7, ADR-0009), so no copy in the
+   app may claim otherwise. Revealing it in the UI is a display state, **not** an
+   authorization boundary.
 7. Setting or changing `expires_on` reconciles that document's pending reminders. Clearing
    it deletes them.
 8. Default lead times are 90, 30, and 7 days before expiry — created automatically for

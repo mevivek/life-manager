@@ -110,23 +110,96 @@ describeDb('documents', () => {
     expect(response.statusCode).toBe(201)
   })
 
-  // ── Rule 6: never store a full identifier ────────────────────────────────
+  /**
+   * ── Rule 6, as revised by ADR-0026 ────────────────────────────────────────
+   *
+   * This block previously asserted the opposite — that the full identifier was discarded and only
+   * four characters survived. **The rule changed by explicit product decision, so the test is
+   * rewritten to the new rule rather than relaxed.** The assertions here are strictly stronger than
+   * the ones they replace: the old test checked that a prefix was absent from one response, these
+   * check the mask is derived correctly, that the full value is reachable *only* through the detail
+   * endpoint, and that no list response carries it (invariant 10 — a test is never weakened to go
+   * green, and a changed rule is not the same as a failing one).
+   */
 
-  it('rule 6: stores only the last four characters of an identifier', async () => {
+  it('rule 6: stores the identifier in full and derives the mask from it', async () => {
     const user = await seedUserWithSpace(app)
 
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/documents',
       ...authAs(user),
-      // An obvious fake, and the point is that the prefix must not survive.
+      // An obvious fake. 11 characters, so a mask taken from the wrong end is visible.
       payload: { title: 'Passport', identifier: 'FAKE1234567' },
     })
 
     expect(response.statusCode).toBe(201)
     expect(response.json().identifier_last4).toBe('4567')
-    // The whole reason the column exists: the full number must be nowhere in the response.
-    expect(response.body).not.toContain('FAKE1234567')
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${response.json().id}`,
+      ...authAs(user),
+    })
+    expect(detail.statusCode).toBe(200)
+    expect(detail.json().identifier).toBe('FAKE1234567')
+    expect(detail.json().identifier_last4).toBe('4567')
+  })
+
+  it('rule 6: keeps the full identifier out of every list response', async () => {
+    const user = await seedUserWithSpace(app)
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Aadhaar', identifier: 'FAKE729481038109' },
+    })
+
+    const list = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
+
+    expect(list.statusCode).toBe(200)
+    // The list is what the offline cache persists and the archive screen renders 100 at a time. The
+    // mask belongs there; the number does not. Asserted on the raw body rather than the parsed rows,
+    // so a field added to the shared mapper by mistake fails here too.
+    expect(list.body).not.toContain('FAKE729481038109')
+    expect(list.json().data[0].identifier_last4).toBe('8109')
+    expect(list.json().data[0].identifier).toBeUndefined()
+  })
+
+  it('rule 6: trims before masking, and treats an emptied field as no identifier', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      // A trailing space is what a phone keyboard produces. The mask comes off the END of the
+      // string, so an untrimmed value masks to "109 " — wrong in the one place the mask is shown.
+      payload: { title: 'PAN card', identifier: '  FAKEABCDE1234F  ' },
+    })
+    expect(created.json().identifier_last4).toBe('234F')
+
+    // `null`, not `''` — `identifierInputSchema` is `min(1)`, and `DocumentForm` already maps a blank
+    // field to null in its own schema so validation and submission cannot disagree.
+    const emptied = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${created.json().id}`,
+      ...authAs(user),
+      payload: { identifier: null, version: created.json().version },
+    })
+    expect(emptied.statusCode).toBe(200)
+    expect(emptied.json().identifier_last4).toBeNull()
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${created.json().id}`,
+      ...authAs(user),
+    })
+    // Both columns clear together. Leaving yesterday's mask on the row is the drift
+    // `identifierColumns` exists to prevent, and it would show in every list.
+    expect(detail.json().identifier).toBeNull()
+    expect(detail.json().identifier_last4).toBeNull()
   })
 
   // ── Rule 8: default reminders for identity and certificate ───────────────

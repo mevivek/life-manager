@@ -1,6 +1,7 @@
 # ADR-0009: Sensitivity tiers — no application-level encryption for ordinary data
 
-- **Status:** accepted
+- **Status:** accepted — **data-minimisation half amended by [ADR-0026](0026-store-the-full-identifier.md)**;
+  the encryption decision below stands unchanged
 - **Date:** 2026-07-26
 
 ## Context

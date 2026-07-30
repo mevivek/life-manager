@@ -16,6 +16,8 @@ import {
   formatDate,
   STATUS_BG,
 } from '@/features/documents/ExpiryStatus'
+import { IdentifierCard } from '@/features/documents/IdentifierCard'
+import { numberLabelFor } from '@/features/documents/presets'
 import {
   useDeleteDocument,
   useDocument,
@@ -186,22 +188,20 @@ function DocumentDetailPage() {
               ))}
             </dl>
 
-            {detail.identifier_last4 !== null && (
-              <Card tone="sunken" className="mt-3.5 border-rule px-4 py-3.5">
-                <p className="flex items-center gap-2.5">
-                  <span className="font-mono text-mask tracking-mask text-ink-3">••••</span>
-                  <span className="selectable font-mono text-mask font-medium tracking-mask">
-                    {detail.identifier_last4}
-                  </span>
-                </p>
-                <p className="mt-2 text-meta leading-relaxed text-ink-2 [text-wrap:pretty]">
-                  {/* Business rule 6, explained where the consequence is visible. Without this the
-                      four digits look like a truncation bug rather than a decision. */}
-                  We only ever keep the last four. Enough to know it’s the right one, not enough to
-                  be worth stealing. The scan is the record.
-                </p>
-              </Card>
-            )}
+            {/*
+              ADR-0026 replaced the old "we only ever keep the last four" card. The number is stored
+              in full now, so the card reveals rather than explains a truncation — see
+              `IdentifierCard` for why the mask is a display state and not a boundary.
+
+              The label names the real document, via the same preset table the capture form uses:
+              "Aadhaar number" rather than "Number". Falls back to "Number" for a document whose
+              title matches no preset, which is most warranties and receipts.
+            */}
+            <IdentifierCard
+              identifier={detail.identifier}
+              last4={detail.identifier_last4}
+              label={numberLabelFor(detail.title, detail.doc_type)}
+            />
           </>
         )}
       </section>

@@ -48,7 +48,8 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0022](0022-web-push-library.md) | Web Push library | accepted | `webpush-webcrypto` (MIT), because `web-push` is MPL-2.0 and hand-rolling RFC 8291 is forbidden |
 | [0023](0023-migrate-on-boot.md) | Migrations applied on API boot | accepted | Nothing else applied them once ADR-0021 dropped Fly's release_command; the fix has to ship in the image because of D25 |
 | [0024](0024-offline-writes-outbox.md) | Offline writes via an outbox | accepted | Supersedes 0013's no-writes half. Server `version` precondition, stale write → **409**, IndexedDB outbox replayed on reconnect, conflicts SURFACED never merged |
-| [0025](0025-ledger-design-system.md) | The Ledger design system | accepted | Warm paper, serif + grotesk, colour spent only on status; five-state expiry ladder readable in greyscale; **three tabs forever**, domains become a switcher not tabs |
+| [0025](0025-ledger-design-system.md) | The Ledger design system | accepted | Warm paper, serif + grotesk, colour spent only on status; five-state expiry ladder readable in greyscale; **three tabs forever**, domains become a switcher not tabs. §4's tab NAMES amended by 0026's handoff — Add left the bar, You took the slot |
+| [0026](0026-store-the-full-identifier.md) | Store the full document identifier, unencrypted | accepted | **Reverses business rule 6.** Full value in `identifier`, mask DERIVED into `identifier_last4`, detail response only. Plaintext — amends 0009's data-minimisation half, not its encryption half (invariant 7 stands) |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -91,7 +92,8 @@ first
 
 **Adding a screen, or touching how anything looks**
 0025 the Ledger design system — tokens, the expiry ladder, the three-tab rule · 0003 SPA shell ·
-0024 what a write does with no network, and what the cache holds
+0024 what a write does with no network, and what the cache holds · 0026 why a passport number is
+stored in full and why it is not encrypted
 
 ---
 

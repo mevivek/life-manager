@@ -43,6 +43,9 @@ export const TEXT_SIZES = [
   'meta',
   'label',
   'mask',
+  // ADR-0026's revealed identifier. A `--text-*` token is INERT to `cn()` until it is named here —
+  // see the note above; this is the second half of that two-file change.
+  'number',
 ] as const
 
 /**

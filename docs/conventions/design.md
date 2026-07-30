@@ -36,6 +36,7 @@ component.
 | A card ground | `bg-raised` | `bg-white` |
 | Secondary text | `text-ink-2` | `text-gray-600` |
 | A pill | `rounded-pill` | `rounded-full` |
+| A revealed number | `text-number` | `text-[19px]` |
 | The screen gutter | `px-gutter` | `px-5` |
 
 Arbitrary values are permitted only where the value **is** the content — a progress bar's `width`, a
@@ -93,7 +94,7 @@ and if they do the ladder is cosmetically off while the reminders stay right (in
 |---|---|---|
 | **Newsreader** (serif) | What a human wrote — titles, headlines, a document's name on the horizon | `text-display` `text-title` `text-serif-row` |
 | **IBM Plex Sans** | What the interface says — rows, body, buttons, status | `text-head` `text-row` `text-body` `text-meta` |
-| **IBM Plex Mono** | What the machine names — eyebrow labels, the last-four mask, serials, counts | `text-label` `text-mask` |
+| **IBM Plex Mono** | What the machine names — eyebrow labels, the mask, a revealed identifier, serials, counts | `text-label` `text-mask` `text-number` |
 
 Rules that are not preferences:
 
@@ -127,6 +128,8 @@ What this forbids:
 
 - **No accent hue.** No brand colour to admire. The user opens this twice a month and wants an answer.
 - **No colour per `doc_type`.** Seven type-colours is a code nobody learns at fortnightly intervals.
+- **Exactly one control in the app is emphatic**: the Add pill on Documents. It is an ink fill with a
+  hairline and **no shadow** — see §5. A second emphatic control anywhere means one of them is wrong.
 - **Destructive is text in `--status-late`, never a filled red block** — a red button makes "delete"
   the loudest thing on a screen whose subject is a passport.
 - `--color-destructive` is an **alias** onto `--status-late`. Do not introduce a second red.
@@ -140,6 +143,11 @@ things cast a shadow**, because they are the two things temporarily on top of yo
 
 - the add sheet — `--e-sheet`
 - the toast — `--e-toast`
+
+The Add pill is the case that tests this rule and does not break it: the comp drew it with
+`0 8px 24px`, which would have made it a third. It ships on a hairline instead, because a *permanent*
+control is not temporarily on top of anything — and the ink fill already separates it from any ground
+it crosses.
 
 A card with a drop shadow claims to float above a screen it is actually part of. Group related rows
 inside **one** bordered card with hairline dividers rather than giving each its own box — four
@@ -202,7 +210,13 @@ problems in four cards read as four sections.
 
 ## 8. Navigation: three tabs, forever
 
-**Now · Documents · Add.** Permanently visible, always labelled.
+**Now · Documents · You.** Permanently visible, always labelled.
+
+**A tab is a place.** That is the rule the names follow from, and it is why Add is *not* one: it opens
+a sheet and leaves you where you were, so it belonged on the surfaces it acts on — a text button in
+the Now header, an ink pill on Documents — rather than in a bar of destinations. ADR-0025 §4 named the
+third tab Add; the second design handoff replaced it with You, which is a place, and gave the account,
+sign-out and theme controls the home §10 said they needed.
 
 **Domains never become tabs.** When assets, money, people and the vault arrive, the *middle tab's
 title* becomes a domain switcher — one tap swaps the collection under the same search, the same

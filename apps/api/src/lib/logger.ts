@@ -37,6 +37,18 @@ export const REDACTED_PATHS = [
   // M1, R2. A presigned URL is a bearer credential in a query string.
   'presignedUrl',
   '*.presignedUrl',
+
+  /**
+   * The document identifier — ADR-0026, and the reason this list stopped being belt-and-braces.
+   *
+   * Until then the API truncated to four characters at the boundary, so the worst a log could leak
+   * was a mask. It now stores the value in full, which means a request body or a detail response
+   * caught in a log line is a whole Aadhaar or passport number. `identifier_last4` is deliberately
+   * NOT redacted: it is the display form, it is in every list, and censoring it would make request
+   * logs unreadable while protecting nothing.
+   */
+  'identifier',
+  '*.identifier',
 ] as const
 
 export const loggerOptions = {
