@@ -1,12 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, Outlet, useRouterState } from '@tanstack/react-router'
-import { useState } from 'react'
 import { OfflineNotice } from '@/components/OfflineNotice'
 import { OutboxNotice } from '@/components/OutboxNotice'
 import { TabBar } from '@/components/TabBar'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { AddDocumentSheet } from '@/features/documents/AddDocumentSheet'
+import { AddSheetProvider } from '@/features/documents/AddSheetProvider'
 
 /**
  * `createRootRouteWithContext` so route `beforeLoad` and loaders can reach the QueryClient
@@ -63,36 +62,40 @@ function Shell({
 
 function RootLayout() {
   const withChrome = useHasChrome()
-  /**
-   * The Add sheet lives here rather than in `TabBar`, because it must render *over* the whole shell
-   * — a sheet mounted inside the fixed tab bar would be clipped by it and stack below the content it
-   * is supposed to cover. The tab bar only asks for it to open.
-   *
-   * Plain `useState` and one prop rather than a context: there is exactly one consumer, and a
-   * provider for a single boolean is indirection that has to be read before the boolean can be
-   * found.
-   */
-  const [addOpen, setAddOpen] = useState(false)
 
-  return (
-    <>
-      <Shell withChrome={withChrome}>
-        {/* Above the outlet, so the staleness warning ADR-0013 requires is the first thing on the
-            screen rather than something to scroll to. Renders nothing while online, and only on
-            chrome routes — a sign-in form shows no cached data to be stale. */}
-        {withChrome && <OfflineNotice />}
-        {/* Separate from OfflineNotice: a queue can hold unsent writes, or a conflict needing a
-            decision, long after the connection came back. Being online says nothing about it. */}
-        {withChrome && <OutboxNotice />}
+  /**
+   * A sign-in screen gets no provider and no sheet.
+   *
+   * Early-returning rather than rendering `AddSheetProvider` unconditionally keeps `AddDocumentSheet`
+   * — which reads the document mutations, and therefore the session — out of the tree on routes where
+   * nobody is signed in yet.
+   */
+  if (!withChrome) {
+    return (
+      <Shell withChrome={false}>
         <Outlet />
       </Shell>
-      {withChrome && (
-        <>
-          <TabBar onAdd={() => setAddOpen(true)} />
-          <AddDocumentSheet open={addOpen} onClose={() => setAddOpen(false)} />
-        </>
-      )}
-    </>
+    )
+  }
+
+  return (
+    /**
+     * The provider wraps the shell, not just the tab bar, because Add now opens from *inside* the
+     * outlet — the Now header and the Documents pill — since the design moved it off the tab bar. See
+     * `AddSheetProvider` for why this stopped being a `useState` and a prop.
+     */
+    <AddSheetProvider>
+      <Shell withChrome={true}>
+        {/* Above the outlet, so the staleness warning ADR-0013 requires is the first thing on the
+            screen rather than something to scroll to. Renders nothing while online. */}
+        <OfflineNotice />
+        {/* Separate from OfflineNotice: a queue can hold unsent writes, or a conflict needing a
+            decision, long after the connection came back. Being online says nothing about it. */}
+        <OutboxNotice />
+        <Outlet />
+      </Shell>
+      <TabBar />
+    </AddSheetProvider>
   )
 }
 

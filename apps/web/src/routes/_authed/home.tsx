@@ -1,17 +1,15 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/label'
 import { DocumentListSkeleton } from '@/components/ui/skeleton'
+import { useOpenAdd } from '@/features/documents/AddSheetProvider'
 import { DocumentRow } from '@/features/documents/DocumentRow'
 import { ExpiryGlyph, formatDate, NEEDS_YOU_DAYS } from '@/features/documents/ExpiryStatus'
 import { GettingStarted } from '@/features/documents/GettingStarted'
 import { Horizon } from '@/features/documents/Horizon'
 import { NotificationsCard } from '@/features/documents/NotificationsCard'
 import { type Ledger, toLedger, useLedger } from '@/features/documents/useLedger'
-import { endSession } from '@/lib/session'
-import { useTheme } from '@/lib/useTheme'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authed/home')({ component: NowPage })
@@ -59,9 +57,7 @@ const GETTING_STARTED_MAX = 4
 
 function NowPage() {
   const documents = useLedger()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { resolved, toggle } = useTheme()
+  const openAdd = useOpenAdd()
 
   return (
     /**
@@ -80,50 +76,36 @@ function NowPage() {
     <div className="flex flex-1 flex-col">
       {/*
         ═══════════════════════════════════════════════════════════════════════════════════
-         Sign out and the theme toggle live on this row, which the comp did not draw.
+         The date, and Add.
         ═══════════════════════════════════════════════════════════════════════════════════
 
-        The design has no settings surface at all — its theme switch was part of the prototype's
-        harness, not of the app. But sign-out has to be reachable (and `endSession` purges the
-        persisted cache, so it is load-bearing rather than a nicety), and an app with two themes needs
-        a way to override the system.
-
-        Putting both here as quiet `--ink-3` text beside the eyebrow is the smallest deviation that
-        keeps them reachable: they share a line with the date rather than competing with the serif
-        headline, which is what the design's hierarchy requires. A settings screen is the right home
-        for them once there are more than two — noted in ADR-0025 §10.
+        This row used to carry the theme toggle and Sign out, as quiet text, because the app had no
+        settings surface and ADR-0025 §10 recorded that as a deviation to undo "once there are more
+        than two". **`/you` is that surface**, so both have moved there and this row is back to what
+        the design draws — with Add in the corner now that it is no longer a tab.
       */}
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <Eyebrow>
           <time dateTime={todayIso()}>{todayLabel()}</time>
         </Eyebrow>
-        <div className="-mr-3 flex shrink-0 items-baseline">
-          <Button
-            variant="quiet"
-            size="sm"
-            className="text-meta text-ink-3"
-            onClick={toggle}
-            // The control's job is switching, so its accessible name is the destination. "Light"
-            // alone reads as a label for what you are already looking at.
-            aria-label={`Switch to ${resolved === 'dark' ? 'light' : 'dark'} theme`}
-          >
-            {resolved === 'dark' ? 'Light' : 'Dark'}
-          </Button>
-          <Button
-            variant="quiet"
-            size="sm"
-            className="text-meta text-ink-3"
-            onClick={async () => {
-              // Signs out AND deletes the IndexedDB cache. Since the Query cache is persisted,
-              // `queryClient.clear()` alone would leave the previous user's document list on disk for
-              // the next person on a shared device. See lib/session.ts.
-              await endSession(queryClient)
-              await navigate({ to: '/login' })
-            }}
-          >
-            Sign out
-          </Button>
-        </div>
+        {/*
+          Add, as text with a hairline plus glyph — not the ink-filled block it was as a tab. On the
+          screen whose subject is *dates you already own*, the loudest thing should not be the button
+          for owning more. The Documents screen gets the emphatic pill instead, because that is the
+          screen you are on when you have a document in your hand.
+        */}
+        <Button
+          variant="quiet"
+          size="sm"
+          className="-mr-3 shrink-0 gap-1.5 text-row text-ink-2"
+          onClick={openAdd}
+        >
+          <span aria-hidden="true" className="relative block size-[13px]">
+            <span className="absolute top-[5.5px] left-0 h-[2px] w-[13px] rounded-[1px] bg-current" />
+            <span className="absolute top-0 left-[5.5px] h-[13px] w-[2px] rounded-[1px] bg-current" />
+          </span>
+          Add
+        </Button>
       </div>
 
       {documents.isPending ? (

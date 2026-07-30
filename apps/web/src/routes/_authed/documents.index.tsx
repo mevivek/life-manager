@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
+import { useOpenAdd } from '@/features/documents/AddSheetProvider'
 import { DocumentFilters, type Filters, hasAnyFilter } from '@/features/documents/DocumentFilters'
 import { DocumentList } from '@/features/documents/DocumentList'
 import { useDocuments } from '@/features/documents/useDocuments'
@@ -76,6 +77,7 @@ function toQuery(filters: Filters): Partial<DocumentListQuery> {
 
 function DocumentsPage() {
   const filters = Route.useSearch()
+  const openAdd = useOpenAdd()
   const navigate = useNavigate({ from: Route.fullPath })
   const [openPanel, setOpenPanel] = useState<'none' | 'type' | 'tag' | 'before'>('none')
 
@@ -153,7 +155,9 @@ function DocumentsPage() {
             <p className="mt-1.5 text-body leading-relaxed text-ink-3">
               {hasAnyFilter(filters)
                 ? 'Try fewer filters, or a shorter search.'
-                : 'Add the first one from the Add tab.'}
+                : // Not "the Add tab" any more — Add stopped being a tab when You took the third
+                  // slot. Naming a control that no longer exists is worse than naming none.
+                  'Add the first one with the button below.'}
             </p>
             {hasAnyFilter(filters) && (
               <Button
@@ -173,6 +177,40 @@ function DocumentsPage() {
           </div>
         }
       />
+
+      {/*
+        Room for the pill at the end of the list. The shell's `pb-28` clears the tab bar, but the pill
+        sits *above* the bar — so without this the last row of a full archive is permanently under it,
+        and the one row you cannot reach is the oldest document you own.
+      */}
+      <div aria-hidden="true" className="h-[4.875rem]" />
+
+      {/*
+        ═══════════════════════════════════════════════════════════════════════════════════
+         The Add pill — the one emphatic control in the app.
+        ═══════════════════════════════════════════════════════════════════════════════════
+
+        `fixed` rather than `absolute`, because the design positions it against the viewport and this
+        page's own box is as tall as the archive. It clears the tab bar by sitting above the same
+        safe-area inset the bar pads itself with, so it never lands on the home indicator.
+
+        **It carries a hairline, not a shadow.** The comp draws `0 8px 24px rgba(10,10,9,.24)`, which
+        would make it the third thing in the app to cast one — and ADR-0025 §3 allows exactly two, the
+        sheet and the toast, on the grounds that a shadow means "temporarily on top of your life".
+        A permanent control is not that. The ink fill already separates it from any ground it crosses,
+        which is the job the shadow was doing.
+      */}
+      <button
+        type="button"
+        onClick={openAdd}
+        className="fixed right-gutter bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-40 flex min-h-[3.25rem] items-center gap-2.5 rounded-pill border border-ink bg-ink pr-5 pl-4 text-head text-onink active:opacity-90"
+      >
+        <span aria-hidden="true" className="relative block size-4">
+          <span className="absolute top-[7px] left-0 h-[2.5px] w-4 rounded-[1px] bg-current" />
+          <span className="absolute top-0 left-[7px] h-4 w-[2.5px] rounded-[1px] bg-current" />
+        </span>
+        Add
+      </button>
     </div>
   )
 }

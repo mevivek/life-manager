@@ -5,6 +5,7 @@ import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
+import { useOpenAdd } from './AddSheetProvider'
 import { DocumentForm } from './DocumentForm'
 import {
   ago,
@@ -215,6 +216,23 @@ describe('formatDate', () => {
  * Neither component renders a `<Link>`, so both mount without a router. That is a property worth
  * keeping: it is what makes them testable at all.
  */
+describe('useOpenAdd', () => {
+  it('throws without a provider rather than handing back a no-op', () => {
+    // Add is reachable from two places now that it is not a tab — the Now header and the Documents
+    // pill — so the hook can be called from a tree that forgot the provider. Returning a no-op there
+    // would render a button that focuses, announces and does NOTHING on tap, which is precisely the
+    // class of bug this codebase has shipped twice with valid markup and a passing suite.
+    function Probe() {
+      useOpenAdd()
+      return null
+    }
+    // React logs the render failure; the assertion is the throw, so the log is noise.
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => render(<Probe />)).toThrow(/AddSheetProvider/)
+    quiet.mockRestore()
+  })
+})
+
 describe('the horizon with no entries', () => {
   it('states that nothing else is dated when every dated document is already urgent', () => {
     // The reported case: one passport expiring in 6 days, so `rows` is empty while `datedTotal` is 1.
