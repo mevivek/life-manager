@@ -1,8 +1,9 @@
 import fastifySwagger from '@fastify/swagger'
+import fastifySwaggerUi from '@fastify/swagger-ui'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { createJsonSchemaTransform } from 'fastify-type-provider-zod'
-import { env } from '../env.js'
+import { env, isProduction } from '../env.js'
 
 /**
  * OpenAPI 3.1, generated from the same Zod schemas that validate and serialise
@@ -13,8 +14,14 @@ import { env } from '../env.js'
  * 1. `zodToJsonConfig.target: 'draft-2020-12'` is what makes the output genuinely 3.1. The
  *    plain `jsonSchemaTransform` export emits 3.0-flavoured JSON Schema, which would make
  *    the `openapi: "3.1.0"` field a lie.
- * 2. We serve the document from our own route rather than adding `@fastify/swagger-ui`,
- *    because api.md §1 fixes the path at `/api/v1/openapi.json`. No browsable UI at M0.
+ * 2. The raw document is served from our own route rather than only through swagger-ui,
+ *    because api.md §1 fixes the machine-readable path at `/api/v1/openapi.json`
+ *    regardless of whether a browsable UI is mounted.
+ *
+ * The browsable UI (`@fastify/swagger-ui`) is registered ONLY when `!isProduction` — it has
+ * a "try it out" panel that fires real authenticated requests, which is a different risk
+ * profile than the read-only JSON document and has no reason to be reachable on
+ * `api.mevivek.dev`. The JSON stays public in every environment.
  *
  * Known gap, stated so a future mobile-client session does not waste an afternoon: Better
  * Auth's own endpoints do NOT appear in this document. `@fastify/swagger` can only see
@@ -61,6 +68,19 @@ export const openapiPlugin = fp(
       { schema: { hide: true }, config: { public: true } },
       async () => app.swagger(),
     )
+
+    if (!isProduction) {
+      // A child context: swagger-ui's own routes carry no `config`, and the actor hook
+      // treats a missing `config.public` as "requires a session" (conventions/api.md §6).
+      // The `onRoute` hook stamps every route this plugin registers as public before the
+      // actor hook ever sees it.
+      await app.register(async (docs) => {
+        docs.addHook('onRoute', (routeOptions) => {
+          routeOptions.config = { ...routeOptions.config, public: true }
+        })
+        await docs.register(fastifySwaggerUi, { routePrefix: '/api/v1/docs' })
+      })
+    }
   },
   { name: 'openapi' },
 )
