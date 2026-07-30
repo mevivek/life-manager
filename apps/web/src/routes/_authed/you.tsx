@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/label'
+import { useHolders } from '@/features/documents/useDocuments'
 import { toLedger, useLedger } from '@/features/documents/useLedger'
 import { api } from '@/lib/api'
 import { endSession } from '@/lib/session'
@@ -61,6 +62,8 @@ function YouPage() {
   const approx = ledger !== null && !ledger.complete ? '+' : ''
 
   const space = me.data?.spaces[0] ?? null
+  /** Holders other than the owner. `+ 1` for "you" is done at the render, so the zero case is clear. */
+  const people = useHolders().data ?? []
 
   return (
     <div className="flex flex-1 flex-col">
@@ -124,6 +127,19 @@ function YouPage() {
             numeric
             value={ledger === null ? '—' : `${ledger.withoutScan.length}${approx}`}
           />
+          {/*
+            Only once someone else is filed for. On a single-person archive "1 including you" is a
+            statistic about nothing, and it would imply the app does something with people that it
+            does not — holders are a label, and nobody is invited.
+          */}
+          {people.length > 0 && (
+            <Stat
+              term="People filed for"
+              numeric
+              value={`${people.length + 1}`}
+              note="Including you"
+            />
+          )}
         </dl>
       </section>
 

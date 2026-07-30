@@ -7,7 +7,7 @@ import { Toast } from '@/components/ui/toast'
 import { useOpenAdd } from '@/features/documents/AddSheetProvider'
 import { DocumentFilters, type Filters, hasAnyFilter } from '@/features/documents/DocumentFilters'
 import { DocumentList } from '@/features/documents/DocumentList'
-import { useDocuments } from '@/features/documents/useDocuments'
+import { useDocuments, useHolders } from '@/features/documents/useDocuments'
 import { useLedger } from '@/features/documents/useLedger'
 import { cn } from '@/lib/utils'
 
@@ -54,6 +54,8 @@ const searchSchema = z.object({
   tag: z.string().default('').catch(''),
   before: z.string().default('').catch(''),
   scan: z.enum(['', 'yes', 'no']).default('').catch(''),
+  /** `mine` or a holder's name. See `Filters.who`. */
+  who: z.string().default('').catch(''),
 })
 
 export const Route = createFileRoute('/_authed/documents/')({
@@ -74,6 +76,7 @@ function toQuery(filters: Filters): Partial<DocumentListQuery> {
     ...(filters.tag === '' ? {} : { tag: [filters.tag] }),
     ...(filters.before === '' ? {} : { expiring_before: filters.before }),
     ...(filters.scan === '' ? {} : { has_file: filters.scan === 'yes' }),
+    ...(filters.who === '' ? {} : { holder: filters.who }),
   }
 }
 
@@ -96,7 +99,7 @@ function DocumentsPage() {
   const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(() => new Set())
   const [copied, setCopied] = useState<string | null>(null)
   const navigate = useNavigate({ from: Route.fullPath })
-  const [openPanel, setOpenPanel] = useState<'none' | 'type' | 'tag' | 'before'>('none')
+  const [openPanel, setOpenPanel] = useState<'none' | 'type' | 'tag' | 'before' | 'who'>('none')
 
   const query = toQuery(filters)
 
@@ -117,6 +120,15 @@ function DocumentsPage() {
    */
   const ledger = useLedger()
   const availableTags = collectTags(ledger.data?.data ?? [])
+  /**
+   * The holders the Whose chip offers.
+   *
+   * From `useHolders` rather than from the loaded page, for the same reason tags come from the
+   * unfiltered ledger: a filter that only offers the holders surviving the current filters would make
+   * its own options vanish as you use it.
+   */
+  const holders = useHolders()
+  const people = (holders.data ?? []).map((person) => person.holder)
 
   const total = firstPage.data?.data.length ?? 0
   const complete = firstPage.data?.next_cursor === null
@@ -192,6 +204,7 @@ function DocumentsPage() {
           availableTags={availableTags}
           openPanel={openPanel}
           onOpenPanel={setOpenPanel}
+          people={people}
           onChange={(next) => {
             // `replace` so changing a filter does not stack a history entry per keystroke — otherwise
             // the back button walks the user letter by letter out of their own search.
@@ -233,7 +246,7 @@ function DocumentsPage() {
                 className="mt-3.5"
                 onClick={() =>
                   void navigate({
-                    search: { q: '', type: '', tag: '', before: '', scan: '' },
+                    search: { q: '', type: '', tag: '', before: '', scan: '', who: '' },
                     replace: true,
                   })
                 }

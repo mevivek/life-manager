@@ -10,6 +10,7 @@ import {
   documentListResponseSchema,
   documentSchema,
   documentUpdateSchema,
+  holdersResponseSchema,
   presignDownloadRequestSchema,
   presignDownloadResponseSchema,
   presignUploadRequestSchema,
@@ -133,6 +134,23 @@ export async function documentsRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (request) => ({ data: await service.listIssuers(requireActor(request)) }),
+  )
+
+  route.get(
+    '/api/v1/documents/holders',
+    {
+      schema: {
+        operationId: 'listHolders',
+        summary: 'Distinct holders in the actor’s spaces, with their most recent relation',
+        description:
+          'Registered BEFORE /documents/:id so the static segment wins the match — the same trap ' +
+          '/documents/issuers documents. Holders are free text, not accounts: this is autocomplete ' +
+          'for a label, and it grants nobody access to anything.',
+        tags: ['documents'],
+        response: { 200: holdersResponseSchema, ...commonErrors },
+      },
+    },
+    async (request) => ({ data: await service.listHolders(requireActor(request)) }),
   )
 
   route.get(

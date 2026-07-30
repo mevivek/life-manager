@@ -323,6 +323,22 @@ function fieldsOf(detail: DocumentDetailResponse): Field[] {
       label: 'Type',
       value: detail.doc_type === 'other' ? null : capitalise(detail.doc_type),
     },
+    /**
+     * "Whose" — always shown, and "Mine" when there is no holder.
+     *
+     * Not hidden for the owner's own documents the way the row badge is. A row is scanned in a list
+     * where nine "Me" pills would be noise; a detail screen is one document being read deliberately,
+     * and "Mine" is a fact worth stating next to Issuer and Type rather than an absence to infer.
+     */
+    {
+      label: 'Whose',
+      value:
+        detail.holder == null || detail.holder === ''
+          ? 'Mine'
+          : detail.relation == null || detail.relation === ''
+            ? detail.holder
+            : `${detail.holder} · ${detail.relation}`,
+    },
     { label: 'Issuer', value: emptyToNull(detail.issuer) },
     { label: 'Issued', value: detail.issued_on === null ? null : formatDate(detail.issued_on) },
     {

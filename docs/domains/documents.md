@@ -57,6 +57,8 @@ The logical document — "my passport" — independent of any particular scan of
 | `issuer` | `text null` | Who issued it. Free text with autocomplete — see §9 |
 | `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on **every** document response including the list ([ADR-0027](../decisions/0027-identifier-in-the-list-response.md)). In pino's redaction list |
 | `identifier_last4` | `text null` | The **display** form, derived from `identifier` on every write. This is what lists show — §4 rule 6 |
+| `holder` | `text null` | Whose document it is, as a **label**. `null` means the owner's own — §4 rule 13 |
+| `relation` | `text null` | How the holder relates to the owner — "Wife", "Son (12)". Cosmetic, and `null` whenever `holder` is |
 | `issued_on` | `date null` | |
 | `expires_on` | `date null` | **`date`, not timestamp.** A passport expires on a day, not an instant |
 | `country` | `char(2) null` | ISO 3166-1 alpha-2 |
@@ -184,6 +186,25 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
 11. Uploads are limited to 25 MB and an allowlist: PDF, JPEG, PNG, HEIC, WebP, TIFF.
 12. Every read and write is scoped to `space_id IN actor.spaceIds`. Cross-space access
     returns **404, not 403** ([conventions/api.md](../conventions/api.md) §3).
+13. **`holder` is a label, and never a permission.** It records whose document a record *is* —
+    a spouse's Aadhaar, a child's passport — so one archive can hold a household. Nobody is
+    invited and nothing is shared by setting it: `space_id` remains the only thing that decides
+    who may read a document (invariants 2 and 3), and `distinctHolders()` is scoped like every
+    other read. Sharing, when it arrives, is a space growing a second member — a different
+    mechanism, and this column will not change for it.
+
+    Three consequences worth stating, because each one is easy to undo:
+
+    - **`null` is "mine", and is drawn as absence.** The account owner has no name anywhere in
+      the app; a "Me" badge on nine rows in ten would be noise. Same rule as `other` for
+      `doc_type` and "no expiry" for `expires_on`.
+    - **`relation` cannot outlive `holder`.** One helper writes both (`holderColumns()`), and
+      clearing the name clears the relation in the same statement — a relation with nobody
+      attached would render as a household member who does not exist.
+    - **The `?holder=` filter needs a sentinel for "mine".** It is the literal `mine`
+      (`HOLDER_MINE`), not an empty string, because `?holder=` and `?holder` are the same thing
+      to enough query-string parsers to make the empty case unreliable. A person genuinely
+      named "mine" collides; that is accepted, and noted in the schema.
 
 ## 5. API surface
 
@@ -197,6 +218,7 @@ GET    /api/v1/documents
        ?tag=        repeatable
        ?expiring_before=YYYY-MM-DD
        ?has_file=true|false
+       ?holder=     an exact holder name, or the literal `mine` for holder IS NULL — §4 rule 13
        ?sort=expires_on|created_at|title   ?order=asc|desc
        Default sort: expires_on asc, nulls last — the useful default, not created_at
 
@@ -206,6 +228,8 @@ PATCH  /api/v1/documents/:id
 DELETE /api/v1/documents/:id                 soft delete
 
 GET    /api/v1/documents/issuers             distinct issuers, for the §9(1) autocomplete
+GET    /api/v1/documents/holders             distinct holders, each with its most recent relation
+                                             — PAIRS, not names, so picking a person fills both
 
 POST   /api/v1/documents/:id/files:presign-upload
        → { file_id, upload_url, storage_key, version, expires_at }
@@ -282,14 +306,38 @@ the expiry ladder and the navigation rule; this section records what the screens
   > [backlog entry](../product/idea-backlog.md) that proposed this screen actually posed: *what needs
   > doing* — and, now, *when is the next thing*.
 
-- **Documents** (`/documents`) — the archive. A sticky header carrying search plus four filter chips
-  (**type · tag · expires before · scan**), then the full list sorted soonest-first, then
+- **Documents** (`/documents`) — the archive. A sticky header carrying search plus five filter chips
+  (**type · tag · whose · expires before · scan**), then the full list sorted soonest-first, then
   `Load 20 more`. Every chip maps to a real query parameter and filters **server-side**; filter state
   lives in the **URL**, so the Now screen's nudge can link into a filtered view and a back-navigation
   returns to the list the user was reading.
+
+  **Whose is a panel, not a cycle**, and it is **not drawn until a second person exists** — the same
+  "draw it the day the thing exists" rule that keeps the domain switcher off the title. Its options are
+  *Mine* plus one per known holder. Note the vocabulary split, which is deliberate: the filter says
+  **Mine** because it selects a set of documents, while the form says **Me** because it names a person.
 - **Document detail** — back link → eyebrow type → serif title → a status block tinted by expiry state,
-  carrying the reminder chips → *Details* (including the per-type `custom_attrs`, read-only) → the
+  carrying the reminder chips → *Details* (including *Whose*, which reads **Mine** rather than
+  disappearing — it is a `<dl>` of every field, the same way an absent country reads "Not set" — and the
+  per-type `custom_attrs`, read-only) → the
   `•••• last4` block and its explanation → *Scans* → a quiet text-only delete. Inline preview is M2.
+- **Rows carry the holder as a hairline pill beside the title**, and nothing at all for the owner's
+  own. The pill is `shrink-0` and the title `min-w-0 truncate`, so a long title shortens and the
+  **name never does** — a name truncated to "Priy…" loses the only thing distinguishing two otherwise
+  identical documents.
+- **The people picker** (`DocumentForm`) — *Whose document is it?* as a chip row: **Me**, one chip per
+  known holder, and a dashed **Someone else** that opens *Their name* / *How they're related*.
+
+  > **Exactly one chip is selected, always, and openness is DERIVED — not stored.**
+  >
+  > Storing it and seeding from `initial.holder` looked right and was wrong: every saved holder is
+  > *also* a suggestion (`distinctHolders()` returns all of them), so editing a document filed for
+  > Priya lit **her chip and the dashed one together**, with an editable second copy of her name
+  > below. Choosing **Me** then left an empty *Their name* open beneath it, reading as a required
+  > field. Both bugs were invisible to tests asserting on the submitted payload — the payload was
+  > correct the whole time — and took *rendering the edit screen* to find (debt D37/D43).
+  >
+  > So: open when the current name has no chip, or when the user asked. Picking any chip closes it.
 - **Create / edit** — title-first, everything else progressively disclosed; **title is the only required
   field** and is drawn by border weight rather than an asterisk. Capture friction is the main risk
   ([product/brain.md](../product/brain.md) principle 2). Add opens a **bottom sheet** from the tab bar

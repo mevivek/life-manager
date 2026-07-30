@@ -12,7 +12,9 @@ import {
   documentListResponseSchema,
   documentSchema,
   type HealthResponse,
+  type HoldersResponse,
   healthResponseSchema,
+  holdersResponseSchema,
   type MeResponse,
   meResponseSchema,
   type PresignDownloadResponse,
@@ -220,6 +222,15 @@ export const api = {
 
     remove: (id: string): Promise<null> =>
       request(`/api/v1/documents/${id}`, noContentSchema, { method: 'DELETE' }),
+
+    /**
+     * The people picker's suggestions — pairs, so choosing a known person fills the relation too.
+     *
+     * Autocomplete for a *label*. It grants nobody access to anything: a holder is a word on a
+     * document, and `space_id` is still the only thing that decides who can read one.
+     */
+    holders: (): Promise<HoldersResponse['data']> =>
+      request('/api/v1/documents/holders', holdersResponseSchema).then((body) => body.data),
 
     issuers: (): Promise<string[]> =>
       request('/api/v1/documents/issuers', z.object({ data: z.array(z.string()) })).then(

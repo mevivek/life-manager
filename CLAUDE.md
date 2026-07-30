@@ -12,12 +12,16 @@ read, then open only what its task needs. Full index: [`docs/README.md`](docs/RE
 ## Status
 
 **[M1](docs/roadmap.md) — Documents — is BUILT and DEPLOYED, but NOT DONE.** `pnpm typecheck lint
-build` are green. **The suite is 248 tests: web 123 · shared 29 · api 96.** A container with no Docker
-measures **161 passed / 87 skipped** — all 87 the API's. **246/0 was confirmed on 2026-07-30, not
-locally but by the Cloud Build pipeline**, which runs a real Postgres sidecar with `CI=true` (making
-the harness throw rather than skip) and only builds and deploys after `test` passes — so the API
-reporting commit `99aac06` on `/health` is the evidence the database-backed suites ran green.
-**Still run it somewhere with a database before quoting a total from your own machine.** Deployed
+build` are green. **The suite is 307 tests: web 174 · api 104 · shared 29 — 307/0 measured on
+2026-07-30 against a real Postgres**, not inferred from a green pipeline. A container with no Docker
+measures **212 passed / 95 skipped**; all 95 skipped are the API's.
+
+**You can run the database-backed suites in this container without Docker.** Postgres 16 is installed
+at `/usr/lib/postgresql/16/bin`, and `initdb` refuses to run as root, so:
+`chown postgres <datadir> && su postgres -c "…/initdb -D <datadir> -U postgres --auth=trust"`, start
+it on a spare port, `createdb`, then
+`CI=true TEST_DATABASE_URL=postgres://postgres@127.0.0.1:<port>/<db> pnpm test`. `CI=true` is what
+makes the harness throw instead of skip. Do **not** write that URL into `apps/api/.env`. Deployed
 2026-07-28 (`09d0ace`) and verified on production by writing a real document through the API. But
 **R2 and VAPID are unconfigured** — file endpoints answer 503 and push returns a null key, both
 deliberately — the database holds no real documents, and no reminder has reached a phone. M1's "done
@@ -57,7 +61,9 @@ pipeline. See [README.md](README.md) § Deploying.
 
 What M1 added, so you do not go looking for it: `documents`, `document_files`, `reminders`,
 `push_subscriptions`, `idempotency_keys`; full-text search; presigned R2 upload/download with
-versioning; Web Push; three pg-boss handlers; cursor pagination; `Idempotency-Key`.
+versioning; Web Push; three pg-boss handlers; cursor pagination; `Idempotency-Key`. Then, from the
+design handoffs: `identifier` (ADR-0026/0027), and `holder` + `relation` with
+`GET /api/v1/documents/holders`.
 
 **The offline read cache from [ADR-0013](docs/decisions/0013-read-only-offline-v1.md) is built** —
 pulled ahead of M1's "done when" by an explicit product call, so the app can be iterated on without
@@ -84,7 +90,7 @@ or the precondition it exists to enforce is defeated.
 ([ADR-0025](docs/decisions/0025-ledger-design-system.md), 2026-07-29)** — warm paper light + dark at
 parity, Newsreader + IBM Plex self-hosted, and colour spent *only* on expiry status. **The practical
 rules live in [conventions/design.md](docs/conventions/design.md)** — read that before touching
-anything visual; the ADR is there for *why*. Five things will bite a session that reads neither:
+anything visual; the ADR is there for *why*. Six things will bite a session that reads neither:
 
 1. **`cn()` must be told about every new `--text-*`, `--radius-*` or `--spacing-*` token**
    (`apps/web/src/lib/utils.ts`). `tailwind-merge` cannot tell a colour from a size, and getting this
@@ -102,6 +108,11 @@ anything visual; the ADR is there for *why*. Five things will bite a session tha
 5. **A screen whose content can be short needs `flex-1` and a footer with `mt-auto`.** The shell is
    `min-h-dvh`, so without it a sparse archive leaves a screen of dead space above the tab bar —
    reported from a real phone, invisible to every twelve-document fixture.
+6. **A document can be filed for somebody else** — `holder` + `relation`, on the row, the detail
+   screen, a *Whose* filter and a picker in the form. **It is a label, not a permission**, and `null`
+   means "mine" and is drawn as *absence*: no "Me" badge anywhere. See
+   [documents.md](docs/domains/documents.md) §4 rule 13 before touching any of it. Two of its bugs were
+   found only by rendering the edit screen — the same class as D43, again.
 
 What still does **not** exist: OCR and previews (M2), offline *download* of files, password reset,
 Playwright, R2 object deletion, and **any way for a user to undo a delete** (soft-delete sets
@@ -109,7 +120,7 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D47 with triggers, so check there
+[debt register](docs/product/review.md#3-debt-register) as D1–D48 with triggers, so check there
 before "fixing" one.
 
 ## Start here — next actions
@@ -129,9 +140,9 @@ Four things worth knowing before you touch anything:
 
 1. **Check the skip count, every time.** `pnpm test` **skips** the database-backed suites without
    Docker or `TEST_DATABASE_URL`, and M0 reported "40 tests pass" from a machine where 17 never ran.
-   **248/0 is the target; 161/87 is what a container with no Docker shows you** — the 87 skipped are
-   all the API's, and 123 of the 161 that do run are web tests needing no database. A green deploy of
-   the API is the cheapest proof the other 87 ran: the pipeline gates it on them.
+   **307/0 is the target; 212/95 is what a container with no Docker shows you** — the 95 skipped are
+   all the API's, and 174 of the 212 that do run are web tests needing no database. Cheaper than
+   trusting a green deploy: start the local Postgres 16 as described under Status and run it properly.
 2. **A `:verb` in a route pattern needs `::`, and may only follow a static segment.** Both halves of
    that were found by measurement and both fail silently in the too-permissive direction —
    [conventions/api.md](docs/conventions/api.md) §2 and the block comment in `documents.routes.ts`.
@@ -152,6 +163,7 @@ Four things worth knowing before you touch anything:
 | **Anything visual — a screen, a component, a colour, a size** | [`conventions/design.md`](docs/conventions/design.md) — the practical rules; [`ADR-0025`](docs/decisions/0025-ledger-design-system.md) for why they exist. Four bugs in this design's own implementation were found *only by rendering it* — **look at it at 390px, in both themes, before calling it done** (debt D37, D43) |
 | **Adding a screen, or touching layout** | `apps/web/src/components/TabBar.tsx` (three tabs, forever — ADR-0025 §4) and the `@layer base` block in `apps/web/src/styles.css` — the app-shell rules, each annotated with the web-page tell it removes |
 | **Anything touching a document's NUMBER** | [`ADR-0026`](docs/decisions/0026-store-the-full-identifier.md) then [`ADR-0027`](docs/decisions/0027-identifier-in-the-list-response.md) — the full value is stored **plaintext** and returned on **every** document response, list included (0027 reversed 0026's detail-only rule). `identifier_last4` is DERIVED, never sent by a client. Reveal is a display state, **not** an authorization boundary. The cache now holds every number on the device — debt **D47** |
+| **Anything touching `holder` — the people picker, the Whose filter, the row pill** | [`documents.md`](docs/domains/documents.md) §4 rule 13. **A holder is a LABEL, never a permission** — `space_id` is still the only thing deciding who can read a document. `null` is "mine" and is drawn as *absence*, so there is no "Me" badge on a row. `relation` cannot outlive `holder` (one helper writes both). The `?holder=` filter's "mine" is the literal sentinel `HOLDER_MINE`, not `''`. And in `DocumentForm` the name fields' openness is **derived, not stored** — storing it lit two chips at once |
 | **Showing an expiry date anywhere** | `apps/web/src/features/documents/ExpiryStatus.tsx` — the five-state ladder. Never hand-roll a second one, and never put a business rule in it: the 45-day boundary is display only |
 | **Adding or changing a FIELD on any cached response** | [`lib/persister.ts`](apps/web/src/lib/persister.ts)'s buster note and debt **D46** — the persisted cache is **rehydrated without re-running Zod**, so the first render after a deploy can hand a component last week's shape. A field the schema says is `string \| null` arrives `undefined`. This crashed the app at its root error boundary on a real phone |
 | **Anything touching caching, offline, or a new `useQuery` key** | [`ADR-0024`](docs/decisions/0024-offline-writes-outbox.md) (which supersedes 0013) then `apps/web/src/lib/persister.ts` — the persist allowlist is opt-in, so a new query key is NOT cached until you add it |
@@ -165,7 +177,7 @@ Four things worth knowing before you touch anything:
 | **Reviewing a finished milestone** | [`docs/product/review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`docs/decisions/index.md`](docs/decisions/index.md) |
 | **Running it locally for the first time** | [`README.md`](README.md) § Getting started |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D47, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — D1–D48, each with a trigger. D24/D25 are traps, not gaps. D32/D33 are the two M1 bugs most likely to recur |
 | Anything else | [`docs/README.md`](docs/README.md) routing table |
 
 **Baseline is three files: this one, the routing table, and the one doc your task names.**

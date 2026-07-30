@@ -1,4 +1,4 @@
-import { documentTypeSchema } from '@life-manager/shared'
+import { documentTypeSchema, HOLDER_MINE } from '@life-manager/shared'
 import { Card } from '@/components/ui/card'
 import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
@@ -40,9 +40,24 @@ export type Filters = {
   before: string
   /** `''` unset · `yes` has a scan · `no` no scan. */
   scan: '' | 'yes' | 'no'
+  /**
+   * `''` unset · `mine` the owner's own · any other string an exact holder.
+   *
+   * `mine` is a sentinel and matches `HOLDER_MINE` on the wire — the collision risk (someone filing a
+   * document under the literal name "mine") is accepted in `documentListQuerySchema`, where it is
+   * argued.
+   */
+  who: string
 }
 
-export const EMPTY_FILTERS: Filters = { q: '', type: '', tag: '', before: '', scan: '' }
+export const EMPTY_FILTERS: Filters = {
+  q: '',
+  type: '',
+  tag: '',
+  before: '',
+  scan: '',
+  who: '',
+}
 
 export function hasAnyFilter(filters: Filters): boolean {
   return (
@@ -50,7 +65,8 @@ export function hasAnyFilter(filters: Filters): boolean {
     filters.type !== '' ||
     filters.tag !== '' ||
     filters.before !== '' ||
-    filters.scan !== ''
+    filters.scan !== '' ||
+    filters.who !== ''
   )
 }
 
@@ -65,7 +81,7 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 /** Which sub-panel is unfolded. Only ever one — two open panels push the list off the screen. */
-type OpenPanel = 'none' | 'type' | 'tag' | 'before'
+type OpenPanel = 'none' | 'type' | 'tag' | 'before' | 'who'
 
 export function DocumentFilters({
   filters,
@@ -73,12 +89,15 @@ export function DocumentFilters({
   /** Tags present in the loaded page, so the tag filter offers only tags that exist. */
   availableTags,
   openPanel,
+  people,
   onOpenPanel,
 }: {
   filters: Filters
   onChange: (next: Filters) => void
   availableTags: string[]
   openPanel: OpenPanel
+  /** Holder names that exist in the archive. Empty means the Whose chip is not drawn at all. */
+  people: string[]
   onOpenPanel: (panel: OpenPanel) => void
 }) {
   function toggle(panel: Exclude<OpenPanel, 'none'>) {
@@ -121,6 +140,24 @@ export function DocumentFilters({
         >
           {filters.tag === '' ? 'Tag' : `#${filters.tag}`}
         </Chip>
+        {/*
+          Whose — a panel, not a cycle. Scan cycles because it has three fixed states; "who" has as
+          many states as there are people, so it opens the same kind of list the tag filter does.
+
+          Drawn only once a holder EXISTS. Before that it would be a control that can only filter to
+          "Mine", which is every document — the same "draw it the day the thing exists" rule as the
+          domain switcher (ADR-0025 §4) and the archive's Show-numbers toggle.
+        */}
+        {people.length > 0 && (
+          <Chip
+            size="sm"
+            selected={filters.who !== ''}
+            aria-expanded={openPanel === 'who'}
+            onClick={() => toggle('who')}
+          >
+            {filters.who === '' ? 'Whose' : filters.who === HOLDER_MINE ? 'Mine' : filters.who}
+          </Chip>
+        )}
         <Chip
           size="sm"
           selected={filters.before !== ''}
@@ -179,6 +216,34 @@ export function DocumentFilters({
               }}
             >
               #{tag}
+            </Chip>
+          ))}
+        </Card>
+      )}
+
+      {openPanel === 'who' && (
+        <Card className="mt-2.5 flex flex-wrap gap-1.5 p-2">
+          <Chip
+            size="sm"
+            selected={filters.who === HOLDER_MINE}
+            onClick={() => {
+              onChange({ ...filters, who: filters.who === HOLDER_MINE ? '' : HOLDER_MINE })
+              onOpenPanel('none')
+            }}
+          >
+            Mine
+          </Chip>
+          {people.map((person) => (
+            <Chip
+              key={person}
+              size="sm"
+              selected={filters.who === person}
+              onClick={() => {
+                onChange({ ...filters, who: filters.who === person ? '' : person })
+                onOpenPanel('none')
+              }}
+            >
+              {person}
             </Chip>
           ))}
         </Card>

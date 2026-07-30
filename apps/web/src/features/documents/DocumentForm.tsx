@@ -33,7 +33,7 @@ import {
   presetByName,
   presetForTitle,
 } from './presets'
-import { useIssuers } from './useDocuments'
+import { useHolders, useIssuers } from './useDocuments'
 
 /**
  * Create / edit a document. domains/documents.md §7, ADR-0025 §5.
@@ -88,6 +88,16 @@ const documentFormSchema = documentCreateSchema.extend({
    * anywhere: an emptied field must clear both columns rather than fail `min(1)`.
    */
   identifier: z.union([blank, documentCreateSchema.shape.identifier]),
+  /**
+   * The holder fields need the blank-to-null transform for exactly the reason the note above gives.
+   *
+   * `holderSchema` is `min(1)`, and the picker's "Me" state is an empty string — so without this the
+   * form silently fails validation on **every** document filed for the owner, which is most of them.
+   * It did: adding these defaults without the union broke Save across ten tests at once, with no
+   * error message anywhere, because a resolver rejection is not a server rejection.
+   */
+  holder: z.union([blank, documentCreateSchema.shape.holder]),
+  relation: z.union([blank, documentCreateSchema.shape.relation]),
   /**
    * Uppercased on the way through: `countryCodeSchema` is `^[A-Z]{2}$`, and rejecting `gb` for
    * being lowercase would be a pointless 400 on a field the user typed correctly.
@@ -172,7 +182,28 @@ export function DocumentForm({
   /** The chosen preset's NAME, not the object — so the selected pill survives a re-render by value. */
   const [preset, setPreset] = useState('')
   const [allPresets, setAllPresets] = useState(false)
+  /**
+   * Whether the user has *asked* for the name fields — not whether they are showing.
+   *
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  This was a `someoneElse` boolean initialised to `initial?.holder !== ''`, and it was wrong.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * Every saved holder is also a *suggestion* — `distinctHolders()` returns every holder in the
+   * space — so seeding the flag from the saved value opened the fields for a person who already had
+   * a chip. Editing Priya's Aadhaar drew **"Priya" and "Someone else" both selected**, with an
+   * editable second copy of her name below: precisely the "invites the two to disagree" state the
+   * note on the fields warns against. Clicking **Me** then left an empty *Their name* input sitting
+   * open under a selected Me chip, reading as a required field.
+   *
+   * Neither was visible to a unit test that asserted on the submitted payload — the payload was
+   * correct throughout. It took rendering the edit screen (debt D37/D43: *look at it*).
+   *
+   * So openness is **derived**, and only the user's explicit ask is state.
+   */
+  const [askedForAName, setAskedForAName] = useState(false)
   const issuers = useIssuers()
+  const holders = useHolders()
 
   /**
    * The preset a document being EDITED corresponds to, recovered from its saved title.
@@ -240,6 +271,8 @@ export function DocumentForm({
        * screen you just came from.
        */
       identifier: formatNumber(storedFormat, initial?.identifier ?? ''),
+      holder: initial?.holder ?? '',
+      relation: initial?.relation ?? '',
       country: initial?.country ?? '',
       notes: initial?.notes ?? '',
       tags: initial?.tags ?? [],
@@ -296,6 +329,29 @@ export function DocumentForm({
   const pendingCaret = useRef<number | null>(null)
 
   const numberProgress = numberHint(activeFormat, watch('identifier') ?? '')
+  /** `''` is "Me" — the absence of a holder, which is what `null` becomes on the way into the form. */
+  const holderValue = watch('holder') ?? ''
+
+  /**
+   * Whether a name is a name we have a chip for.
+   *
+   * `holders.data` is `undefined` on the first render, so this is `false` before the suggestions
+   * arrive — which is deliberate, and is the whole reason the fields are derived rather than
+   * seeded. See `someoneElse` below.
+   */
+  const holderHasChip = (holders.data ?? []).some((person) => person.holder === holderValue)
+
+  /**
+   * The name fields are open when there is a name with **nowhere to put it**, or when asked for.
+   *
+   * The first clause is what makes the async load safe: on the first render of an edit the
+   * suggestions have not arrived, so Priya has no chip, so her name shows in the field rather than
+   * the form silently reading as "Me". One render later her chip exists and the field closes.
+   *
+   * A user who then taps **Someone else** to rename her sets `askedForAName`, and the field stays
+   * open with her current name in it to be edited — the suggestion list no longer closes it.
+   */
+  const someoneElse = askedForAName || (holderValue !== '' && !holderHasChip)
 
   /**
    * Restore the caret after the reformat re-rendered the field.
@@ -439,6 +495,115 @@ export function DocumentForm({
           )}
         </fieldset>
       )}
+
+      {/*
+        ═══════════════════════════════════════════════════════════════════════════════════
+         Whose document is it? — a LABEL, never a permission.
+        ═══════════════════════════════════════════════════════════════════════════════════
+
+        Nobody is invited and nothing is shared. `holder` is a word on a document; `space_id` is still
+        the only thing that decides who can read one (invariants 2 and 3). Sharing, when it arrives, is
+        a space growing a second member — a different mechanism, and this field will not change for it.
+
+        **"Me" is the absence of a holder**, drawn as absence, the same way `other` is the absence of a
+        type. That is why the account holder has no name anywhere in the app.
+
+        Shown on both create and edit, unlike the preset chooser: picking a person overwrites nothing
+        the user typed, so there is no reason to hide it from an edit.
+      */}
+      <fieldset className="flex flex-col gap-2 border-0 p-0">
+        <legend className="float-left font-mono text-label tracking-label text-ink-3 uppercase">
+          Whose document is it?
+        </legend>
+        {/*
+          Exactly ONE chip is selected, always — which is why every `selected` here is gated on
+          `!someoneElse`. Without the gate, editing a document filed for a person who has a chip lit
+          *both* her chip and the dashed one, because the name satisfied one condition and the open
+          field satisfied the other. Two selected chips in a single-choice row is not a decoration
+          bug: it leaves no way to tell which value will be saved.
+        */}
+        <div className="flex flex-wrap gap-1.5">
+          <Chip
+            selected={!someoneElse && holderValue === ''}
+            onClick={() => {
+              // Closes the fields as well as clearing them. Clearing alone left an empty "Their name"
+              // open beneath a selected Me, which reads as something still to fill in.
+              setAskedForAName(false)
+              setValue('holder', '', { shouldDirty: true })
+              setValue('relation', '', { shouldDirty: true })
+            }}
+          >
+            Me
+          </Chip>
+          {(holders.data ?? []).map((person) => (
+            <Chip
+              key={person.holder}
+              selected={!someoneElse && holderValue === person.holder}
+              onClick={() => {
+                setAskedForAName(false)
+                setValue('holder', person.holder, { shouldDirty: true })
+                // The relation comes with the person, which is what keeps `relation` being stored
+                // per document from surfacing as a second thing to type every time.
+                setValue('relation', person.relation ?? '', { shouldDirty: true })
+              }}
+            >
+              {person.holder}
+            </Chip>
+          ))}
+          {/*
+            Dashed, because it opens a field rather than making a choice — the same "this is an
+            absence to be filled" language as the no-scan marker.
+          */}
+          <Chip
+            variant="dashed"
+            selected={someoneElse}
+            onClick={() => {
+              // Closing clears, so the collapsed form cannot keep submitting a name nobody can see.
+              // Opening keeps whatever is there, so tapping it to *rename* the current person starts
+              // from their name rather than from blank.
+              if (someoneElse) {
+                setAskedForAName(false)
+                setValue('holder', '', { shouldDirty: true })
+                setValue('relation', '', { shouldDirty: true })
+              } else {
+                setAskedForAName(true)
+              }
+            }}
+          >
+            Someone else
+          </Chip>
+        </div>
+
+        {/*
+          The name and relation fields appear only for a new person. An existing one was chosen by
+          name, and re-showing an editable copy of what the chip just set invites the two to disagree.
+        */}
+        {someoneElse && (
+          <div className="flex flex-col gap-2 pt-0.5">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="holder">Their name</Label>
+              {/*
+                `onFocus` claims the field. Otherwise a user who starts typing during the render or
+                two before the suggestions arrive can have it close under the cursor the moment the
+                name they are halfway through matches an existing one.
+              */}
+              <Input
+                id="holder"
+                placeholder="Priya"
+                {...register('holder')}
+                onFocus={() => setAskedForAName(true)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="relation">How they’re related</Label>
+              <Input id="relation" placeholder="Wife" {...register('relation')} />
+              <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
+                Optional, and only a label — it changes nothing about who can see this.
+              </p>
+            </div>
+          </div>
+        )}
+      </fieldset>
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="title">Title</Label>
