@@ -204,7 +204,7 @@ new one is unreadable until granted.
 ##### The R2 bucket needs a CORS policy, and nothing else will tell you
 
 The browser PUTs bytes **straight to R2** (ADR-0008), so the bucket must allow the app's origin.
-Without this, every upload fails in the browser while the API, the manifest and all 25 deployment
+Without this, every upload fails in the browser while the API, the manifest and all 42 deployment
 checks stay green — the request never reaches our code. In the bucket's **Settings → CORS policy**:
 
 ```json

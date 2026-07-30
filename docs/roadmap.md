@@ -4,7 +4,12 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M1 built and DEPLOYED. Not yet used for real, and files/notifications are unprovisioned.**
+**Current position: M1 built, DEPLOYED, and in real use. One human step from done.**
+
+R2, VAPID and the Neon rotation are all provisioned, real documents are in, and the daily scan now has
+a trigger ([ADR-0028](decisions/0028-external-trigger-for-the-daily-scan.md)) — but nothing has run
+`provision.sh cron` yet, so the endpoint answers 503 and **no notification has arrived**. That, plus a
+week of use for lens 4, is all that stands between M1 and done. See §4.6 below.
 
 Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
 Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
@@ -14,7 +19,8 @@ exactly one personal space.
 
 **M0 is deployed as well as built.** `app.mevivek.dev` on Cloudflare Pages, `api.mevivek.dev` on
 Cloud Run ([ADR-0021](decisions/0021-cloud-run-for-the-api.md)), Postgres on Neon. Nothing runs on
-the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of it in 23 assertions.
+the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of it — **42 checks** as of
+2026-07-30, 42/42 against production.
 
 **Three caveats, all real:**
 
@@ -117,11 +123,16 @@ browser pass at phone width.
 7. **Redo lens 4 of the M1 review** once there is a week of real use. The M1 review is explicitly
    incomplete without it.
 
-> **One piece of litter to clear.** Verifying the deploy created a throwaway account,
-> `deploy-check-1785260209@example.test`, and the session that made it had no database credential to
-> clean up with. Running `node scripts/verify-deployment.mjs` removes every
-> `deploy-check-%@example.test` user as its last step, so the next verification tidies it — or
-> delete it by hand.
+> **Litter to clear — now TWO accounts, and the count only grows.** Each verification run creates a
+> throwaway account, and every run so far has been from an agent container with no database credential
+> to clean up with, so each one leaves its account behind:
+> `deploy-check-1785260209@example.test` and `deploy-check-1785410330291@example.test`.
+>
+> `node scripts/verify-deployment.mjs` removes every `deploy-check-%@example.test` user as its last
+> step **only when it can reach the database** — so running it again from a container adds a third
+> rather than clearing the first two. Clear them by running it once with `DATABASE_URL_UNPOOLED` set
+> (or from `apps/api/.env`), or by hand. Not urgent, but it is real rows in a real database and the
+> pattern is self-accumulating.
 >
 > **Not verified: the deployed app in a browser.** The container's egress proxy relays `CONNECT`
 > only, and Chromium's requests are reset, so production was checked over HTTP rather than driven.
