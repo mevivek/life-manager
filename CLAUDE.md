@@ -215,8 +215,11 @@ Playwright, R2 object deletion, and **any way for a user to undo a delete** (sof
 ADR-0025 § Open items). **`ENABLE_SCHEDULED_JOBS` is off**, so
 the reminder scan is registered and manually triggerable but has never run unattended. Several of
 these look like missing conventions rather than deferred work — they are in the
-[debt register](docs/product/review.md#3-debt-register) as D1–D53 with triggers, so check there
-before "fixing" one.
+[debt register](docs/product/review.md#3-debt-register) as D1–D55 with triggers, so check there
+before "fixing" one. **D54 and D55 are the two newest and both are traps for a fresh session:**
+the web and API deploy on separate triggers, so a response field added to the client must never be
+*required* of the server (it took the archive down once); and `lib/outbox.test.ts` is **flaky**, so
+do not accept anyone's description of a failure in it as expected.
 
 ## Start here — next actions
 
