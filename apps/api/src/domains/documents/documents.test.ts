@@ -411,6 +411,259 @@ describeDb('documents', () => {
     expect(detail.json().identifier_last4).toBeNull()
   })
 
+  /**
+   * ── ADR-0029: `thing_id`, the link to a thing ─────────────────────────────
+   *
+   * The column has **no foreign key yet** and that is deliberate: `things` does not exist, and
+   * ADR-0023 migrates on boot, so a constraint on a missing table would take the API down rather
+   * than fail a build (see the block comment on `thingId` in `documents.schema.ts`). So these
+   * tests use plain fabricated uuids and there is nothing to insert first — the session that
+   * creates `things` adds the constraint with `on delete set null` (things.md §4 rule 5).
+   *
+   * The link is written from the **document** side, because that is where the column is
+   * (things.md §5): `PATCH /api/v1/documents/:id { thing_id }`. Both screens draw it, one
+   * endpoint sets it.
+   */
+
+  // Obvious fakes (conventions/testing.md §5). Two of them, because half of what is worth
+  // asserting here is that a filter EXCLUDES the other one.
+  const THING_A = '2a000000-0000-4000-8000-00000000000a'
+  const THING_B = '2b000000-0000-4000-8000-00000000000b'
+
+  it('ADR-0029: stores thing_id on create and returns it on the response', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      // Settable at capture, because that is where it is usually known: the vehicle papers
+      // checklist opens the form already aware of which thing it is filing against (things.md §7).
+      payload: { title: 'Car insurance', thing_id: THING_A },
+    })
+
+    expect(created.statusCode).toBe(201)
+    expect(created.json().thing_id).toBe(THING_A)
+
+    // Persisted, not merely echoed. A service that dropped the column and reflected the input back
+    // would satisfy the assertion above and nothing else.
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${created.json().id}`,
+      ...authAs(user),
+    })
+    expect(detail.statusCode).toBe(200)
+    expect(detail.json().thing_id).toBe(THING_A)
+  })
+
+  it('ADR-0029: leaves thing_id null when none is given — the common case', async () => {
+    const user = await seedUserWithSpace(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/documents',
+      ...authAs(user),
+      payload: { title: 'Passport' },
+    })
+
+    // Most documents belong to no thing, so `null` has to be an ordinary value rather than a gap —
+    // the same shape as `other` for `doc_type` and a null `expires_on` (Q2).
+    expect(created.statusCode).toBe(201)
+    expect(created.json().thing_id).toBeNull()
+  })
+
+  it('ADR-0029: returns thing_id on the LIST response, not only on detail', async () => {
+    const user = await seedUserWithSpace(app)
+    await createDocument(app, user, { title: 'Boiler warranty', thing_id: THING_A })
+
+    const list = await app.inject({ method: 'GET', url: '/api/v1/documents', ...authAs(user) })
+
+    /**
+     * A **non-zero, real value** — conventions/testing.md §3 and debt D33. `thing_id` is on
+     * `documentSchema`, so it is on the list too; a list mapper that forgot the field would return
+     * `undefined` and every test asserting `null` on an unlinked document would still pass. That is
+     * exactly how `file_count` stayed 0 for the whole of M1.
+     */
+    expect(list.statusCode).toBe(200)
+    expect(list.json().data[0].thing_id).toBe(THING_A)
+  })
+
+  it('ADR-0029: a patch sets the link on a document that had none', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user, { title: 'Service record' })
+    expect(document.body.thing_id).toBeNull()
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, thing_id: THING_A },
+    })
+
+    expect(patched.statusCode).toBe(200)
+    expect(patched.json().thing_id).toBe(THING_A)
+  })
+
+  it('ADR-0029: an explicit null clears the link, and an absent key leaves it alone', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user, { title: 'Receipt', thing_id: THING_A })
+
+    /**
+     * The two halves of conventions/api.md §8, and the reason `documentUpdateSchema` is `.nullish()`
+     * on an all-optional object rather than `.partial()` of the create schema: `.partial()` cannot
+     * tell "don't change" from "clear", and only one of these two tests would fail if it could not.
+     */
+    const untouched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      // No `thing_id` key at all — an unrelated edit must not silently unlink the document.
+      payload: { version: document.version, title: 'Dishwasher receipt' },
+    })
+    expect(untouched.statusCode).toBe(200)
+    expect(untouched.json().title).toBe('Dishwasher receipt')
+    expect(untouched.json().thing_id).toBe(THING_A)
+
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      // Explicit `null` — this is the "unlink" control, and it is the same field as the link.
+      payload: { version: untouched.json().version, thing_id: null },
+    })
+    expect(cleared.statusCode).toBe(200)
+    expect(cleared.json().thing_id).toBeNull()
+  })
+
+  it('ADR-0029: ?thing_id= lists that thing’s documents and excludes the rest', async () => {
+    const user = await seedUserWithSpace(app)
+    await createDocument(app, user, { title: 'Car registration', thing_id: THING_A })
+    await createDocument(app, user, { title: 'Car insurance', thing_id: THING_A })
+    await createDocument(app, user, { title: 'Laptop receipt', thing_id: THING_B })
+    await createDocument(app, user, { title: 'Passport' })
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents?thing_id=${THING_A}`,
+      ...authAs(user),
+    })
+
+    // Both directions. A filter that quietly matched everything would pass a test that only checked
+    // the two rows it wanted were present — this is what the Thing detail screen's *Its documents*
+    // section reads, so a full-archive answer there would be wrong in a way nobody would notice.
+    expect(filtered.statusCode).toBe(200)
+    const titles = (filtered.json().data as { title: string }[]).map((row) => row.title).sort()
+    expect(titles).toEqual(['Car insurance', 'Car registration'])
+
+    const unfiltered = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents',
+      ...authAs(user),
+    })
+    expect(unfiltered.json().data).toHaveLength(4)
+  })
+
+  it('ADR-0029: rejects a non-uuid thing_id filter rather than reading the whole table', async () => {
+    const user = await seedUserWithSpace(app)
+    await createDocument(app, user, { title: 'Car insurance', thing_id: THING_A })
+
+    // `uuidSchema` inside a `z.strictObject` — debt D27. A malformed filter must fail loudly; the
+    // failure it prevents is a "documents for this thing" list that silently shows every document.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/documents?thing_id=not-a-uuid',
+      ...authAs(user),
+    })
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('ADR-0029: a thing_id filter cannot cross a space boundary, and a patch is 404', async () => {
+    const { alice, bob } = await seedTwoUsers(app)
+    const document = await createDocument(app, alice, {
+      title: 'Alice car insurance',
+      thing_id: THING_A,
+    })
+
+    /**
+     * Bob files something against the **same** id — which he can, because there is no foreign key
+     * and nothing stops two spaces naming the same uuid. That is what makes this two-sided rather
+     * than vacuous: an empty answer would also be produced by a caller who owns nothing at all, so
+     * the assertion is "Bob sees his own row and *only* his own".
+     *
+     * The link is a *label on a row*, exactly like `holder`: `scoped()` is still the only thing
+     * deciding what a caller may read (invariants 2 and 3). Knowing a thing's id — which a client in
+     * another space could guess or be told — must buy nothing.
+     */
+    await createDocument(app, bob, { title: 'Bob car insurance', thing_id: THING_A })
+    // Plus one of his own that is linked to nothing, so a dropped filter fails here too rather than
+    // being masked by Bob owning exactly one row.
+    await createDocument(app, bob, { title: 'Bob passport' })
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents?thing_id=${THING_A}`,
+      ...authAs(bob),
+    })
+    expect(filtered.statusCode).toBe(200)
+    expect((filtered.json().data as { title: string }[]).map((row) => row.title)).toEqual([
+      'Bob car insurance',
+    ])
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(bob),
+      payload: { version: document.version, thing_id: THING_B },
+    })
+
+    // 404, never 403 — a 403 would confirm the document exists (conventions/api.md §3, invariant 4).
+    expect(patched.statusCode).toBe(404)
+    expect(patched.statusCode).not.toBe(403)
+
+    // And Alice's link is untouched by the attempt.
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(alice),
+    })
+    expect(detail.json().thing_id).toBe(THING_A)
+  })
+
+  it('ADR-0029: the version precondition still governs a thing_id patch', async () => {
+    const user = await seedUserWithSpace(app)
+    const document = await createDocument(app, user, { title: 'Car insurance' })
+
+    const linked = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, thing_id: THING_A },
+    })
+    expect(linked.statusCode).toBe(200)
+    // A new field is not exempt from ADR-0024: the counter has to advance, or an offline replay of
+    // this write would be indistinguishable from a fresh one.
+    expect(linked.json().version).toBe(document.version + 1)
+
+    // A second write built against the version the client first read — the outbox case.
+    const stale = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+      payload: { version: document.version, thing_id: THING_B },
+    })
+
+    expect(stale.statusCode).toBe(409)
+    expect(stale.headers['content-type']).toContain('application/problem+json')
+
+    // The losing write left nothing behind — the link is still the one that won.
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/documents/${document.id}`,
+      ...authAs(user),
+    })
+    expect(detail.json().thing_id).toBe(THING_A)
+  })
+
   // ── Rule 8: default reminders for identity and certificate ───────────────
 
   it('rule 8: creates 90/30/7-day reminders for an identity document with an expiry', async () => {
