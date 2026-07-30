@@ -108,6 +108,7 @@ trustworthy observation of production.
 run on this repo at all** — `.github/workflows/ci.yml` looks authoritative and executes nothing
 (debt D24). `cloudbuild.deploy.yaml` is the real pipeline, and editing it requires pushing the new
 copy to the trigger — which needs a delete-and-recreate, not an update (debt D25).
+**A multi-commit push can skip the API deploy entirely, and it has caused an outage** (debt **D62**). The guard in `cloudbuild.deploy.yaml` diffs `HEAD~1..HEAD`, which is right for a merge commit and wrong for a **fast-forward** — a push of N commits examines only the tip, so API changes behind it are skipped. **Merge with `--no-ff`** until D62 and D25 are fixed together.
 **A doc-only commit deliberately deploys nothing**, so do not read a skipped build as a broken
 pipeline. See [README.md](README.md) § Deploying.
 

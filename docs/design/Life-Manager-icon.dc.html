@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300..600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+--canvas:#E4E0D6; --paper:#F7F5F0; --raised:#FFFFFF; --sunken:#EFEBE3;
+--ink:#15140F; --ink2:#4A4740; --ink3:#7C776C;
+--rule:#DFDAD0; --rule2:#C6BFB2;
+--ok:#2C5B4A; --warn:#8A5A12; --alert:#96331F;
+--onink:#F7F5F0;
+--sans:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+--face-h:"Newsreader",Georgia,serif;
+}
+body{margin:0;background:var(--canvas);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2E5AA8;text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</helmet>
+
+<div style="padding:44px 46px 60px;max-width:1180px">
+  <div style="font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">Life Manager · app icon</div>
+  <h1 style="margin:12px 0 0;font:400 34px/1.15 var(--face-h);letter-spacing:-.01em">The gauge, cut down to a mark</h1>
+  <p style="margin:10px 0 0;max-width:60ch;font:400 15.5px/1.55 var(--sans);color:var(--ink2);text-wrap:pretty">Three descending bars already carry the meaning inside the app: a document's remaining validity, read as weight rather than colour. Read again at icon scale they're a stack of filed papers, and the shortest bar is the one that needs you. Nothing here is a metaphor the app doesn't already use.</p>
+
+  <div style="display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start;margin-top:38px">
+    <div>
+      <div style="width:280px;height:280px;border-radius:62px;background:#15140F;padding:66px 62px;display:flex;flex-direction:column;justify-content:center;gap:20px;box-shadow:0 18px 44px rgba(10,10,9,.28)">
+        <div style="height:20px;border-radius:10px;background:#F7F5F0"></div>
+        <div style="height:20px;width:74%;border-radius:10px;background:#F7F5F0;opacity:.72"></div>
+        <div style="height:20px;width:40%;border-radius:10px;background:#E0B063"></div>
+      </div>
+      <div style="margin-top:12px;font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">1024 · primary</div>
+    </div>
+
+    <div>
+      <div style="width:280px;height:280px;border-radius:62px;background:#F7F5F0;padding:66px 62px;display:flex;flex-direction:column;justify-content:center;gap:20px;border:1px solid var(--rule2)">
+        <div style="height:20px;border-radius:10px;background:#15140F"></div>
+        <div style="height:20px;width:74%;border-radius:10px;background:#15140F;opacity:.62"></div>
+        <div style="height:20px;width:40%;border-radius:10px;background:#8A5A12"></div>
+      </div>
+      <div style="margin-top:12px;font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">1024 · paper</div>
+    </div>
+
+    <div>
+      <div style="width:280px;height:280px;border-radius:62px;background:#2C5B4A;padding:66px 62px;display:flex;flex-direction:column;justify-content:center;gap:20px">
+        <div style="height:20px;border-radius:10px;background:#F7F5F0"></div>
+        <div style="height:20px;width:74%;border-radius:10px;background:#F7F5F0;opacity:.66"></div>
+        <div style="height:20px;width:40%;border-radius:10px;background:#F7F5F0;opacity:.3"></div>
+      </div>
+      <div style="margin-top:12px;font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">1024 · all clear</div>
+    </div>
+  </div>
+
+  <div style="margin-top:52px;padding-top:26px;border-top:1px solid var(--rule)">
+    <div style="font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">Down to 40px</div>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:28px;margin-top:20px">
+      <div>
+        <div style="width:180px;height:180px;border-radius:40px;background:#15140F;padding:42px 40px;display:flex;flex-direction:column;justify-content:center;gap:13px">
+          <div style="height:13px;border-radius:7px;background:#F7F5F0"></div>
+          <div style="height:13px;width:74%;border-radius:7px;background:#F7F5F0;opacity:.72"></div>
+          <div style="height:13px;width:40%;border-radius:7px;background:#E0B063"></div>
+        </div>
+        <div style="margin-top:9px;font:400 12px var(--mono);color:var(--ink3)">180</div>
+      </div>
+      <div>
+        <div style="width:120px;height:120px;border-radius:27px;background:#15140F;padding:28px 27px;display:flex;flex-direction:column;justify-content:center;gap:9px">
+          <div style="height:9px;border-radius:5px;background:#F7F5F0"></div>
+          <div style="height:9px;width:74%;border-radius:5px;background:#F7F5F0;opacity:.72"></div>
+          <div style="height:9px;width:40%;border-radius:5px;background:#E0B063"></div>
+        </div>
+        <div style="margin-top:9px;font:400 12px var(--mono);color:var(--ink3)">120</div>
+      </div>
+      <div>
+        <div style="width:76px;height:76px;border-radius:17px;background:#15140F;padding:18px 17px;display:flex;flex-direction:column;justify-content:center;gap:6px">
+          <div style="height:6px;border-radius:3px;background:#F7F5F0"></div>
+          <div style="height:6px;width:74%;border-radius:3px;background:#F7F5F0;opacity:.72"></div>
+          <div style="height:6px;width:40%;border-radius:3px;background:#E0B063"></div>
+        </div>
+        <div style="margin-top:9px;font:400 12px var(--mono);color:var(--ink3)">76</div>
+      </div>
+      <div>
+        <div style="width:40px;height:40px;border-radius:9px;background:#15140F;padding:9px;display:flex;flex-direction:column;justify-content:center;gap:3.5px">
+          <div style="height:3.5px;border-radius:2px;background:#F7F5F0"></div>
+          <div style="height:3.5px;width:74%;border-radius:2px;background:#F7F5F0;opacity:.72"></div>
+          <div style="height:3.5px;width:40%;border-radius:2px;background:#E0B063"></div>
+        </div>
+        <div style="margin-top:9px;font:400 12px var(--mono);color:var(--ink3)">40</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:52px;padding-top:26px;border-top:1px solid var(--rule)">
+    <div style="font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">On a home screen</div>
+    <div style="display:flex;flex-wrap:wrap;gap:30px;margin-top:20px">
+      <div style="width:280px;padding:26px 24px 30px;border-radius:26px;background:linear-gradient(#C9C3B4,#9E998C)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px 16px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <div style="width:52px;height:52px;border-radius:12px;background:#15140F;padding:12px 11px;display:flex;flex-direction:column;justify-content:center;gap:4px">
+              <div style="height:4px;border-radius:2px;background:#F7F5F0"></div>
+              <div style="height:4px;width:74%;border-radius:2px;background:#F7F5F0;opacity:.72"></div>
+              <div style="height:4px;width:40%;border-radius:2px;background:#E0B063"></div>
+            </div>
+            <span style="font:400 9.5px var(--sans);color:#F7F5F0;text-shadow:0 1px 2px rgba(0,0,0,.4)">Life</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:12px;background:rgba(247,245,240,.32)"></div><span style="font:400 9.5px var(--sans);color:rgba(247,245,240,.5)">·</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:12px;background:rgba(247,245,240,.32)"></div><span style="font:400 9.5px var(--sans);color:rgba(247,245,240,.5)">·</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:12px;background:rgba(247,245,240,.32)"></div><span style="font:400 9.5px var(--sans);color:rgba(247,245,240,.5)">·</span></div>
+        </div>
+      </div>
+      <div style="width:280px;padding:26px 24px 30px;border-radius:26px;background:linear-gradient(#22221E,#0C0C0B)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px 16px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <div style="width:52px;height:52px;border-radius:12px;background:#F7F5F0;padding:12px 11px;display:flex;flex-direction:column;justify-content:center;gap:4px">
+              <div style="height:4px;border-radius:2px;background:#15140F"></div>
+              <div style="height:4px;width:74%;border-radius:2px;background:#15140F;opacity:.62"></div>
+              <div style="height:4px;width:40%;border-radius:2px;background:#8A5A12"></div>
+            </div>
+            <span style="font:400 9.5px var(--sans);color:#F7F5F0">Life</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:12px;background:rgba(247,245,240,.14)"></div><span style="font:400 9.5px var(--sans);color:rgba(247,245,240,.35)">·</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:12px;background:rgba(247,245,240,.14)"></div><span style="font:400 9.5px var(--sans);color:rgba(247,245,240,.35)">·</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:52px;height:52px;border-radius:12px;background:rgba(247,245,240,.14)"></div><span style="font:400 9.5px var(--sans);color:rgba(247,245,240,.35)">·</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:52px;padding-top:26px;border-top:1px solid var(--rule);display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:26px">
+    <div>
+      <div style="font:500 15px var(--sans)">Why the shortest bar is amber</div>
+      <div style="margin-top:6px;font:400 13.5px/1.55 var(--sans);color:var(--ink2);text-wrap:pretty">It's the same amber the app uses for a date that's approaching. The icon states the app's job — something is coming up — without depending on colour: the bar is also the shortest.</div>
+    </div>
+    <div>
+      <div style="font:500 15px var(--sans)">Why no glyph</div>
+      <div style="margin-top:6px;font:400 13.5px/1.55 var(--sans);color:var(--ink2);text-wrap:pretty">A folder, a shield or a passport would name the filing cabinet rather than the reason to open it, and all three are crowded categories on a home screen.</div>
+    </div>
+    <div>
+      <div style="font:500 15px var(--sans)">Production notes</div>
+      <div style="margin-top:6px;font:400 13.5px/1.55 var(--sans);color:var(--ink2);text-wrap:pretty">Bars sit on a 1024 grid at 20/74%/40% width, 66px inset, corner radius 62 at 280 (0.222 of the square). Ship the ink version as primary, paper for light-mode tinting, and a full-bleed square for Android's adaptive mask.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -18,6 +18,7 @@ deviation before "fixing" the code to match the comp.
 | `Life-Manager-handoff-2.dc.html` | Second handoff — replaced the **Add** tab with **You**; the 22-document preset chooser |
 | `Life-Manager-handoff-3.dc.html` | Third handoff — the full document identifier, holders (*"Whose document is it?"*), and the three **Feel** preferences (density · headings · voice) |
 | `Life-Manager-handoff-4.dc.html` | Fourth handoff, **the authoritative one** — the **Things** domain (a second domain, pulled forward from M4), capture as a **stepped wizard**, a cross-domain horizon, and the document↔thing link. [ADR-0029](../decisions/0029-the-things-domain.md) and [ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md) |
+| `Life-Manager-icon.dc.html` | The **app icon** handoff, a separate bundle from the screen comps. Three variants (ink · paper · green), the 1024-grid geometry, and the two rationale blocks — *why the shortest bar is amber* and *why no glyph*. `apps/web/public/favicon.svg` implements the **ink** variant; the paper and green ones are drawn but unshipped, and D61 says why. **Its "Production notes" are misleading about the inset** — they say 66px on a 1024 grid while the art it was drawn from is 22% horizontally and centres the bars vertically at ~32%. The SVG's comment records which was followed |
 | `support.js` | The Claude Design player runtime, shared byte-for-byte across all four. The comps reference it as a sibling (`./support.js`), which is why one copy sits beside them |
 | `image-slot.js` | The player's drop-an-image-here custom element, new in handoff 4 — it is how the comp fakes a photo on the Thing hero and on a document's scans. **Nothing in it is production code**: the shipped app puts real R2 files there ([ADR-0008](../decisions/0008-object-storage-r2.md)) |
 | `HANDOFF.md` | The bundle's own README, verbatim — the "coding agents, read this first" note the tool ships |
@@ -55,10 +56,18 @@ rather than changed.
   `AA##AA####`; handoff 4's own comment says that made a Bharat-series plate (`22 BH 1234 AA`)
   untypeable. The series is now an explicit choice, and the number hint drops for it because two
   formats have no single length.
-- **The Things nav is drawn twice**, and the prototype has a `thingsNav: "tab" | "switch"` knob. We
-  ship the **switcher**, not a fourth tab — see
-  [ADR-0029](../decisions/0029-the-things-domain.md) § *Alternatives considered*, and note that the
-  comp's own §4 prose still says "three tabs, forever" while its default knob says `tab`.
+- **The Things nav is drawn twice**, and the prototype has a `thingsNav: "tab" | "switch"` knob
+  defaulting to `tab`. **We ship the tab — the comp's default — and the bar is four tabs.**
+  [ADR-0031](../decisions/0031-things-is-a-fourth-tab.md).
+
+  That took two goes, and the detour is worth knowing about because it is the clearest example of how
+  to read these comps. ADR-0029 first chose the **switcher**, reasoning from ADR-0025 §4's *"three
+  tabs, forever"* and from the fact that handoff 4's own §4 prose *still says it*. But the prose was
+  inherited unchanged from handoff 1 and the **drawing** had moved on — and when the maintainer opened
+  the shipped app, they said Things being on the Documents screen did not match the design. **Where a
+  comp's prose and its drawing disagree, the drawing is the newer statement of intent.** The same rule
+  settled the Add pill's shadow: ADR-0025 §3's "only two things lift" is prose, and every screen of
+  the comp draws the shadow.
 
 ## Reading them
 

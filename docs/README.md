@@ -41,6 +41,7 @@ that must be read exhaustively are no better than no docs
 | **Seeing the original design comp for a screen** | [design/](design/README.md) — the Claude Design handoff bundles; **handoff 4** is authoritative, and its README summarises what it changed |
 | **Showing a warranty, a service date, or anything a thing owns** | [conventions/design.md](conventions/design.md) §2a — the cover ladder. **Cover is not expiry**; never reuse the expiry gauge for it ([ADR-0029](decisions/0029-the-things-domain.md)) |
 | **Touching capture / the Add sheet** | [ADR-0030](decisions/0030-capture-as-a-stepped-wizard.md) → [conventions/design.md](conventions/design.md) §6. Six steps, two tracks, and **every step but one is skippable** |
+| **Touching the app icon or the favicon** | [design/Life-Manager-icon.dc.html](design/Life-Manager-icon.dc.html) — the icon handoff — then `scripts/generate-icons.mjs`, which rasterises `favicon.svg` into the four PNGs. **Debt D61 first**: the mark is illegible at 16px and the fix needs a product call |
 | **Writing tests** | [conventions/testing.md](conventions/testing.md) |
 | **Deciding what to build next** | [product/brain.md](product/brain.md) → [product/idea-backlog.md](product/idea-backlog.md) → [roadmap.md](roadmap.md) |
 | **Brainstorming features with the human** | [product/brain.md](product/brain.md) §7 |
@@ -77,14 +78,14 @@ that must be read exhaustively are no better than no docs
 - [**conventions/data.md**](conventions/data.md) — schema rules: `space_id`, timestamps,
   soft deletes, JSONB, search
 - [**conventions/design.md**](conventions/design.md) — the Ledger design system in practice:
-  tokens, the expiry ladder, type, what colour is for, three tabs forever
+  tokens, the two status ladders, type, what colour is for, and how many tabs the bar holds (§8)
 - [**conventions/testing.md**](conventions/testing.md) — what to test at which layer
 
 ### Decisions
 
 - [**decisions/index.md**](decisions/index.md) — one line per ADR, plus a by-topic view
 
-Seventeen ADRs covering the stack, ownership, security, hosting, and process. Each records
+Thirty-one ADRs plus the template, covering the stack, ownership, security, hosting, design and process. Each records
 its **rejected alternatives**, which is usually the part you need.
 
 ### Domains
