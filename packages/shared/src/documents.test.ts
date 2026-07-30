@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   documentCreateSchema,
   documentListQuerySchema,
+  documentSchema,
   documentUpdateSchema,
   presignUploadRequestSchema,
   truncateToLast4,
@@ -170,5 +171,66 @@ describe('presignUploadRequestSchema — business rules 5 and 11', () => {
   it('makes a new upload primary by default — business rule 3', () => {
     const result = presignUploadRequestSchema.parse({ mime: 'image/png', size_bytes: 100 })
     expect(result.make_primary).toBe(true)
+  })
+})
+
+describe('documentSchema tolerates an older server', () => {
+  /**
+   * The regression test for a real outage. Cloudflare Pages deployed the web app on push while the
+   * Cloud Build trigger did not deploy the API, so a client requiring `thing_id` met a server ten
+   * commits behind that never sent it — and because `lib/api.ts` parses every document response with
+   * this schema, the failure took out the whole archive rather than one field.
+   *
+   * Both halves deploy independently, so this is a permanent property rather than a one-off: a
+   * response field added to the client must not be required of the server.
+   */
+  const fromAnOlderServer = {
+    id: '00000000-0000-4000-8000-000000000001',
+    space_id: '00000000-0000-4000-8000-000000000002',
+    title: 'Passport',
+    doc_type: 'identity',
+    issuer: 'HM Passport Office',
+    holder: null,
+    relation: null,
+    identifier: 'FAKE12345',
+    identifier_last4: '2345',
+    // `thing_id` deliberately ABSENT — this is the whole point of the fixture.
+    issued_on: '2016-09-12',
+    expires_on: '2026-09-12',
+    country: 'GB',
+    notes: null,
+    tags: [],
+    custom_attrs: {},
+    file_count: 2,
+    created_at: '2026-07-30T00:00:00.000Z',
+    updated_at: '2026-07-30T00:00:00.000Z',
+    version: 1,
+  }
+
+  it('parses a response with no thing_id at all, and defaults it to null', () => {
+    const result = documentSchema.safeParse(fromAnOlderServer)
+
+    expect(result.success).toBe(true)
+    // `null`, not `undefined` — the output type stays `string | null` so no consumer has to branch
+    // on a third state.
+    expect(result.data?.thing_id).toBeNull()
+    // The rest of the document must survive intact; a non-zero count, per design.md §10 and D33.
+    expect(result.data?.file_count).toBe(2)
+    expect(result.data?.title).toBe('Passport')
+  })
+
+  it('still accepts an explicit null and a real uuid', () => {
+    expect(documentSchema.parse({ ...fromAnOlderServer, thing_id: null }).thing_id).toBeNull()
+
+    const linked = '00000000-0000-4000-8000-000000000009'
+    expect(documentSchema.parse({ ...fromAnOlderServer, thing_id: linked }).thing_id).toBe(linked)
+  })
+
+  it('still rejects a thing_id that is present but not a uuid', () => {
+    // Tolerating ABSENCE must not become tolerating garbage — that would be the contract giving up
+    // rather than degrading. ADR-0004.
+    expect(documentSchema.safeParse({ ...fromAnOlderServer, thing_id: 'not-a-uuid' }).success).toBe(
+      false,
+    )
   })
 })

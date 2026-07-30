@@ -290,8 +290,38 @@ export const documentSchema = z.object({
    *
    * The relationship is drawn from **both** sides — *Belongs to* on a document, *Its documents* on a
    * thing — but it is written from this one, because this is where the column is.
+   *
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  `.nullish().default(null)`, NOT `.nullable()` — and this cost a production outage.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * A plain `.nullable()` makes the **key required**. `lib/api.ts` parses every document response
+   * with this schema, so an older server that does not send the key at all fails the parse and throws
+   * — taking out the Now screen and the whole archive, not just this one field.
+   *
+   * That is not hypothetical. Cloudflare Pages deployed the web app on push while the Cloud Build
+   * trigger did not deploy the API, so the client required `thing_id` against a server ten commits
+   * behind that had never heard of it. Both halves deploy independently
+   * ([README.md](../../../README.md) § Deploying), which means **the client is never entitled to
+   * assume the server is the same age as it is** — and a required response field is exactly that
+   * assumption, written down.
+   *
+   * `.default(null)` keeps the OUTPUT type `string | null`, so nothing downstream branches on
+   * `undefined`; only the input becomes tolerant. Absence and `null` mean the same thing to every
+   * consumer here — "not linked to anything" — so collapsing them loses no information.
+   *
+   * ── When NOT to copy this ──
+   *
+   * Tolerating a missing field is right for a field the client treats as *optional information*. It
+   * is **wrong** for a field the client depends on: there, a loud parse failure is the contract doing
+   * its job, and silently defaulting would hide real drift (ADR-0004). The test is whether absence and
+   * the default are genuinely indistinguishable to the consumer. Here they are.
+   *
+   * It also closes the stale-cache half of debt **D46**: the persisted cache rehydrates **without**
+   * re-running Zod, so a document cached by an older build arrives missing this key. That is the same
+   * failure that crashed the app at its root error boundary when ADR-0026 added `identifier`.
    */
-  thing_id: uuidSchema.nullable(),
+  thing_id: uuidSchema.nullish().default(null),
   issued_on: isoDateSchema.nullable(),
   expires_on: isoDateSchema.nullable(),
   country: countryCodeSchema.nullable(),
