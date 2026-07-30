@@ -73,6 +73,7 @@ const detailFixture: DocumentDetailResponse = {
   relation: null,
   identifier: 'FAKEM1234567',
   identifier_last4: '4567',
+  thing_id: null,
   issued_on: null,
   expires_on: null,
   country: 'IN',

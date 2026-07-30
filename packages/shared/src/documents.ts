@@ -280,6 +280,18 @@ export const documentSchema = z.object({
   identifier: z.string().nullable(),
   /** The masked display form, DERIVED from `identifier` server-side. Never sent by a client. */
   identifier_last4: identifierLast4Schema.nullable(),
+  /**
+   * The **thing** this document belongs to, or `null` — [ADR-0029](../../../docs/decisions/0029-the-things-domain.md).
+   *
+   * One nullable column rather than a join table: a receipt belongs to one object, and an object
+   * collects many papers. `on delete set null`, so deleting a car does **not** shred its paperwork
+   * (things.md §4 rule 5) — the copy on that delete control says exactly that, and a cascade here
+   * would make it a lie.
+   *
+   * The relationship is drawn from **both** sides — *Belongs to* on a document, *Its documents* on a
+   * thing — but it is written from this one, because this is where the column is.
+   */
+  thing_id: uuidSchema.nullable(),
   issued_on: isoDateSchema.nullable(),
   expires_on: isoDateSchema.nullable(),
   country: countryCodeSchema.nullable(),
@@ -370,6 +382,11 @@ export const documentCreateSchema = z.strictObject({
   identifier: identifierInputSchema.nullish(),
   holder: holderSchema.nullish(),
   relation: relationSchema.nullish(),
+  /**
+   * Settable at capture, because that is where it is most often known: the vehicle papers checklist
+   * opens this form already knowing which thing it is filing against (things.md §7).
+   */
+  thing_id: uuidSchema.nullish(),
   issued_on: isoDateSchema.nullish(),
   expires_on: isoDateSchema.nullish(),
   country: countryCodeSchema.nullish(),
@@ -405,6 +422,8 @@ export const documentUpdateSchema = z
     identifier: identifierInputSchema.nullish(),
     holder: holderSchema.nullish(),
     relation: relationSchema.nullish(),
+    /** Linking and unlinking are both this field — `null` clears it (conventions/api.md §8). */
+    thing_id: uuidSchema.nullish(),
     issued_on: isoDateSchema.nullish(),
     expires_on: isoDateSchema.nullish(),
     country: countryCodeSchema.nullish(),
@@ -464,6 +483,14 @@ export const documentListQuerySchema = z.strictObject({
    * a time, which is what the design's single chip draws.
    */
   holder: z.string().trim().min(1).max(120).optional(),
+  /**
+   * The documents filed against one thing — ADR-0029.
+   *
+   * A plain uuid rather than a `mine`-style sentinel for "unlinked": nothing in the UI asks for
+   * "documents belonging to no thing", and a filter nobody offers is a filter that rots. If that
+   * question ever gets asked, it gets its own spelling and its own note here.
+   */
+  thing_id: uuidSchema.optional(),
   has_file: z.stringbool().optional(),
   sort: documentSortSchema.default('expires_on'),
   order: sortOrderSchema.default('asc'),

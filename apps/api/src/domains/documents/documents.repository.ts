@@ -155,6 +155,14 @@ export async function list(
         ? sql`(${documents.holder} is null or ${documents.holder} = '')`
         : eq(documents.holder, query.holder),
 
+    /**
+     * `?thing_id=` — the papers filed against one thing, which is what a Thing detail screen reads.
+     *
+     * No sentinel for "unlinked", unlike `?holder=mine`: nothing in the UI asks for documents
+     * belonging to no thing, and a filter nobody offers is a filter that rots untested.
+     */
+    query.thing_id === undefined ? undefined : eq(documents.thingId, query.thing_id),
+
     query.has_file === undefined
       ? undefined
       : query.has_file
@@ -216,6 +224,8 @@ export type DocumentInsert = {
   /** Full value — ADR-0026. Derived together with the mask by `identifierColumns` in the service. */
   identifier: string | null
   identifierLast4: string | null
+  /** The thing this document belongs to, or `null` — ADR-0029. No FK yet; see the schema's note. */
+  thingId: string | null
   issuedOn: string | null
   expiresOn: string | null
   country: string | null

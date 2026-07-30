@@ -118,6 +118,34 @@ export const documents = pgTable(
      */
     identifierLast4: text('identifier_last4'),
 
+    /**
+     * The **thing** this document belongs to — [ADR-0029](../../../../../docs/decisions/0029-the-things-domain.md),
+     * [things.md](../../../../../docs/domains/things.md) §3.
+     *
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  Deliberately NO `.references()` yet, and that is a temporary state with a trigger.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * A `things` table does not exist. The design handoff specified the domain in full and its
+     * client half was built from it, so the *link* has to be storable — but a foreign key to a
+     * missing table is a migration that cannot apply, and ADR-0023 runs migrations on boot, so it
+     * would take the API down rather than fail a build.
+     *
+     * So: a plain `uuid` with an index, and **the session that creates `things` adds the constraint**
+     * in the same migration, with `on delete set null`. That last part is business rule 5 and it is
+     * not a detail — deleting a car must not shred its paperwork, and the copy on the delete control
+     * promises exactly that. A `cascade` here would make it a lie.
+     *
+     * Until then nothing writes a value that could dangle: the only writer is the client's link
+     * picker, which offers ids it just read from `GET /things` — an endpoint that also does not exist.
+     * The column is inert, which is why shipping it early is safe rather than merely convenient.
+     *
+     * One nullable column rather than a join table. A receipt belongs to one object; an object
+     * collects many papers. ADR-0029 § *Alternatives considered* records the trigger for revisiting
+     * that (one invoice covering three appliances).
+     */
+    thingId: uuid('thing_id'),
+
     issuedOn: date('issued_on'),
 
     /**
@@ -187,6 +215,16 @@ export const documents = pgTable(
     index('documents_search_vector_idx').using('gin', table.searchVector),
     /** `?tag=` is an array containment filter, which needs GIN to avoid a sequential scan. */
     index('documents_tags_idx').using('gin', table.tags),
+    /**
+     * `?thing_id=` — the documents filed against one thing, which is what the Thing detail screen's
+     * *"Its documents"* section reads. Partial on `deleted_at is null` like every other access path
+     * here, and present now rather than with the constraint because Postgres does not index a
+     * foreign key automatically (conventions/data.md §2) — so the index is the useful half, and it
+     * does not depend on the missing table.
+     */
+    index('documents_thing_id_idx')
+      .on(table.thingId)
+      .where(sql`${table.deletedAt} is null`),
   ],
 )
 

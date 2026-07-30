@@ -43,6 +43,13 @@
       "when": 1785397136110,
       "tag": "0005_breezy_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785419113902,
+      "tag": "0006_lush_iron_lad",
+      "breakpoints": true
     }
   ]
 }

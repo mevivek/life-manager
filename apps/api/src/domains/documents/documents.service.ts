@@ -92,6 +92,8 @@ function toDocument(row: DocumentRow): Document {
      */
     identifier: row.identifier,
     identifier_last4: row.identifierLast4,
+    /** The thing this belongs to, or `null` — ADR-0029. Drawn as *Belongs to* on the detail screen. */
+    thing_id: row.thingId,
     issued_on: row.issuedOn,
     expires_on: row.expiresOn,
     country: row.country,
@@ -247,6 +249,13 @@ export async function create(actor: ActorContext, input: DocumentCreate): Promis
         // from it in the same breath.
         ...identifierColumns(input.identifier),
         ...holderColumns(input.holder, input.relation),
+        /**
+         * Settable at capture because that is where it is usually known: a vehicle's papers
+         * checklist opens the form already aware of which thing it is filing against
+         * (things.md §7). Unvalidated against a `things` row on purpose — there is no such table
+         * yet, and the schema's note on `thingId` says what the session that adds it must do.
+         */
+        thingId: input.thing_id ?? null,
         issuedOn,
         expiresOn,
         country: input.country ?? null,
@@ -336,6 +345,12 @@ export async function update(
           'relation' in patch ? patch.relation : existing.relation,
         )
       : {}),
+    /**
+     * Linking and unlinking are the same field — an explicit `null` clears it, an absent key leaves
+     * it alone (conventions/api.md §8). That is what lets the document detail screen's *Belongs to*
+     * picker set the link and a future "unlink" clear it without a second endpoint.
+     */
+    ...('thing_id' in patch ? { thingId: patch.thing_id ?? null } : {}),
     ...('issued_on' in patch ? { issuedOn } : {}),
     ...('expires_on' in patch ? { expiresOn } : {}),
     ...('country' in patch ? { country: patch.country ?? null } : {}),
