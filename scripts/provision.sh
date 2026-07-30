@@ -325,18 +325,30 @@ is safe.'
 
 Verify — do not wait until 08:00 UTC to find out:
 
-  1. Run it now, and read the counts rather than just the status code:
+  1. Call the endpoint yourself and READ THE COUNTS. This is the only check that shows them:
+       KEY=\$(gcloud secrets versions access latest --secret=CRON_SECRET --project=${PROJECT})
+       curl -s -X POST -H "X-Cron-Key: \$KEY" ${API_ORIGIN}/api/v1/maintenance:run-daily | jq .
+       unset KEY
+     The secret lives in a variable, so the command itself carries no value.
+
+  2. To fire it the way the scheduler will — this proves the JOB is right rather than the endpoint.
+     It returns no body, so use step 1 to see counts:
        gcloud scheduler jobs run ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT}
        gcloud scheduler jobs describe ${SCHEDULER_JOB} --location=${REGION} --project=${PROJECT} \\
-         --format='value(status,lastAttemptTime)'
-     # NOTE the --format. A bare \`jobs describe\` prints the X-Cron-Key header in full.
+         --format='value(status.code,lastAttemptTime)'
+     # KEEP the --format. A bare \`jobs describe\` prints the X-Cron-Key header in full.
 
-  2. Read what the API reported. "found 0" means nothing was due, which is NOT the same as working:
-       gcloud run services logs read ${SERVICE} --region=${REGION} --project=${PROJECT} --limit=20
+  3. NOT \`gcloud run services logs read\` — the API logs structured JSON (pino), which lands in
+     jsonPayload, while that command renders textPayload. You get timestamps and blank messages.
+     If you want the logs:
+       gcloud logging read 'resource.labels.service_name="${SERVICE}" AND jsonPayload.msg:"reminder"' \\
+         --project=${PROJECT} --limit=10 \\
+         --format='value(timestamp,jsonPayload.msg,jsonPayload.found,jsonPayload.delivered)'
 
-  3. For a notification you can actually see, you need a reminder inside its lead window AND a push
-     subscription on your phone (turn reminders on from the You screen). With no subscription the run
-     reports 'undelivered', which is honest, not broken.
+  4. "found 0" means nothing was due, which is NOT the same as working. For a notification you can
+     actually see you need a reminder inside its lead window AND a push subscription on your phone
+     (turn reminders on from the You screen). With no subscription the run reports 'undelivered',
+     which is honest rather than broken.
 
 EOF
 }

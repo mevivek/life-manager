@@ -528,13 +528,32 @@ reminder rather than an outage.
   }
 
   Write-Host ''
-  Write-Host 'Done. Verify now - do not wait until 08:00 UTC:' -ForegroundColor Green
-  Write-Host "  gcloud scheduler jobs run $SchedulerJob --location=$Region --project=$Project"
-  Write-Host "  gcloud run services logs read $Service --region=$Region --project=$Project --limit=20"
+  Write-Host 'Done. Verify now - do not wait until 08:00 UTC.' -ForegroundColor Green
   Write-Host ''
-  Write-Host 'Read the COUNTS, not just the status code. "found 0" means nothing was due, which is'
-  Write-Host 'not the same as working. For a notification you can see, you need a reminder inside its'
-  Write-Host 'lead window AND reminders turned on from the You screen on your phone.'
+  Write-Host 'Call the endpoint yourself and READ THE COUNTS. This is the only check that shows them:'
+  Write-Host "  `$key = (gcloud.cmd secrets versions access latest --secret=CRON_SECRET --project=$Project)"
+  Write-Host "  Invoke-RestMethod -Method Post -Uri $ApiOrigin/api/v1/maintenance:run-daily ``"
+  Write-Host "    -Headers @{ 'X-Cron-Key' = `$key } | ConvertTo-Json"
+  Write-Host ''
+  Write-Host 'The secret goes into a variable and is never displayed, and the command itself carries no'
+  Write-Host 'value - so nothing lands in your history.'
+  Write-Host ''
+  Write-Host 'To fire it the way the scheduler will, which proves the JOB is right rather than the'
+  Write-Host 'endpoint (it returns no body, so use the call above to see counts):'
+  Write-Host "  gcloud.cmd scheduler jobs run $SchedulerJob --location=$Region --project=$Project"
+  Write-Host "  gcloud.cmd scheduler jobs describe $SchedulerJob --location=$Region --project=$Project ``"
+  Write-Host "    --format='value(status.code,lastAttemptTime)'"
+  Write-Host '  # KEEP the --format. A bare `describe` prints the X-Cron-Key header in full.'
+  Write-Host ''
+  Write-Host 'NOT `gcloud run services logs read` - the API logs structured JSON (pino), which lands in'
+  Write-Host 'jsonPayload, and that command renders textPayload. You get timestamps and blank messages.'
+  Write-Host 'If you do want the logs:'
+  Write-Host "  gcloud.cmd logging read 'resource.labels.service_name=`"$Service`" AND jsonPayload.msg:`"reminder`"' ``"
+  Write-Host "    --project=$Project --limit=10 ``"
+  Write-Host "    --format='value(timestamp,jsonPayload.msg,jsonPayload.found,jsonPayload.delivered,jsonPayload.undelivered,jsonPayload.errored)'"
+  Write-Host ''
+  Write-Host '"found 0" means nothing was due - NOT that it works. For a notification you can see, you'
+  Write-Host 'need a reminder inside its lead window AND reminders turned on from the You screen.'
 }
 
 function Show-Status {
