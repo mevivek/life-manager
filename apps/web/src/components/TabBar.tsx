@@ -84,7 +84,13 @@ type Tab = {
  * the content, and every one of these is read off the comp
  * (`docs/design/Life-Manager-handoff-4.dc.html` lines 900–926).
  */
-const TABS: Tab[] = [
+/**
+ * Exported only so `lib/docs.test.ts` can assert that CLAUDE.md states the number of tabs this array
+ * actually has. CLAUDE.md said "four tabs" in one place and "three tabs, forever" in another for a
+ * while, the second being in the routing row a layout session reads — so the count is now checked
+ * against the source of truth rather than trusted to prose. Do not import this to render anything.
+ */
+export const TABS: Tab[] = [
   {
     to: '/home',
     label: 'Now',

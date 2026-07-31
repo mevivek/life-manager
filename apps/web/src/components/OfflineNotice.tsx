@@ -51,9 +51,14 @@ export function OfflineNotice() {
       // `role="status"` not `role="alert"`: being offline is a condition to report, not an error to
       // interrupt for. An alert steals focus from whatever the user was reading.
       role="status"
-      className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+      // Ledger tokens, not the pre-Ledger shadcn utilities this shipped with (design.md §1, §3): a
+      // `--radius-*` token rather than `rounded-md`, and `text-body` rather than `text-sm` — 14px is
+      // below §3's 15px floor and, being outside the `--text-*` scale, does not move with the density
+      // preference either. This banner sits above every authed screen, so it was the most-seen thing
+      // in the app still wearing another design system.
+      className="flex items-center gap-2 rounded-3 border border-rule bg-sunken px-4 py-3 text-body leading-snug text-ink-2"
     >
-      <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-muted-foreground" />
+      <span aria-hidden="true" className="size-2 shrink-0 rounded-pill bg-ink-3" />
       <span>
         Offline
         {oldest === null ? (

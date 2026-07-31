@@ -1,5 +1,6 @@
 import { KIND_LABELS, type Thing } from '@life-manager/shared'
 import { Link } from '@tanstack/react-router'
+import { formatDateShort } from '@/features/documents/ExpiryStatus'
 import { cn } from '@/lib/utils'
 import { CoverStatus, coverAccessibleName, ServiceLine, serviceOf } from './CoverStatus'
 
@@ -214,6 +215,10 @@ function awayOf(thing: Thing): { tag: string; label: string; tone: string } | nu
    * (things.md §3), so every combination has to read as a sentence. "Lent out" alone is less
    * information than "Lent to Sam · 4 Mar 2026" and it is still true, which is the test — a row that
    * printed "Lent to null" would be the alternative.
+   *
+   * `formatDateShort`, not the raw column: the row used to print `2026-03-04` while the detail banner
+   * printed `4 Mar 2026` for the same record. Nothing else in either domain shows a user an ISO date,
+   * and the helper is `OwnershipPanel`'s `awayLabel`'s so the two sentences cannot drift again.
    */
   const parts = [
     who === null || who === ''
@@ -221,7 +226,7 @@ function awayOf(thing: Thing): { tag: string; label: string; tone: string } | nu
         ? 'Lent out'
         : 'Handed on'
       : `${lent ? 'Lent to' : 'Handed to'} ${who}`,
-    since,
+    since === null || since === '' ? null : formatDateShort(since),
   ].filter((part) => part !== null && part !== '')
 
   return {

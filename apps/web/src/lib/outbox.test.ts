@@ -60,6 +60,18 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  /**
+   * `restoreAllMocks` does **not** undo `vi.stubGlobal`, and four tests below replace `navigator`
+   * wholesale. The last of them — in `storage quota` — had no `unstubAllGlobals` of its own, so its
+   * fake `navigator.storage` outlived its describe block and was still installed for `session
+   * boundaries`. Harmless today, and exactly the shared mutable state conventions/testing.md §5
+   * forbids: it makes the file order-dependent, which is the first thing to rule out in a flake.
+   *
+   * Worth knowing while you are here: `{ ...globalThis.navigator }` spreads to `{}`, because a
+   * `Navigator`'s properties live on its prototype. So each of those stubs replaces `navigator` with
+   * an object carrying ONLY the one field the test set — not a copy with one field changed.
+   */
+  vi.unstubAllGlobals()
 })
 
 describe('queueing', () => {
@@ -231,10 +243,6 @@ describe('replaying', () => {
 })
 
 describe('a write that can never be sent', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
   it('stops claiming "waiting to send" once it keeps failing while online', async () => {
     const outbox = await import('./outbox')
     // Online, but every attempt fails at the network layer — a CSP block, a CORS refusal, a DNS

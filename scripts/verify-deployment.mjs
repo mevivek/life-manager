@@ -39,8 +39,16 @@ const { Client } = require('pg')
  *
  * **Optional, deliberately.** It is read for exactly one thing — the database credential used by the
  * cleanup step at the end — and requiring it would mean a machine that has never run the API locally
- * cannot run any of these checks at all. That is the wrong trade: the 25 checks are the point, and
+ * cannot run any of these checks at all. That is the wrong trade: the checks are the point, and
  * the cleanup is a tidy-up.
+ *
+ * This is the one exemption to invariant 1 ("only `apps/api` holds a database URL"), carved
+ * explicitly in ADR-0002 § Amendment 2026-07-30. It covers this file, for cleanup, and nothing
+ * else — a second script needing the database is a new decision, not a precedent.
+ *
+ * Deliberately NOT stating a check count here. It has been wrong in three places at once before
+ * (the docs said 42 while these comments said 25), and a number in a comment nobody re-counts is
+ * worse than no number. The run prints its own total.
  *
  * `DATABASE_URL_UNPOOLED` in the real environment takes precedence, so CI or a one-off run can
  * supply it without a file existing anywhere.
@@ -264,7 +272,7 @@ console.log('\n[7] the Documents domain actually works — i.e. its tables exist
 {
   /**
    * ═══════════════════════════════════════════════════════════════════════════════════════
-   *  This section exists because the other 23 checks would all pass against a database
+   *  This section exists because every other check would pass against a database
    *  with no `documents` table at all.
    * ═══════════════════════════════════════════════════════════════════════════════════════
    *

@@ -30,7 +30,7 @@ that must be read exhaustively are no better than no docs
 |---|---|
 | **Just arrived, no specific task** | [`CLAUDE.md`](../CLAUDE.md) → this file → [architecture.md](architecture.md) |
 | **Working on the Documents domain** | [domains/documents.md](domains/documents.md) → [conventions/api.md](conventions/api.md) → the relevant playbook |
-| **Working on the Things domain** | [domains/things.md](domains/things.md) → [ADR-0029](decisions/0029-the-things-domain.md). **Both halves are built** (M4 step 1) — §10 lists every file and the four things still open, of which the useful one to know is that **nothing creates a thing reminder** because §9(2) is unanswered |
+| **Working on the Things domain** | [domains/things.md](domains/things.md) → [ADR-0029](decisions/0029-the-things-domain.md). **Both halves are built** (M4 step 1) — §10 lists every file and what is still open, of which the useful one to know is that **nothing creates a thing reminder** because §9(2) is unanswered |
 | **Adding an endpoint** | [agent-playbooks/add-an-endpoint.md](agent-playbooks/add-an-endpoint.md) → the domain doc |
 | **Adding a whole new domain** | [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md) → [domains/_template.md](domains/_template.md) |
 | **Changing the database schema** | [agent-playbooks/change-the-schema.md](agent-playbooks/change-the-schema.md) → [conventions/data.md](conventions/data.md) |
@@ -46,11 +46,11 @@ that must be read exhaustively are no better than no docs
 | **Deciding what to build next** | [product/brain.md](product/brain.md) → [product/idea-backlog.md](product/idea-backlog.md) → [roadmap.md](roadmap.md) |
 | **Brainstorming features with the human** | [product/brain.md](product/brain.md) §7 |
 | **Shaping a technical question / architecture call** | [product/brain.md](product/brain.md) §8b → [decisions/index.md](decisions/index.md) |
-| **Reviewing a finished milestone** | [product/review.md](product/review.md) |
+| **Reviewing a finished milestone** | [product/review-method.md](product/review-method.md) — the four lenses and the procedure → [product/review.md](product/review.md) for the **debt register** and the log of past reviews |
 | **Changing the plan** | [product/brain.md](product/brain.md) §10 |
 | **Wondering why something is the way it is** | [decisions/index.md](decisions/index.md) |
 | **Tempted to change the stack** | [decisions/index.md](decisions/index.md) — the alternative was probably already rejected |
-| **Deploying or debugging hosting** | [ADR-0014](decisions/0014-hosting-topology.md) |
+| **Deploying or debugging hosting** | [ADR-0021](decisions/0021-cloud-run-for-the-api.md) — Cloud Run, `--min-instances=0`, **superseding [ADR-0014](decisions/0014-hosting-topology.md)'s Fly choice**. Then its two companions: [ADR-0019](decisions/0019-same-site-subdomain-deployment.md) for why the session cookie survives two hosting providers, and [ADR-0023](decisions/0023-migrate-on-boot.md) for what applies the migrations. Status — what is actually deployed — is in [roadmap.md § Current position](roadmap.md#current-position), nowhere else |
 
 ---
 
@@ -112,8 +112,10 @@ cover what you hit, **fix it in the same commit.**
 - [**product/brain.md**](product/brain.md) — **the project brain.** Vision, principles,
   anti-goals, and the four working modes: ideate, shape, review, re-plan. Covers product
   *and* technical thinking
-- [**product/review.md**](product/review.md) — review method, the four lenses, and the
-  **debt register**
+- [**product/review-method.md**](product/review-method.md) — the review **method**: the four
+  lenses, how to run one, how findings become work, and the anti-patterns. Stable
+- [**product/review.md**](product/review.md) — the **debt register** (D1–D75, each with a trigger)
+  and the log of what each past review checked. Churns
 - [**product/idea-backlog.md**](product/idea-backlog.md) — every idea with its status,
   including rejected ones and why
 - [**product/open-questions.md**](product/open-questions.md) — questions needing a human

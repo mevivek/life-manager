@@ -24,11 +24,14 @@ import { useUpdateDocument } from './useDocuments'
  *
  * ── The version is the one thing that is easy to get wrong here ──
  *
- * The patch carries `document.version` — the version this screen was **rendered from**, not a fresh
- * read. That is ADR-0024's precondition, and re-reading to "make sure it is current" is precisely the
- * defeat of it: if the document changed while this screen was open, the server must refuse with 409
- * rather than have the link quietly overwrite the other change. `useDocuments.ts` says the same thing
- * about the edit form.
+ * The patch carries the version **captured when the picker was opened**, held in the `picking` state
+ * itself — not `document.version` read at the moment of the tap. That is ADR-0024's precondition, and
+ * reading the live prop to "make sure it is current" is precisely the defeat of it: `useDocument`
+ * refetches on window focus, so choosing a thing, backgrounding the app and coming back to tap would
+ * send whatever version the refetch handed us. The server's `where version = :expected` would then
+ * match and the other device's edit would vanish without a word. Opening the picker is the moment the
+ * user read this screen, so it is the moment the precondition is taken. `useDocuments.ts` says the same
+ * thing about the edit form.
  *
  * ── `useUpdateDocument` may not return a document ──
  *
@@ -48,18 +51,24 @@ import { useUpdateDocument } from './useDocuments'
  *    honest placeholder. The link is a fact we hold locally; only the name needs the server.
  */
 export function BelongsTo({ document }: { document: DocumentDetailResponse }) {
-  const [picking, setPicking] = useState(false)
+  /**
+   * The version this screen was read at, or `null` when the picker is closed.
+   *
+   * One piece of state rather than two, so the open flag and the version it was opened at cannot
+   * disagree — and so a call site cannot reach for the live prop by accident. See the block comment.
+   */
+  const [picking, setPicking] = useState<number | null>(null)
   /** Set when the write went to the outbox instead of the server. Cleared by the next attempt. */
   const [queued, setQueued] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const update = useUpdateDocument(document.id)
 
-  async function link(thingId: string) {
+  async function link(thingId: string, versionRead: number) {
     setFailure(null)
     setQueued(false)
     try {
-      const result = await update.mutateAsync({ thing_id: thingId, version: document.version })
-      setPicking(false)
+      const result = await update.mutateAsync({ thing_id: thingId, version: versionRead })
+      setPicking(null)
       // `Document` has no `queued` key, so this narrows without a cast. ADR-0024.
       if ('queued' in result) setQueued(true)
     } catch (error) {
@@ -75,13 +84,29 @@ export function BelongsTo({ document }: { document: DocumentDetailResponse }) {
         <Eyebrow>Belongs to</Eyebrow>
       </div>
 
-      {document.thing_id !== null ? (
+      {/*
+        ═══════════════════════════════════════════════════════════════════════════════════
+         `!= null`, not `!== null` — and that is debt D46, not a style preference.
+        ═══════════════════════════════════════════════════════════════════════════════════
+
+        The persisted Query cache is rehydrated **without re-running Zod** (`lib/persister.ts`), so a
+        document cached by a build that predates `thing_id` arrives with the key *absent* — and
+        `undefined !== null` is `true`. This section then drew a linked card for a document linked to
+        nothing: `LinkedThingCard thingId={undefined}` fetching `/things/undefined`, a `<Link>` with an
+        undefined param, and the words "Something you own — couldn't load its details" under
+        **Belongs to** on a document that belongs to nothing.
+
+        `packages/shared`'s `.nullish().default(null)` does not save us here: a Zod default only fires
+        when the schema RUNS, and the whole premise of D46 is the restore path that never runs it. So
+        the branch has to tolerate both, which is what `IdentifierCard` already does — see its note.
+      */}
+      {document.thing_id != null ? (
         <LinkedThingCard thingId={document.thing_id} />
-      ) : picking ? (
+      ) : picking !== null ? (
         <ThingPicker
           busy={update.isPending}
-          onCancel={() => setPicking(false)}
-          onPick={(thingId) => void link(thingId)}
+          onCancel={() => setPicking(null)}
+          onPick={(thingId) => void link(thingId, picking)}
         />
       ) : (
         /**
@@ -89,7 +114,12 @@ export function BelongsTo({ document }: { document: DocumentDetailResponse }) {
          * something optional. A solid button here would read as a step the user is expected to
          * complete, and most documents belong to no object at all.
          */
-        <Button variant="dashed" className="w-full" onClick={() => setPicking(true)}>
+        <Button
+          variant="dashed"
+          className="w-full"
+          // Opening the picker is what takes the precondition: this is the version the user read.
+          onClick={() => setPicking(document.version)}
+        >
           Link this to something you own
         </Button>
       )}

@@ -454,6 +454,125 @@ describe('the Now screen when the Things request fails', () => {
     expect(screen.queryByText(/that’s every date we hold/i)).toBeNull()
   })
 
+  it('shows the timeline for a household with THINGS and no documents at all', async () => {
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *  The zero state was a DOCUMENT count, and it swallowed the whole second domain.
+     * ═══════════════════════════════════════════════════════════════════════════════════════
+     *
+     * `NowBody` opened with `if (loadedCount === 0) return <ZeroState />`, where `loadedCount` is
+     * `documents.length`. So a user with three things and no paperwork was told "Nothing in here yet."
+     * and pointed at `/documents/new`, while a warranty ended in three weeks — the cross-domain
+     * `entries` had already been computed one line above and were discarded before `<Horizon>` could
+     * draw them.
+     *
+     * **This assertion has to be at the screen level.** The sibling test above — "still draws the
+     * timeline when a THING has a date and no document does" — renders `<Horizon>` directly, so it
+     * passed throughout while this screen returned early and never reached it. That is the shape of
+     * test that cannot see this bug, and the reason this one exists beside it.
+     */
+    server.use(
+      http.get('*/api/v1/documents', () => HttpResponse.json({ data: [], next_cursor: null })),
+      http.get('*/api/v1/things', () =>
+        HttpResponse.json({
+          data: [
+            thing({
+              id: '00000004-0000-4000-8000-000000000000',
+              name: 'Vaillant boiler',
+              warranty_ends_on: iso(21),
+            }),
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/push/public-key', () => HttpResponse.json({ public_key: null })),
+    )
+
+    await renderWithRouter(
+      <QueryClientProvider client={createQueryClient()}>
+        <AddSheetProvider>
+          <NowPage />
+        </AddSheetProvider>
+      </QueryClientProvider>,
+    )
+
+    // The date is on screen, with its kicker — the thing this user actually needs from Now.
+    await waitFor(() => expect(screen.getByText('Vaillant boiler')).toBeInTheDocument())
+    expect(screen.getByText('Warranty ends')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+
+    // And NOT the empty-ledger screen. Both halves are asserted: the headline no longer claims the app
+    // is empty (the cross-domain total is what `nowHeadline` is given), and the "Add the first one"
+    // invitation that belongs to a genuinely empty space is absent.
+    expect(screen.queryByText('Nothing in here yet.')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add the first one' })).toBeNull()
+  })
+
+  it('still shows the zero state for a space that holds NOTHING in either domain', async () => {
+    // The other side of the same condition: with no documents, no things and no dates, "Nothing in here
+    // yet." is true and the invitation is the right and only content. A fix that keyed the zero state on
+    // `entries` alone would also have to pass this.
+    server.use(
+      http.get('*/api/v1/documents', () => HttpResponse.json({ data: [], next_cursor: null })),
+      http.get('*/api/v1/things', () => HttpResponse.json({ data: [], next_cursor: null })),
+      http.get('*/api/v1/push/public-key', () => HttpResponse.json({ public_key: null })),
+    )
+
+    await renderWithRouter(
+      <QueryClientProvider client={createQueryClient()}>
+        <AddSheetProvider>
+          <NowPage />
+        </AddSheetProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Nothing in here yet.')).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'Add the first one' })).toBeInTheDocument()
+  })
+
+  it('does not call a space empty when its things carry no forward date', async () => {
+    /**
+     * The clause `entries` alone cannot cover: three things, none with a warranty or a service due, so
+     * the timeline is legitimately empty — and the archive is still not. Telling their owner "Nothing in
+     * here yet." is the app being wrong about data it is holding, which is why the guard reads the things
+     * COUNT as well as the merged entries.
+     */
+    server.use(
+      http.get('*/api/v1/documents', () => HttpResponse.json({ data: [], next_cursor: null })),
+      http.get('*/api/v1/things', () =>
+        HttpResponse.json({
+          data: [
+            thing({ id: '00000005-0000-4000-8000-000000000000', name: 'Kitchen table' }),
+            thing({ id: '00000006-0000-4000-8000-000000000000', name: 'Bicycle' }),
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/push/public-key', () => HttpResponse.json({ public_key: null })),
+    )
+
+    await renderWithRouter(
+      <QueryClientProvider client={createQueryClient()}>
+        <AddSheetProvider>
+          <NowPage />
+        </AddSheetProvider>
+      </QueryClientProvider>,
+    )
+
+    /**
+     * Waited on a POSITIVE assertion, not on the absence of the zero state.
+     *
+     * `queryByText(...) toBeNull()` inside a `waitFor` is satisfied by the loading skeleton, so it passes
+     * on the first tick and asserts nothing at all — which is how the first draft of this test went green
+     * against a screen that had not rendered yet.
+     *
+     * The all-clear voice is the honest reading of this space: nothing needs you, and something is here.
+     */
+    await waitFor(() => expect(screen.getByText('Nothing needs you today.')).toBeInTheDocument())
+    expect(screen.queryByText('Nothing in here yet.')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add the first one' })).toBeNull()
+  })
+
   it('merges the thing events in once the request DOES succeed', async () => {
     // The same screen, same handlers, one working endpoint — so this proves the degrade above is a
     // fallback rather than the merge simply never happening.

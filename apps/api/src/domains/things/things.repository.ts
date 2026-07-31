@@ -15,7 +15,13 @@ import {
 import type { ActorContext } from '../../auth/actor.js'
 import { db } from '../../db/client.js'
 import { scoped } from '../../db/scoped.js'
-import { afterCursor, type Cursor, orderByCursor } from '../../lib/cursor.js'
+import {
+  afterCursor,
+  type Cursor,
+  type CursorSortKind,
+  orderByCursor,
+  sortValueKind,
+} from '../../lib/cursor.js'
 import type { Executor } from '../documents/documents.repository.js'
 import { documents } from '../documents/documents.schema.js'
 import { thingPhotos, thingServices, things } from './things.schema.js'
@@ -128,6 +134,15 @@ const SORT_COLUMNS = {
   warranty_ends_on: things.warrantyEndsOn,
   service_due_on: things.serviceDueOn,
 } as const satisfies Record<ThingSort, unknown>
+
+/**
+ * The shape a cursor's sort value must have for a given sort option, read off the column itself.
+ * Identical to the Documents one and for the same reason: the service validates the decoded cursor
+ * against the column it will be compared with, and only the *kind* crosses the layer boundary.
+ */
+export function cursorSortKind(sort: ThingSort): CursorSortKind {
+  return sortValueKind(SORT_COLUMNS[sort])
+}
 
 function select(executor: Executor) {
   // `searchVector` is excluded by listing columns explicitly: a large generated tsvector that no

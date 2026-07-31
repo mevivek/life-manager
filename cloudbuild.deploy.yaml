@@ -28,14 +28,32 @@ substitutions:
   # Also from the payload. A webhook trigger cannot filter on branch (this gcloud has no
   # `--filter` for `triggers create webhook`), so the guard step below does it instead.
   _REF: refs/heads/main
+  # The commit main pointed at BEFORE this push — GitHub's push payload `before`. Mapped by the
+  # trigger as `$(body.before)`; empty here so a manual `gcloud builds submit` still works.
+  #
+  # This is the fix for debt D62. `${_SHA}` alone identifies only the TIP of the push, and a
+  # fast-forward push of N commits still has one tip — so the old `HEAD~1..HEAD` diff examined one
+  # commit out of nine and skipped an API deploy whose changes were sitting behind it. `before..after`
+  # is the actual pushed range, which is the only range that answers "did this push touch the API".
+  #
+  # ⚠ It arrives EMPTY until the trigger is recreated with the mapping (debt **D25**: the trigger
+  # holds its own inline copy of this file and `gcloud builds triggers update webhook` cannot
+  # replace it — the trigger must be DELETED AND RECREATED). Until then the guard falls back, and
+  # the fallback is documented and safe. See README.md § Deploying.
+  _BEFORE: ''
 
 steps:
   # ── source ────────────────────────────────────────────────────────────────────────────────
   # Cloned rather than supplied by the trigger: a webhook trigger has no repo attached, and the
   # repository is public so this needs no credential.
   #
-  # --depth 2, not 1: the guard below needs the parent commit to see which files changed. On a
-  # merge commit the first parent is the previous main, so the diff is exactly the merged work.
+  # --depth 2, not 1: the guard below needs the tip's parents. On a merge commit the first parent is
+  # the previous main, so a first-parent diff is exactly the merged work.
+  #
+  # The push's before-SHA is fetched separately when the trigger supplies it, because it can be any
+  # distance back and is not an ancestor of anything we already have at depth 2. A two-tree
+  # `git diff <before> <head>` needs only both commit objects present, not the history between them,
+  # so --depth 1 is enough for it.
   - id: clone
     name: gcr.io/cloud-builders/git
     entrypoint: bash
@@ -48,6 +66,33 @@ steps:
         git fetch -q --depth 2 origin "${_SHA}"
         git checkout -q FETCH_HEAD
         echo "checked out $(git rev-parse --short HEAD)"
+        # Fetched AFTER the checkout so FETCH_HEAD is not clobbered before it is used. A failure here
+        # is not fatal — a force-push can remove the before-SHA — the guard just loses its best base.
+        if [ -n "${_BEFORE}" ] && [ "${_BEFORE}" != "0000000000000000000000000000000000000000" ]; then
+          git fetch -q --depth 1 origin "${_BEFORE}" \
+            || echo "could not fetch before-SHA ${_BEFORE} — the guard will fall back"
+        fi
+
+  # ── always-run checks: no database, no install, no guard ──────────────────────────────────
+  # Deliberately placed BEFORE the guard and with no `/workspace/SKIP` check, so it runs on every
+  # push including a doc-only one and including a feature branch. Two reasons it belongs here rather
+  # than in the `test` step:
+  #
+  #  1. The guard writes SKIP for a doc-only commit, and every step after it exits 0. A check that
+  #     only runs when a deploy is happening cannot catch the class of defect where the deploy is
+  #     being skipped for the wrong reason.
+  #  2. `check-schema-barrel.mjs` uses Node builtins only — no `pnpm install`, no Postgres — so it
+  #     costs seconds. Its database-backed counterpart (`migrations.test.ts`) SKIPS wherever no
+  #     Postgres is reachable (ADR-0018), which is where a table is most likely to be added without
+  #     the barrel re-export that makes it real.
+  #
+  # This one DOES fail the build, unlike the guard. A table missing from the barrel is invisible to
+  # drizzle-kit, so it is missing in production while every local test passes — that is a defect, not
+  # a "nothing to deploy".
+  - id: checks
+    name: node:22-alpine
+    entrypoint: sh
+    args: ['-c', 'node scripts/check-schema-barrel.mjs']
 
   # ── guard: right branch, and something worth deploying ────────────────────────────────────
   # Two independent reasons to skip, both writing the same marker. Cloud Build has no native
@@ -60,6 +105,28 @@ steps:
   #
   # It exits 0 either way. A skipped deploy is the CORRECT outcome, and failing the build for it
   # would train everyone to ignore red.
+  #
+  # ── DEBT D62: what the diff base has to be, and why HEAD~1 was wrong ──
+  #
+  # This step used to diff `HEAD~1..HEAD`. That is right for a MERGE commit and wrong for a
+  # FAST-FORWARD, and the comment here said as much without noticing the second half. `${_SHA}` is
+  # the pushed TIP; a fast-forward push of N commits has exactly one tip, so N-1 commits were never
+  # examined. On 2026-07-30 a `--ff-only` merge landed 9 commits whose tip was web+docs, the guard
+  # skipped, and three commits behind it had added a field to the wire contract — the client then
+  # required a key the deployed API had never sent, and the Documents archive and the Now screen both
+  # failed to load. A skipped deploy is not a cheap mistake.
+  #
+  # Three bases, in descending order of correctness. The first is the real fix; the others are
+  # honest about what they can and cannot know:
+  #
+  #  1. `${_BEFORE}..HEAD` — the ACTUAL pushed range. Correct for any push shape, any depth.
+  #  2. `HEAD^1..HEAD` when the tip is a merge commit — the first parent IS the previous main, so
+  #     this is exactly the merged work. This is the case the old code was written for and the case
+  #     `--no-ff` (D62's interim mitigation) guarantees, so it stays supported.
+  #  3. Otherwise — a non-merge tip with no before-SHA — the pushed range is genuinely NOT derivable
+  #     from the repository. So DEPLOY. A needless deploy costs build minutes and one Artifact
+  #     Registry slot; a wrongly skipped one caused the outage above. The doc-only optimisation is
+  #     forfeited in exactly this case and returns as soon as `_BEFORE` is supplied.
   - id: guard
     name: gcr.io/cloud-builders/git
     entrypoint: bash
@@ -72,22 +139,37 @@ steps:
           touch /workspace/SKIP
           exit 0
         fi
-        # If the parent is unavailable (shallow edge case, first run, force-push), deploy rather
-        # than skip: a needless deploy is cheap, a silently skipped one is not.
-        if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
-          echo "no parent commit available — deploying to be safe."
+
+        # Lowercase shell variables on purpose: Cloud Build substitutes $UPPERCASE and ${UPPERCASE}
+        # before bash ever sees this script, so an uppercase name would need $$ escaping.
+        base=""
+        if [ -n "${_BEFORE}" ] \
+           && [ "${_BEFORE}" != "0000000000000000000000000000000000000000" ] \
+           && git cat-file -e "${_BEFORE}^{commit}" 2>/dev/null; then
+          base="${_BEFORE}"
+          echo "diffing the whole pushed range ${_BEFORE}..HEAD"
+        elif [ "$(git cat-file -p HEAD | grep -c '^parent ')" -ge 2 ]; then
+          base="HEAD^1"
+          echo "no before-SHA, but the tip is a merge commit — HEAD^1..HEAD is the merged work"
+        else
+          echo "cannot determine the pushed range: no usable _BEFORE and the tip is not a merge."
+          echo "A fast-forward push of N commits would leave N-1 unexamined (debt D62), so this"
+          echo "deploys rather than guessing. Map _BEFORE to the push payload's before field on"
+          echo "the trigger to restore the doc-only skip — and note debt D25: the trigger must be"
+          echo "DELETED AND RECREATED, an update cannot replace its inline config."
           exit 0
         fi
-        if git diff --quiet HEAD~1 HEAD -- \
+
+        if git diff --quiet "$base" HEAD -- \
              apps/api packages/shared cloudbuild.deploy.yaml apps/api/Dockerfile \
              pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json; then
           echo "no changes to the API, shared package, or build inputs — skipping."
           touch /workspace/SKIP
         else
           echo "API-relevant changes found:"
-          git diff --name-only HEAD~1 HEAD -- \
-            apps/api packages/shared cloudbuild.deploy.yaml pnpm-lock.yaml \
-            pnpm-workspace.yaml tsconfig.base.json
+          git diff --name-only "$base" HEAD -- \
+            apps/api packages/shared cloudbuild.deploy.yaml apps/api/Dockerfile \
+            pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json
         fi
 
   # ── a real Postgres for the API integration tests ─────────────────────────────────────────
@@ -132,6 +214,15 @@ steps:
     args: ['-c', '[ -f /workspace/SKIP ] && exit 0; corepack enable pnpm && pnpm lint']
     env: ['CI=true']
 
+  # `pnpm test` carries two guardrails worth naming, because a future edit that narrows this step
+  # would silently disarm them:
+  #
+  #  • `packages/shared/src/contract.test.ts` — every RESPONSE field must tolerate an older server
+  #    omitting it (debt D54). It needs no database, and it is safe for it to live behind the guard
+  #    rather than in the `checks` step above: `packages/shared` is one of the paths the guard diffs,
+  #    so a commit that can trip this test can never be one the guard skips.
+  #  • `apps/api/src/db/migrations.test.ts` — the schema barrel and `information_schema` must agree
+  #    about every table, in both directions. This one needs the sidecar below, hence `CI=true`.
   - id: test
     name: node:22-alpine
     entrypoint: sh

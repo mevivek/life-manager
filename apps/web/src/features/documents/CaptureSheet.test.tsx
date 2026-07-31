@@ -10,7 +10,7 @@ import {
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
 import { CaptureWizard, visibleSteps } from './CaptureSheet'
@@ -218,9 +218,76 @@ async function renderWizard(props: Partial<Parameters<typeof CaptureWizard>[0]> 
 const skip = () => screen.getByRole('button', { name: 'Skip for now' })
 const continueOn = () => screen.getByRole('button', { name: 'Continue' })
 
+/**
+ * Pays the accessible-name machinery's one-time cost in a HOOK rather than inside the first test.
+ *
+ * **This is a flake fix (debt D65) and deleting it brings the flake back.** `getByRole` with a name
+ * filter is the first thing the skip walk does, and the *first* such call in the file builds
+ * `aria-query`'s role tables and JITs `dom-accessibility-api` — measured at **410–560ms of CPU**,
+ * against ~60–100ms for every later query. That is 40% of the skip walk's whole body, and it is not
+ * work the test is about: it is module warm-up that happened to land on whichever test ran first.
+ *
+ * It mattered because `testTimeout` is a per-test budget. `CaptureSheet.test.tsx` is the third-largest
+ * web test file, so Vitest's size-descending sequencer starts it in the first, most contended batch of
+ * a parallel run — the moment with the least CPU to go round. Warming here moves the constant out of
+ * the timed body, and measured on the walk it cut the body from **1072–1298ms of CPU to 714–849ms**
+ * (five isolated runs each side).
+ *
+ * A `beforeAll` is the right home: hooks have their own (10s) timeout, and this is setup for the file,
+ * not a step of any test. A plain button is deliberately enough — it is the query machinery that is
+ * cold, not the wizard.
+ */
+beforeAll(async () => {
+  const { unmount } = render(
+    <form>
+      <label htmlFor="warm">Warm</label>
+      <input id="warm" />
+      <button type="button">Warm up the queries</button>
+    </form>,
+  )
+  const button = screen.getByRole('button', { name: 'Warm up the queries' })
+  screen.getByLabelText('Warm')
+  await userEvent.click(button)
+  await userEvent.type(screen.getByLabelText('Warm'), 'ab')
+  unmount()
+})
+
 // ── The one that matters ─────────────────────────────────────────────────────
 
-describe('the skip walk', () => {
+/**
+ * `timeout: 15_000` — a measured BUDGET, not a hang, and debt D65's other half.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  If one of these three goes red, it is the WIZARD that is wrong. Never satisfy it by
+ *  making a step required — that is the regression ADR-0030 exists to prevent.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The three walks are the heaviest tests in the web suite: each renders the wizard and drives six
+ * steps through real pointer and keyboard events. Measured 2026-07-30 on a 4-core container: the
+ * document walk takes **0.9–1.4s run alone** and **1.6–3.4s inside a parallel full run** — Vitest
+ * starts three files at once, and this is one of the three largest. Add three competing CPU hogs, which
+ * is roughly what a second agent session doing the same does to the box, and **one full run in six
+ * crossed 5000ms** (six runs; D65 reports one in three). 5000ms was never more than ~1.5x the real
+ * cost, which is not a budget, it is a coin toss.
+ *
+ * **The measurement that justifies the raise is that nothing here can fail to settle.** Every await is
+ * a `userEvent` interaction against a rendered node, or a `waitFor` on an MSW handler that always
+ * answers; mutations are `retry: false` (`lib/query-client.ts`), and no query is awaited by a test
+ * body. So a red here is a real failure arriving late, never a wait for something that never comes.
+ *
+ * **Why an abandoned walk is worse than a slow one, and the reason this is not just cosmetic.** Vitest
+ * reports a timeout but does not cancel the body, so the abandoned walk keeps clicking — into the
+ * *next* test's freshly rendered wizard. Measured in the 2026-07-30 reproduction: the document walk
+ * timed out, and the two tests after it then failed with
+ * `Unable to find an accessible element with the role "button" and name "Skip for now"` because the
+ * leaked clicks had advanced their wizard a step early. That message reads exactly like "the Skip
+ * button is gone", which is the false signal that gets a validation guard added to a step. One late
+ * test manufactured two content-shaped lies about ADR-0030's central rule.
+ *
+ * The `beforeAll` warm-up above is the other half: it takes ~a third of the body's cost out of the
+ * budget rather than just widening the budget.
+ */
+describe('the skip walk', { timeout: 15_000 }, () => {
   it('saves a DOCUMENT after skipping every step but the title — ADR-0030, and Q2', async () => {
     const sent = interceptCreates()
     await renderWizard()

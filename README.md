@@ -3,19 +3,14 @@
 A personal life-management app — one coherent place for the documents, possessions, money,
 people, and secrets that make up a life.
 
-**Status: M1 — Documents — is built, but not yet deployed or used for real.** The domain, its files,
-its expiry reminders and the web app all work locally: 136 tests pass against a real Postgres, and
-the upload path has been verified end to end against a real S3. What has *not* happened is the part
-that counts — nothing is deployed, the storage bucket and push keys are unprovisioned, and no
-reminder has reached a phone. [`docs/roadmap.md`](docs/roadmap.md) § Next actions lists the seven
-remaining steps; they are deployment and credentials, not code.
+**Status lives in one place: [`docs/roadmap.md` § Current position](docs/roadmap.md#current-position)**
+— what is built, what is deployed, what is provisioned, and what is still outstanding. This page does
+not restate it, because asserting deployment status in five files is what drifted at M0 and again at M1
+(debt D28); § Deploying below covers *how* to deploy, not whether it has been.
 
-**M0 is deployed and verified on a real phone.** `app.mevivek.dev` on Cloudflare Pages,
-`api.mevivek.dev` on Cloud Run, Postgres on Neon. **Nothing runs on the maintainer's laptop.** Both
-halves deploy on push; re-verify any deploy with `node scripts/verify-deployment.mjs`.
-
-One caveat that matters more than it looks: **CI is not GitHub Actions.** `.github/workflows/ci.yml`
-is committed, looks authoritative, and never executes — see § Deploying.
+One caveat that matters more than it looks: **CI is not GitHub Actions**, and there is no workflow
+file — Actions has never run on this repository, so the `ci.yml` that used to sit there was deleted
+rather than fixed (debt D24). The pipeline is `cloudbuild.deploy.yaml` — see § Deploying.
 
 ---
 
@@ -299,10 +294,11 @@ Four things that will bite, all already handled in config — don't undo them:
 
 ### Deploying
 
-**Done. Both halves are deployed and both deploy on push** — web on Cloudflare Pages, API on Cloud
-Run. The tunnel section above is no longer the routing path; it is kept because it is still the
-cheapest way to re-verify the [ADR-0019](docs/decisions/0019-same-site-subdomain-deployment.md)
-cookie behaviour after an auth change.
+**Both halves deploy on push** — web to Cloudflare Pages, API to Cloud Run. For *whether* a deploy has
+happened and what is provisioned, read [roadmap.md § Current position](docs/roadmap.md#current-position);
+this section is the mechanism. The tunnel section above is no longer the routing path; it is kept
+because it is still the cheapest way to re-verify the
+[ADR-0019](docs/decisions/0019-same-site-subdomain-deployment.md) cookie behaviour after an auth change.
 
 The host choice is **settled**: [ADR-0021](docs/decisions/0021-cloud-run-for-the-api.md) chose Cloud
 Run and supersedes [ADR-0014](docs/decisions/0014-hosting-topology.md)'s Fly decision.
@@ -446,12 +442,11 @@ nothing to already-built assets.
 assigned, no steps and no logs — an account-level block, on every commit, including ones predating
 any workflow change. Billing was corrected and a fresh push still failed identically.
 
-So **two files claim to be CI, and only one of them runs:**
-
-| File | Status |
-|---|---|
-| `.github/workflows/ci.yml` | **Never executes.** Kept because it is correct — if Actions is unblocked it takes over and the Cloud Build trigger can be deleted |
-| `cloudbuild.deploy.yaml` | **This is the real pipeline** |
+**One file is CI, and it is not a GitHub Actions workflow.** `cloudbuild.deploy.yaml` is the real
+pipeline. There is no `.github/workflows/ci.yml`: it described this same sequence in 194 convincing
+lines and executed nothing, so it was deleted on 2026-07-30 (debt D24) and
+[`.github/workflows/README.md`](.github/workflows/README.md) says why in its place. If Actions is
+ever unblocked, that stub is where to start — and then the Cloud Build trigger and its webhook can go.
 
 Trigger `deploy-api-on-push` is a **webhook** trigger, fired by a GitHub push webhook. A webhook
 trigger was chosen because it needs no browser step: connecting a repository to Cloud Build

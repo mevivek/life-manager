@@ -51,14 +51,58 @@ describe('what may be written to disk', () => {
     // ADR-0029's second domain. Allowlisted deliberately, and it widens debt D47 — a thing's serial
     // is plaintext on the wire and therefore plaintext on disk, same as a document's identifier.
     expect(persisted(['things', 'list', {}])).toBe(true)
-    expect(persisted(['reminders'])).toBe(true)
     // Load-bearing: routes/_authed.tsx guards on `me`, so without it an offline cold start lands on
     // the error screen and every other cached query is unreachable.
     expect(persisted(['me'])).toBe(true)
 
+    // `reminders` used to be allowlisted and asserted here, and NO query in the app is rooted at it —
+    // reminders come nested inside a document's or a thing's detail response. A dead entry is worse
+    // than a missing one: it silently pre-authorises the next `['reminders', …]` hook someone writes.
+    expect(persisted(['reminders'])).toBe(false)
+
     // The allowlist is the point. A future hook must be added deliberately, not inherited.
     expect(persisted(['secrets'])).toBe(false)
     expect(persisted(['vault', 'items'])).toBe(false)
+  })
+
+  it('has no allowlisted root without a query behind it', async () => {
+    /**
+     * The check that would have caught `reminders`.
+     *
+     * Every root is read out of the source rather than listed here — a hand-kept list of "roots the
+     * app has" is the same tautology the allowlist test would otherwise be, and it is what let a dead
+     * entry sit on the list through two milestones. `documentsKey` and friends are `export const … =
+     * ['documents'] as const`; the rest are literals passed straight to `useQuery`.
+     */
+    const { PERSISTED_KEY_ROOTS } = await import('./persister')
+
+    const sources = import.meta.glob('../**/*.{ts,tsx}', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+
+    const roots = new Set<string>()
+    // Tests excluded: a fixture inventing a query key must not be able to justify an allowlist entry.
+    for (const [path, source] of Object.entries(sources)) {
+      if (path.includes('.test.')) continue
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '')
+      for (const [, root] of code.matchAll(/(?:queryKey: |Key = )\[\s*'([a-z-]+)'/g)) {
+        if (root !== undefined) roots.add(root)
+      }
+    }
+
+    // A floor, so a broken scan fails rather than passes vacuously.
+    expect([...roots].sort()).toEqual(
+      expect.arrayContaining(['documents', 'health', 'me', 'outbox', 'push', 'things']),
+    )
+
+    for (const root of PERSISTED_KEY_ROOTS) {
+      expect(
+        [...roots],
+        `'${root}' is on the persist allowlist but no query in the app is rooted at it — either the hook was removed or the entry was never real`,
+      ).toContain(root)
+    }
   })
 
   it('does not persist a failed query', async () => {
@@ -189,4 +233,49 @@ describe('the persisted cache across a session boundary', () => {
     // `me` alone would refetch `me` while the document lists rendered from the restored cache.
     expect(store.has(CACHE_KEY)).toBe(false)
   })
+
+  /**
+   * **Deleting the file is not the same as it being gone**, and until 2026-07-30 this suite only
+   * asserted the first.
+   *
+   * `persister.ts` gives its persister `throttleTime: 1_000`, which does not delay a write — it keeps
+   * ONE queued write and runs it a second after the previous one finished. So a live session almost
+   * always has a write already scheduled, and `purgePersistedCache()` cannot see it. Measured against
+   * the real provider tree before the fix: purge at +501ms, **file back at +1448ms**. The three
+   * existing assertions above all passed throughout, because every one of them looks at the instant
+   * after the purge and never again.
+   *
+   * The wait below is the persister's own `throttleTime` plus a margin, which is why this test carries
+   * an explicit timeout: the wait is a documented constant rather than a guess, and the allowance is
+   * there so a loaded machine cannot turn a real assertion into a flake. It is not a retry, and it is
+   * not covering for something that never settles — remove `sealed` from `persister.ts` and this fails
+   * every time.
+   */
+  it('stays deleted when the throttled write that was already queued lands', async () => {
+    const { queryCachePersister, purgePersistedCache, resumePersisting, cacheBuster } =
+      await import('./persister')
+    const snapshot = {
+      buster: cacheBuster,
+      timestamp: Date.now(),
+      clientState: { mutations: [], queries: [] },
+    }
+
+    // Two calls inside the throttle window: the first executes at once, the second is QUEUED. This is
+    // the state the app is in whenever anything at all is fetching.
+    void queryCachePersister.persistClient(snapshot)
+    void queryCachePersister.persistClient(snapshot)
+    await vi.waitFor(() => expect(store.has(CACHE_KEY)).toBe(true))
+
+    await purgePersistedCache()
+    expect(store.has(CACHE_KEY)).toBe(false)
+
+    await new Promise((resolve) => setTimeout(resolve, 1_400))
+
+    // The queued write arrived in here somewhere. On disk, the user is still signed out.
+    expect(store.has(CACHE_KEY)).toBe(false)
+
+    // Not an assertion — the seal is module state on a singleton, so leaving it set would switch
+    // persistence off for every test after this one (conventions/testing.md §5).
+    resumePersisting()
+  }, 10_000)
 })

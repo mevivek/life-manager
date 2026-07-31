@@ -1312,6 +1312,50 @@ describeDb('things', () => {
     expect(new Set(seen).size).toBe(4)
   })
 
+  it('paginates every sort option, not just the default — page 2 follows page 1 with no gap', async () => {
+    const user = await seedUserWithSpace(app)
+    for (const name of ['A', 'B', 'C']) {
+      await createThing(app, user, {
+        name,
+        purchased_on: '2026-01-01',
+        warranty_ends_on: '2030-01-01',
+        service_every_months: 12,
+        service_due_on: '2027-01-01',
+      })
+    }
+
+    // One sort per column type in the whitelist. The cursor's sort value is validated — and bound —
+    // against the column it is compared with, so a whitelist entry this loop does not name is one
+    // whose cursor has never been round-tripped.
+    for (const sort of ['name', 'purchased_on', 'warranty_ends_on', 'service_due_on'] as const) {
+      const first = await app.inject({
+        method: 'GET',
+        url: `/api/v1/things?limit=2&sort=${sort}`,
+        ...authAs(user),
+      })
+      expect(first.statusCode, sort).toBe(200)
+      const page1 = first.json() as { data: { name: string }[]; next_cursor: string | null }
+      expect(page1.data.length, sort).toBe(2)
+      expect(page1.next_cursor, `${sort} must offer a page two`).not.toBeNull()
+      if (page1.next_cursor === null) continue
+
+      const second = await app.inject({
+        method: 'GET',
+        url: `/api/v1/things?limit=2&sort=${sort}&cursor=${encodeURIComponent(page1.next_cursor)}`,
+        ...authAs(user),
+      })
+      expect(second.statusCode, `${sort} page 2`).toBe(200)
+      const page2 = second.json() as { data: { name: string }[]; next_cursor: string | null }
+      expect(page2.data.length, sort).toBe(1)
+      expect(page2.next_cursor, `${sort} must be the last page`).toBeNull()
+
+      // No gap and no repeat: the two pages together are exactly the three rows, each once.
+      const seen = [...page1.data, ...page2.data].map((row) => row.name)
+      expect(seen.length, sort).toBe(3)
+      expect([...seen].sort(), sort).toEqual(['A', 'B', 'C'])
+    }
+  })
+
   it('rejects a malformed cursor rather than silently serving page one', async () => {
     const user = await seedUserWithSpace(app)
     const response = await app.inject({
@@ -1319,9 +1363,70 @@ describeDb('things', () => {
       url: '/api/v1/things?cursor=not-a-real-cursor',
       ...authAs(user),
     })
-    // 422: a cursor the client did not get from us is a bug worth surfacing. Serving page one would
-    // look like the list randomly resetting.
-    expect(response.statusCode).toBe(422)
+    /**
+     * 400: a cursor the client did not get from us is a bug worth surfacing. Serving page one would
+     * look like the list randomly resetting.
+     *
+     * **Was 422 until 2026-07-30.** conventions/api.md §3's table splits the two by what failed —
+     * 400 is a malformed request, 422 is a well-formed one breaking a business rule — and a cursor
+     * that does not parse is malformed. §4 and `lib/cursor.ts` were corrected together.
+     */
+    expect(response.statusCode).toBe(400)
+    expect(response.json().type).toBe('https://life-manager.app/problems/validation-failed')
+  })
+
+  it('rejects a WELL-FORMED cursor carrying garbage with a 400, never a 500', async () => {
+    const user = await seedUserWithSpace(app)
+    for (const name of ['A', 'B', 'C']) {
+      await createThing(app, user, { name, purchased_on: '2026-01-01' })
+    }
+
+    // Non-zero, so a 400 below cannot be an empty archive dressed up as validation (debt D33).
+    const all = await app.inject({ method: 'GET', url: '/api/v1/things', ...authAs(user) })
+    expect(all.statusCode).toBe(200)
+    expect((all.json().data as unknown[]).length).toBe(3)
+
+    /**
+     * These all decode to valid JSON with `v: 1`, so the old two-field check waved them through and
+     * bound them into the `WHERE` clause: `i` reached `gt(things.id, 'not-a-uuid')` and Postgres
+     * raised `22P02 invalid input syntax for type uuid`, which fell through to the last step of
+     * `lib/problem.ts` as a **500 on every paginated endpoint**. Measured, not theorised.
+     *
+     * No cross-space read was ever possible — the tenant filter is a separate `AND` a cursor cannot
+     * reach — so this is availability, not a leak.
+     */
+    const garbage: { label: string; query: string; payload: unknown }[] = [
+      {
+        label: 'id is not a uuid',
+        query: '',
+        payload: { v: 1, s: null, i: 'not-a-uuid' },
+      },
+      {
+        label: 'sort value is not a date, but the column is',
+        query: '&sort=purchased_on',
+        payload: { v: 1, s: 'nope', i: '3f1a9b5e-7c2d-4e8a-9b0f-1d2c3e4f5a6b' },
+      },
+      {
+        label: 'a version this server never minted',
+        query: '',
+        payload: { v: 2, s: null, i: '3f1a9b5e-7c2d-4e8a-9b0f-1d2c3e4f5a6b' },
+      },
+    ]
+
+    for (const { label, query, payload } of garbage) {
+      const cursor = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/v1/things?limit=2${query}&cursor=${encodeURIComponent(cursor)}`,
+        ...authAs(user),
+      })
+      expect(response.statusCode, label).toBe(400)
+      expect(response.json().type, label).toBe(
+        'https://life-manager.app/problems/validation-failed',
+      )
+      // The response must not echo the payload's internal field letters back.
+      expect(response.json().detail, label).toBe('That pagination cursor is not valid.')
+    }
   })
 
   // ── §6: reminders — the capability exists, the automatic creation does not ─

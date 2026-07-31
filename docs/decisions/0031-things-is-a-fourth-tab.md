@@ -51,7 +51,7 @@ labelled, in the comp's order. `/things` and `/things/$thingId` both light the T
 **`DomainSwitcher` is deleted.** Not left unreferenced — an unused component whose docstring argues
 at length for a rejected approach is precisely what misleads the next session. The pill row comes off
 `documents.index.tsx` and `things.index.tsx`; the reasoning worth keeping is preserved here and in
-[design.md §8](../conventions/design.md#8-navigation-four-tabs-now--documents--things--you).
+[design.md §8](../conventions/design.md).
 
 **Two properties of the switcher survive it, because they are rules about navigation and not about
 pills:**

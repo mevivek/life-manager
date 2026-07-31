@@ -60,7 +60,7 @@ guesses, and it guesses wrong in **two opposite directions**:
   `className` override silently coexists instead of winning.
 
 `utils.test.ts` walks the exported `TEXT_SIZES`, `RADII` and `NAMED_SPACING` lists. Extend the list,
-and the test covers the new token automatically. Debt **D42**.
+and the test covers the new token automatically. Debt **D63**.
 
 The feel work added two more traps of the same shape, both now declared and walked:
 
@@ -412,7 +412,7 @@ one with valid markup, a passing suite and a correct accessible name: a button r
 chevron missing from the first row of every card, a push ask offering to notify about a date in the
 past, and a file row clipping "Version 1" to "Versi…".
 
-There is no visual regression testing (debt **D43**), so this is manual and it is not optional:
+There is no visual regression testing (debt **D64**), so this is manual and it is not optional:
 
 1. **390px, both themes.** That is the design's target width; debt **D37** is the record of what
    skipping it costs.

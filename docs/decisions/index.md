@@ -25,7 +25,7 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | # | Decision | Status | In one line |
 |---|---|---|---|
 | [0001](0001-typescript-monorepo.md) | TypeScript monorepo | accepted | One language, pnpm workspaces + Turborepo; shared Zod contract is the reason |
-| [0002](0002-api-first-decoupling.md) | API-first decoupling | accepted | Every client is a plain HTTP consumer; only `apps/api` touches the database |
+| [0002](0002-api-first-decoupling.md) | API-first decoupling | accepted — amended 2026-07-30 | Every client is a plain HTTP consumer; only `apps/api` touches the database, with one named exemption for the deploy verifier's cleanup |
 | [0003](0003-vite-spa-pwa-over-nextjs.md) | Vite SPA, not Next.js | accepted | SSR is unusable under ADR-0002 and tempts sessions to break it |
 | [0004](0004-zod-single-contract-source.md) | Zod as the single contract | accepted | One schema → validation + types + OpenAPI + form validation |
 | [0005](0005-postgres-neon-drizzle.md) | Postgres on Neon, Drizzle | accepted | JSONB, full-text, transactions; branching makes resets free |

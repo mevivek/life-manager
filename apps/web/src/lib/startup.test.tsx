@@ -35,11 +35,49 @@ import { server } from '@/test/msw'
  * deleting the gate from the app would have left all four of these green.
  */
 
+/** The device's IndexedDB, as far as `lib/persister.ts` is concerned. */
 const store = new Map<string, unknown>()
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ *  Whether the page running right now is still allowed to write to `store`.
+ *  Without this, one test's cache lands in a later test's IndexedDB. Debt **D76**.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `lib/persister.ts` gives the shared `queryCachePersister` `throttleTime: 1_000`, and
+ * `createAsyncStoragePersister` implements that with `asyncThrottle`, which keeps exactly ONE queued
+ * write and runs it `throttleTime` after the previous one finished. **The persister is a module
+ * singleton**, so that queue does not belong to a test — it belongs to this file. `store.clear()` in
+ * `beforeEach` cannot reach it, because the write has not happened yet.
+ *
+ * Measured on this file with every write logged: the first mount writes at +242ms, its follow-up is
+ * queued for +1242ms, and it lands at **+1266ms — four tests later** — carrying whichever dehydrated
+ * cache was most recent. Four assertions here are wrong the moment that happens:
+ *
+ *  · both tests that assert `hardRecovery()` purged the cache see the key come straight back;
+ *  · a landed write carries the CURRENT buster, so "fails fast offline" finds a usable `me` on disk,
+ *    resolves the guard and never reaches the error screen;
+ *  · and "discards a cache written by an older build" sees `meRequests` 0 where it requires 1.
+ *
+ * That is D76 exactly: two of them fail together, only under a parallel run. Load does not change
+ * *what* happens — it changes *when* the queued write lands relative to the assertion, which is why
+ * the file passes in isolation and why no timeout would fix it.
+ *
+ * So a write from a page that is gone is **dropped**, which is what a browser does for free: it tears
+ * the page down with the timer still inside it. `del` is deliberately NOT guarded — a purge must
+ * always be observable, since it is the thing two of these tests are about.
+ *
+ * The app's own version of this hazard is real, and it is handled rather than hidden here:
+ * `lib/session.ts` clears the query client *before* deleting the file, "so that if the persister's
+ * throttled write lands after the delete below, the only thing it can possibly write is an empty
+ * cache".
+ */
+let pageMayPersist = false
 
 vi.mock('idb-keyval', () => ({
   get: async (key: string) => store.get(key),
   set: async (key: string, value: unknown) => {
+    if (!pageMayPersist) return
     store.set(key, value)
   },
   del: async (key: string) => {
@@ -178,6 +216,9 @@ function stubTheRestOfTheNowScreen(): void {
 async function mountApp(): Promise<void> {
   const { createQueryClient } = await import('./query-client')
 
+  // From here until this page goes away, the persister's writes are the live page's and count.
+  pageMayPersist = true
+
   const queryClient = createQueryClient()
   const router = createRouter({
     routeTree,
@@ -260,6 +301,14 @@ function fakeRecoveryEnvironment(cacheNames: string[]): RecoveryEnvironment {
     replace: () => {},
     reload: () => {
       environment.reloads += 1
+      /**
+       * A reload ends this page, and the persister's queued write goes with it. jsdom keeps the
+       * document alive instead, so without this line that write lands after `hardRecovery()` purged
+       * the cache and puts the key straight back (**D76**). Nothing can slip in between the purge and
+       * here: `hardRecovery`'s remaining steps all settle on microtasks, and a timer only runs at a
+       * macrotask boundary.
+       */
+      pageMayPersist = false
     },
   })
 
@@ -296,12 +345,17 @@ async function settleRecovery(): Promise<void> {
 
 beforeEach(() => {
   store.clear()
+  // Nothing is mounted yet, so nothing may write — see the block comment on `pageMayPersist`.
+  pageMayPersist = false
   window.sessionStorage.clear()
 })
 
 afterEach(async () => {
   const { onlineManager } = await import('@tanstack/react-query')
   onlineManager.setOnline(true)
+  // The page this test mounted is gone. Anything the shared persister still has queued for it must
+  // not land in the next test's IndexedDB (D76).
+  pageMayPersist = false
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   window.sessionStorage.clear()

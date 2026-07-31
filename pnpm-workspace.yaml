@@ -20,10 +20,10 @@ allowBuilds:
   # msw's postinstall only copies `mockServiceWorker.js` into a public directory, which is for
   # intercepting in a real browser. We use `msw/node` in Vitest, so there is nothing to place.
   msw: false
-  # Cloudflare's local Workers runtime, pulled in by wrangler. Its postinstall downloads a
-  # ~100MB platform binary that is only used by `wrangler dev` / `wrangler pages dev` to emulate
-  # Workers locally. We deploy the web app as static files (`wrangler pages deploy`) and use no
-  # Pages Functions, so nothing needs it. Flip to true only if local Workers emulation is added.
+  # Cloudflare's local Workers runtime, which arrived via wrangler. `wrangler` itself was removed on
+  # 2026-07-30 (debt D30) because no script ever invoked it — Pages builds through the dashboard's git
+  # integration. This entry stays as a cheap guard: if wrangler is ever added back for a local
+  # `pages dev`, its postinstall would otherwise pull a ~100MB platform binary silently.
   workerd: false
 
 # `pnpm deploy` (used by apps/api/Dockerfile) refuses to run without this.

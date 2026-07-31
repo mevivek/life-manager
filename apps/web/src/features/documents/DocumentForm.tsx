@@ -150,7 +150,28 @@ const SELECTABLE_TYPES = documentTypeSchema.options.filter((option) => option !=
 export type DocumentFormProps = {
   /** Present when editing; absent when creating. */
   initial?: DocumentDetailResponse
-  onSubmit: (values: DocumentCreate) => Promise<unknown>
+  /**
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *  `seededVersion` is the version `initial` carried AT MOUNT, and that is the whole of
+   *  ADR-0024's precondition on this form.
+   * ═══════════════════════════════════════════════════════════════════════════════════════
+   *
+   * The fields below are seeded from `initial` **once**, by `defaultValues`, and this form never
+   * `reset()`s on a changed `initial` prop — deliberately, because resetting under a user mid-edit
+   * would throw away what they had typed. The consequence is that the values on screen can be older
+   * than the prop: `useDocument` inherits `refetchOnWindowFocus: true`, so backgrounding the app and
+   * returning refetches the document, and if it was edited on another device the prop now carries
+   * version 2 while these inputs still hold version 1's values.
+   *
+   * A caller that read `initial.version` at *submit* time would therefore send version-1 VALUES
+   * stamped with version 2 — the server's `where version = :expected` would match, and the other
+   * device's edit would be silently overwritten. That is precisely the loss ADR-0024 exists to
+   * refuse, and it is invisible: nothing fails, the write just wins.
+   *
+   * So the version travels **with the values**, captured at the same instant they were. `null` when
+   * creating, where there is nothing to be stale about.
+   */
+  onSubmit: (values: DocumentCreate, seededVersion: number | null) => Promise<unknown>
   onCancel?: () => void
   submitLabel?: string
   /**
@@ -204,6 +225,14 @@ export function DocumentForm({
   const [askedForAName, setAskedForAName] = useState(false)
   const issuers = useIssuers()
   const holders = useHolders()
+  /**
+   * The version the fields below were seeded from, frozen at mount beside `defaultValues`.
+   *
+   * A `useRef` rather than a read of `initial.version` at submit time: the two differ exactly when the
+   * document changed underneath an open form, which is the case the precondition is for. See the long
+   * note on `onSubmit`.
+   */
+  const seededVersion = useRef(initial?.version ?? null)
 
   /**
    * The preset a document being EDITED corresponds to, recovered from its saved title.
@@ -387,7 +416,10 @@ export function DocumentForm({
     try {
       // `values` is already coerced by `documentFormSchema`: blanks are null and the country code
       // is uppercase. Nothing left to normalise here.
-      await onSubmit(values)
+      //
+      // The seeded version goes with them, because it is the version THESE values were read at —
+      // never a fresh one. ADR-0024, and the note on the prop.
+      await onSubmit(values, seededVersion.current)
     } catch (error) {
       // The server owns the rules, so its message is the useful one — particularly for rule 2
       // (expiry before issue date), which this form does not duplicate.

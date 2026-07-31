@@ -159,3 +159,71 @@ deploy that cannot run. The gate behaved correctly and refused to ship — but s
 
 No coverage threshold. A percentage target produces tests written to hit the number rather
 than to catch bugs — the isolation test in §2 is worth more than 20 points of coverage.
+
+---
+
+## 8. Running the database-backed suites in an agent container
+
+`pnpm test` **skips** the API's suites without Docker or `TEST_DATABASE_URL`
+([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
+API was tested. **Check the skip count, every time.**
+
+**Measured 2026-07-30 on a settled tree, three consecutive runs: 745 passed / 0 skipped** with a
+database (web 467 · api 222 · shared 56); **546 passed / 199 skipped** without one — every skip is the
+API's. **Re-measure rather than citing this**: the figure in this repo has been wrong three separate
+times, once by 17 tests, and once because a session did the arithmetic instead of running the suite.
+Note also that `pnpm --filter @life-manager/api test` on its own hits the D77 timeout flake roughly half
+the time on a 4-core container, where the full three-package run rarely does — the suite you run changes
+what you see.
+
+Postgres 16 is installed in the agent container, so no Docker is needed. `initdb` refuses to run as
+root:
+
+```bash
+DD=/tmp/pg-$$/pgdata                       # a UNIQUE path per session — concurrent agents collide
+mkdir -p $DD && chown postgres:postgres $DD && chmod 700 $DD
+su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $DD -U postgres --auth=trust"
+su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $DD -l $DD/server.log \
+  -o '-p 55999 -k /tmp -c listen_addresses=127.0.0.1' start -w -t 60"
+/usr/lib/postgresql/16/bin/createdb -h 127.0.0.1 -p 55999 -U postgres lmtest
+CI=true TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55999/lmtest pnpm test
+```
+
+Four details are load-bearing, and the first two fail **silently** — a server that never started
+looks identical to one you forgot to start:
+
+- **The log must live inside the datadir**, after the `chown`. Postgres cannot write the parent.
+- **`-k /tmp`** is needed for the unix socket.
+- **`CI=true`** is what makes the harness throw instead of skip. Without it you get a green run that
+  proves nothing.
+- **A unique datadir and port per session.** Two agents following a shared path killed each other's
+  server mid-run; the survivor's numbers were still correct, but only because it was re-run in
+  isolation.
+
+Do **not** write that URL into `apps/api/.env`.
+
+`--reporter=basic` no longer exists in Vitest 4. For per-package counts, run the three filtered
+suites, or use `--reporter=json`.
+
+### Known-flaky tests
+
+Do not accept anyone's description of a failure in these as expected, and never satisfy one by
+weakening what it asserts (invariant 10):
+
+| File | Debt | Note |
+|---|---|---|
+| `apps/web/src/lib/outbox.test.ts` | D55 | The original flake |
+| `apps/web/src/features/documents/CaptureSheet.test.tsx` | D65 | Times out ~1 full run in 3, passes in isolation. **It guards ADR-0030's one-required-field rule**, so a session that "fixes" it by adding a guard to a wizard step causes the exact regression the ADR exists to prevent |
+| `apps/web/src/lib/startup.test.tsx` | D76 | Only under a parallel full run; passes in isolation. Guards D49 |
+| `apps/api/src/db/migrations.test.ts` | D77 | Seen once on an advisory-lock timeout under concurrent runs |
+
+### A probe from an agent container is not evidence
+
+Outbound HTTPS goes through a proxy that has been observed returning SPA-fallback HTML for assets the
+origin serves correctly, `503` for every path, and the literal body `DNS resolution failure` for a
+real file. **Node's `fetch` does not bypass it** — believing otherwise cost real time on 2026-07-30,
+when a `fetch`-based probe reported four chunks "missing" from a healthy deploy.
+
+So a negative result from here is **not** evidence of a broken deploy. Re-run it several times, check
+`curl -sS "$HTTPS_PROXY/__agentproxy/status"`, and treat a real device's screenshot as the only
+trustworthy observation of production.

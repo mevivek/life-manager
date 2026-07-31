@@ -66,25 +66,38 @@ runtime dependencies on either app and must never import from them.
 
 ## 3. Technology
 
-| Layer | Choice | ADR |
-|---|---|---|
-| Language | TypeScript, `strict: true`, everywhere | [0001](decisions/0001-typescript-monorepo.md) |
-| Monorepo | pnpm workspaces + Turborepo | [0001](decisions/0001-typescript-monorepo.md) |
-| Web client | Vite + React SPA, `vite-plugin-pwa` (Workbox) | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| Routing | TanStack Router | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| Server state | TanStack Query | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| UI | Tailwind v4 + shadcn/ui (Radix) | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
-| Forms | React Hook Form + Zod resolver | [0004](decisions/0004-zod-single-contract-source.md) |
-| API framework | Fastify 5 + `fastify-type-provider-zod` | [0004](decisions/0004-zod-single-contract-source.md) |
-| Database | Postgres 18 on Neon | [0005](decisions/0005-postgres-neon-drizzle.md) |
-| ORM | Drizzle ORM + drizzle-kit | [0005](decisions/0005-postgres-neon-drizzle.md) |
-| Auth | Better Auth, self-hosted | [0007](decisions/0007-better-auth-self-hosted.md) |
-| File storage | Cloudflare R2, private bucket | [0008](decisions/0008-object-storage-r2.md) |
-| Background jobs | pg-boss (on the same Postgres) | [0012](decisions/0012-pg-boss-background-jobs.md) |
-| Push | Web Push (VAPID) behind a channel abstraction | [0013](decisions/0013-read-only-offline-v1.md) |
-| Tests | Vitest, Playwright, MSW | [0016](decisions/0016-testing-and-tooling.md) |
-| Lint/format | Biome | [0016](decisions/0016-testing-and-tooling.md) |
-| CI | GitHub Actions | [0016](decisions/0016-testing-and-tooling.md) |
+**Versions are what `pnpm install` actually resolved.** This is the only stack table in the repo —
+`CLAUDE.md` used to carry a second, and the two disagreed about whether R2 was provisioned and
+whether jobs were scheduled. It also said Playwright was a test tool and GitHub Actions was CI;
+neither is true (debt D35, D24).
+
+| Layer | Choice | Version | ADR |
+|---|---|---|---|
+| Runtime | Node.js | **22.15** (`.node-version`, `engines`) | — |
+| Package manager | pnpm | **11.17** (`packageManager`) | [0001](decisions/0001-typescript-monorepo.md) |
+| Language | TypeScript `strict` + `noUncheckedIndexedAccess` | **7.0** (Go-native `tsgo`) | [0001](decisions/0001-typescript-monorepo.md) |
+| Monorepo | pnpm workspaces + Turborepo | turbo 2.10 | [0001](decisions/0001-typescript-monorepo.md) |
+| Contract | Zod | **4.4** | [0004](decisions/0004-zod-single-contract-source.md) |
+| Web | Vite + React SPA, PWA via `vite-plugin-pwa` | vite 8.1 · react 19.2 · pwa 1.3 | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
+| Routing / data | TanStack Router + TanStack Query | router 1.170 · query 5.101 | [0003](decisions/0003-vite-spa-pwa-over-nextjs.md) |
+| UI | Tailwind v4 + shadcn/ui primitives, wearing the **Ledger** design system | tailwind 4.3 | [0025](decisions/0025-ledger-design-system.md) |
+| Type | Newsreader + IBM Plex, **self-hosted** — not the Google CDN, which breaks offline | `@fontsource*`, OFL-1.1 | [0025](decisions/0025-ledger-design-system.md) |
+| API | Fastify + `fastify-type-provider-zod` → OpenAPI 3.1 | fastify 5.10 · provider 7.0 | [0004](decisions/0004-zod-single-contract-source.md) |
+| Database | Postgres 18 on Neon | 18.4 | [0005](decisions/0005-postgres-neon-drizzle.md) |
+| ORM | Drizzle + drizzle-kit | 0.45 / 0.31 | [0005](decisions/0005-postgres-neon-drizzle.md) |
+| Auth | Better Auth, self-hosted in our Postgres | 1.6 | [0007](decisions/0007-better-auth-self-hosted.md) |
+| Files | Cloudflare R2, private, presigned URLs | `@aws-sdk/client-s3` 3.1096 · provisioned, in use | [0008](decisions/0008-object-storage-r2.md) |
+| Jobs | pg-boss on the same Postgres — no Redis | 12.26 · 3 handlers · schedules **off permanently** | [0012](decisions/0012-pg-boss-background-jobs.md) · [0028](decisions/0028-external-trigger-for-the-daily-scan.md) |
+| Tests | Vitest (real Postgres) + MSW; Playwright **not installed** (D35) | vitest 4.1 · msw 2.15 | [0016](decisions/0016-testing-and-tooling.md) · [0018](decisions/0018-testcontainers-for-api-tests.md) |
+| Web Push | `webpush-webcrypto` — **not `web-push`, which is MPL-2.0** | 1.0.5 (MIT) | [0022](decisions/0022-web-push-library.md) |
+| Lint/format | Biome | 2.5 | [0016](decisions/0016-testing-and-tooling.md) |
+| Hosting | Cloudflare Pages · **Cloud Run** · Neon · R2 | see [roadmap](roadmap.md#current-position) | [0021](decisions/0021-cloud-run-for-the-api.md) · [0019](decisions/0019-same-site-subdomain-deployment.md) |
+
+**Bumping any one of these forces others** — the coupling list is in [architecture.md § Version couplings](docs/architecture.md#version-couplings).
+
+**Before proposing a stack change, read [`decisions/index.md`](decisions/index.md)** — the
+alternative was probably already rejected for a reason that still holds. Next.js, Supabase, Prisma,
+Redis, tRPC, GraphQL and offline-first sync were each evaluated and declined.
 
 ## 4. API layering
 
@@ -197,14 +210,19 @@ Universal column rules are in [conventions/data.md](conventions/data.md).
 
 All free or near-free at single-user traffic
 ([ADR-0021](decisions/0021-cloud-run-for-the-api.md), superseding
-[ADR-0014](decisions/0014-hosting-topology.md)). **Live since 2026-07-27**, except R2.
+[ADR-0014](decisions/0014-hosting-topology.md)).
+
+**This section describes the shape, not the state.** What is deployed and provisioned right now is
+asserted in exactly one place — [roadmap.md § Current position](roadmap.md#current-position) — because
+restating it in five files is what drifted at M0 and again at M1 (debt **D28**). Do not add a status
+claim here.
 
 | Component | Host | Notes |
 |---|---|---|
 | Web PWA | Cloudflare Pages | Static build, global CDN, no server. Builds on push from `main` |
 | API | **Cloud Run** | Node container, `--min-instances=0`. Not Fly — [ADR-0021](decisions/0021-cloud-run-for-the-api.md) |
 | Database | Neon | Serverless Postgres, branching, scale-to-zero |
-| Files | Cloudflare R2 | Private bucket, zero egress fees. **Not provisioned yet — M1** |
+| Files | Cloudflare R2 | Private bucket, zero egress fees. Presigned PUT straight from the browser, so the bucket needs a CORS policy ([README](../README.md) § Provisioning) |
 
 The web build is static and the API is a stateless container, so nothing about this
 topology is load-bearing — every component can be moved to another provider without a
@@ -216,8 +234,12 @@ Recorded so a future session doesn't treat an intentional absence as an oversigh
 
 - **No SSR / server-rendered HTML.** The web client is a static SPA
   ([ADR-0003](decisions/0003-vite-spa-pwa-over-nextjs.md)).
-- **No offline writes.** v1 caches reads only
-  ([ADR-0013](decisions/0013-read-only-offline-v1.md)).
+- **No background sync.** Offline writes *do* exist, through an explicit outbox: a write made
+  offline queues in IndexedDB and replays on reconnect, and a stale write is refused with **409** and
+  surfaced for the user to decide, never merged
+  ([ADR-0024](decisions/0024-offline-writes-outbox.md), superseding
+  [ADR-0013](decisions/0013-read-only-offline-v1.md)'s no-writes half — its read cache stands). What
+  is deliberately absent is the *implicit* half: no Background Sync API, no CRDTs, no automatic merge.
 - **No GraphQL.** REST with a generated OpenAPI contract
   ([ADR-0004](decisions/0004-zod-single-contract-source.md)).
 - **No application-level encryption of ordinary data**
@@ -226,3 +248,17 @@ Recorded so a future session doesn't treat an intentional absence as an oversigh
 - **No Redis.** ([ADR-0012](decisions/0012-pg-boss-background-jobs.md))
 - **No migration discipline yet.** Pre-v1, the dev database may be reset freely
   ([ADR-0011](decisions/0011-pre-v1-schema-resets.md)).
+
+---
+
+## Version couplings
+
+Bumping one of these forces the others. Moved here from `CLAUDE.md`, which is a router.
+
+`@vitejs/plugin-react@6` peer-requires
+`vite@^8` exactly · `fastify-type-provider-zod@7` needs `zod >=4.2` **and** `@fastify/swagger
+>=9.5.1` · `@better-auth/drizzle-adapter` peer-requires `drizzle-orm ^0.45.2`, and `better-auth`
+sets the Zod floor · Vitest 4 dropped `vitest.workspace.ts` for `test.projects` (and its `basic`
+reporter) · Turbo 2 renamed `pipeline` to `tasks` · Tailwind 4 has no `tailwind.config.js` · pnpm 11
+reads settings from `pnpm-workspace.yaml`, **not** `.npmrc`.
+

@@ -4,7 +4,14 @@ Sequenced milestones. A session picking up work should find the first milestone 
 done and work on it. Each milestone is a coherent, shippable slice — not a phase of a
 waterfall.
 
-**Current position: M1 built, DEPLOYED, fully provisioned, and one observation from done.**
+## Current position
+
+**M1 built, DEPLOYED, fully provisioned, and one observation from done.**
+
+**This heading is the single authoritative statement of what is deployed and provisioned.**
+[README.md](../README.md), [architecture.md](architecture.md) §9 and `CLAUDE.md` all link here rather
+than restating it — asserting it in five places is the mechanism that drifted at M0 and again at M1
+(debt **D28**). If you change what is deployed, change it here.
 
 R2, VAPID, the Neon rotation and now `CRON_SECRET` plus the Cloud Scheduler job are all provisioned; real
 documents are in; and the daily scan has been called against production and reported
@@ -28,8 +35,9 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 **Three caveats, all real:**
 
 - **CI is `cloudbuild.deploy.yaml`, not GitHub Actions.** Both halves now deploy on push (D22
-  fixed), but Actions never runs on this account, so `.github/workflows/ci.yml` enforces nothing
-  (debt D24) and editing the Cloud Build config needs a delete-and-recreate (debt D25).
+  fixed), but Actions never runs on this account, so the workflow file that claimed to enforce
+  anything was deleted (debt D24) and editing the Cloud Build config needs a delete-and-recreate
+  (debt D25).
 - **`SIGTERM` graceful shutdown is still unverified** (debt D14). Windows does not deliver POSIX
   signals — but Cloud Run does, and `--min-instances=0` fires it several times a day, so this is
   now checkable from the logs with no deploy required. Nobody has looked.
@@ -40,8 +48,11 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 
 ## Next actions, in order — read this before starting anything
 
-**M1 is built. It is not done.** Everything is green locally; nothing is deployed and nobody has used
-it. The next actions are §4 below — deployment and credentials — not M2, and not more code.
+**M1 is built and deployed. It is still not done.** Every credential is bound and real documents are
+in; steps 1–6 of §4 below are all closed. What is unmet is **§4.7 — nobody has seen a notification
+arrive.** Turn reminders on from the You screen, call `/api/v1/maintenance:run-daily` again, and expect
+`delivered: 1` with a notification on the phone. Then §4.8 wants a week of real use. That is the whole
+next-actions list — not M2, and not more code.
 
 ### 1. ✅ The M0 review — done 2026-07-28
 
@@ -201,9 +212,9 @@ agreements name first: "one domain at a time — finish and actually use it befo
 **That agreement is under strain and it is worth saying so plainly.** Things is a second domain
 finished — both halves — before the first is done. The mitigation that used to be recorded here was
 that only the client half existed; that mitigation is gone. **M1's last observation is still
-outstanding**, and a session tempted to keep going on Things (the outbox, the photo client, §9(2))
-instead of turning reminders on from the You screen and watching one arrive should read §5 of the brain
-again first.
+outstanding**, and a session tempted to keep going on Things (the offline outbox, §9(2)) instead of
+turning reminders on from the You screen and watching one arrive should read §5 of the brain again
+first.
 
 ---
 
@@ -247,7 +258,7 @@ to fail. Then sign up a second account and confirm it gets its own separate spac
 the first.
 
 **Verified on the deployed app**, not just locally: `node scripts/verify-deployment.mjs` asserts
-all of it in 25 checks — the `Secure; HttpOnly; SameSite=Lax` cookie with **no `Domain`**, the
+all of it in **42** checks — the `Secure; HttpOnly; SameSite=Lax` cookie with **no `Domain`**, the
 cross-subdomain session, that the API origin is actually baked into the shipped JavaScript, and
 that every asset and lazy route chunk the app names is really served rather than answered by the
 SPA fallback.
@@ -283,17 +294,24 @@ triggers in [product/review.md](product/review.md) §3 before writing `GET /docu
 **Done when:** your real passport, driving licence, and a warranty are in the system, and
 your phone notifies you before one expires.
 
-> **Still not met.** Everything above is built and green, but the database holds test documents and
-> no notification has reached a real phone. The gap is deployment plus R2 and VAPID credentials,
-> not code — see § Next actions step 4.
+> **Still not met — but only just.** Everything above is built, deployed and fully provisioned, and
+> the database holds real documents. The **one** thing outstanding is that no notification has been
+> *seen* on a phone: the scan has been called against production and reported
+> `found: 1, delivered: 0, undelivered: 1`, which is the mechanism working with nowhere to deliver to.
+> Switch reminders on from the **You** screen, call the endpoint again, and watch for `delivered: 1`.
+> Nothing is missing but that observation — see § Next actions step 4.7.
 
 ## M2 — Documents, enrichment
 
 - `documents.extract-text` pg-boss job: OCR uploaded PDFs/images into `document_text`
 - Search index extended to cover extracted text
 - Thumbnails/previews for the document list
-- Offline read cache (app shell + last-seen list) per
-  [ADR-0013](decisions/0013-read-only-offline-v1.md)
+- [x] Offline read cache (app shell + last-seen list) per
+  [ADR-0013](decisions/0013-read-only-offline-v1.md) — **done 2026-07-29, out of order and on
+  purpose: see §4b.** Offline *writes* followed as an outbox
+  ([ADR-0024](decisions/0024-offline-writes-outbox.md), superseding 0013's no-writes half), so this
+  line is the only part of M2 that is closed. What is still missing is offline access to **file
+  bytes**, which ADR-0013 rules out deliberately
 
 Only possible because documents are Tier 0 — see
 [ADR-0009](decisions/0009-sensitivity-tiers.md).
@@ -326,18 +344,22 @@ So M4 is now, in order:
      every endpoint in §5, and the `on delete set null` foreign key on `documents.thing_id`.
      `packages/shared/src/things.ts` was implemented **unchanged** (invariant 9). 71 new
      tests; suite 674/0. things.md §10 lists the files.
-2. **Answer things.md §9(2)** — whether a warranty gets automatic reminders — in
-   [product/open-questions.md](product/open-questions.md) before coding it. Documents only
+2. **Answer [Q7](product/open-questions.md)** — whether a warranty or a service date gets automatic
+   reminders (things.md §9(2)) — before coding it. Documents only
    auto-remind for `identity` and `certificate`, and the equivalent call here has **still not
    been made**, so step 1 deliberately built the capability and left the switch off: nothing
    creates a thing reminder, and `GET /things/:id` returns an empty `reminders[]` with a test
    asserting exactly that. **Answering it is not only a `AUTO_REMINDER_TYPES`-shaped edit** —
    the daily scan's copy is document-shaped and would announce that a warranty "expires",
    which is the sentence ADR-0029 exists to prevent. Debt D58.
-3. **The two client gaps step 1 left**, both small and both named in things.md §10: Things
-   writes do not go through the offline outbox (one entry kind plus one `writeOrQueue` per
-   mutation), and `api.things` has no methods for the four photo verbs that now exist
-   (debt D59).
+3. **The one client gap step 1 left**, named in things.md §10 item 2: Things writes do not go
+   through the offline outbox — one entry kind plus one `writeOrQueue` per mutation. The
+   photo client is **not** part of this any more: `api.things.photos` carries all five verbs
+   and `ThingPhotos.tsx` draws the hero and the strip, so debt **D59** is closed for reads and
+   writes and only its offline half survives, inside this same outbox work. (It landed with its
+   URLs written `photos::presign-upload` — the `::` is Fastify's *registration* escape and never
+   reaches a URL, so every photo verb 404'd until the paths were corrected to one colon. Fixed;
+   recorded because the doc it was copied from said `::` too.)
 4. **Money**, with its own doc first.
 
 The real test here was whether the playbook works: adding a domain should be mechanical.

@@ -35,14 +35,41 @@ import { cn } from '@/lib/utils'
  * times disagree, the ladder is cosmetically off and the reminders are still right.
  */
 
-/** Whole days from today to `date`, negative when past. Both are calendar dates, so no timezone. */
+/**
+ * Whole days from today to `date`, negative when past.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  "Today" is the USER'S today — read from LOCAL parts, never from `getUTC*`.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `date` is a bare `YYYY-MM-DD` and carries no zone, so the *target* genuinely has none. The
+ * **reference day does** — a `Date` is an instant, and which calendar day that instant falls on
+ * depends on where the reader is standing. This used to read `today.getUTC*()`, with a comment
+ * claiming "both are calendar dates, so no timezone"; the second half of that sentence was false and
+ * it shipped two off-by-one-day bugs on real phones:
+ *
+ *  - At **UTC-07:00**, 18:00 on 30 July is already 31 July in UTC, so a passport expiring
+ *    2026-07-30 — valid all day where the user is sitting — rendered `expired`, *"Expired 1 day
+ *    ago"*, and one expiring the 31st drew the pulsing "expires today" ring a day early.
+ *  - At **UTC+05:30**, 00:30 on 31 July is still 30 July in UTC, so the same two errors happen in
+ *    the opposite direction.
+ *
+ * An expiry is a calendar date, so the only day it can sensibly be compared against is the user's.
+ * That also puts this helper in step with the write side — `isoToday()` in `ServiceHistory.tsx` and
+ * `OwnershipPanel.tsx` already record local parts, and a reader disagreeing with the writer about
+ * what day it is means a date saved as "today" can read back as yesterday.
+ *
+ * `Date.UTC` is still used for both operands, and that is not a contradiction: it is only a fixed
+ * frame in which to subtract two already-resolved calendar days, so the difference is always an exact
+ * multiple of 86,400,000ms and no DST transition can make a day 23 or 25 hours long.
+ */
 export function daysUntil(date: string, today = new Date()): number {
   const target = Date.UTC(
     Number(date.slice(0, 4)),
     Number(date.slice(5, 7)) - 1,
     Number(date.slice(8, 10)),
   )
-  const midnightToday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  const midnightToday = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
   return Math.round((target - midnightToday) / 86_400_000)
 }
 

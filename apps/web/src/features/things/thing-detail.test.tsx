@@ -12,7 +12,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,6 +26,7 @@ import { cycleLabel, ServiceHistory } from './ServiceHistory'
 import { ageOf, coverSpan, ThingCoverCard } from './ThingCoverCard'
 import { ThingDetail } from './ThingDetail'
 import { ThingSerial } from './ThingSerial'
+import { thingDetailKey } from './useThings'
 
 /**
  * The **Thing detail screen** — one file per screen, alongside `things.test.tsx` (the list and the row)
@@ -788,7 +789,15 @@ describe('ownership on the screen', () => {
         return HttpResponse.json(detail({ ownership: 'lent', ownership_who: 'Priya', version: 2 }))
       }),
     )
-    await renderDetail(detail())
+    /**
+     * Version **4**, not the fixture's default `1`.
+     *
+     * `1` is the value a defaulted or forgotten version coincidentally has, so asserting it proved only
+     * that *a* number arrived. Four proves the client read it off the record. Which of the two candidate
+     * versions it read is a separate claim, and it needs a divergence — see "the detail screen's version
+     * preconditions" below.
+     */
+    await renderDetail(detail({ version: 4 }))
 
     await userEvent.click(screen.getByRole('button', { name: 'It’s not with me any more' }))
     await userEvent.type(screen.getByLabelText('Who has it'), 'Priya')
@@ -804,7 +813,7 @@ describe('ownership on the screen', () => {
      * on something it cannot see. The version is the ADR-0024 precondition.
      */
     expect(patched[0]).toEqual({
-      version: 1,
+      version: 4,
       ownership: 'lent',
       ownership_who: 'Priya',
       ownership_since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -936,6 +945,191 @@ describe('deleting a thing', () => {
   })
 })
 
+// ── The version preconditions ────────────────────────────────────────────────
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  WHICH version a write carries, when the two candidates differ. ADR-0024.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The sibling of `documents.test.tsx`'s block of the same name, and the tests are only worth anything
+ * because of the middle step: the query is **advanced underneath the open control** and the screen is
+ * asserted to have *observed* it. Every test above renders a record whose version never moves, so all of
+ * them pass just as happily against a component that reads `thing.version` at the moment of the tap —
+ * which is precisely the bug ADR-0024's precondition exists to prevent, and which cannot be caught
+ * without a divergence to catch it with.
+ *
+ * The real divergence is `useThing`'s refetch on window focus: a panel or a confirmation left open while
+ * the phone was elsewhere comes back holding somebody else's edit. Sending *that* version makes the
+ * server's `where version = :expected` match, so the edit nobody here has seen is overwritten in silence.
+ * Sending the version the control was populated at makes the server able to answer 409 — the only safe
+ * outcome, and the one the user is then shown.
+ */
+describe('the detail screen’s version preconditions', () => {
+  /** The thing as the screen first read it. */
+  const atSeven = detail({ version: 7 })
+
+  /**
+   * The same thing after somebody else edited it on another device — a new **name** as well as a new
+   * version, so a test can *see* that the advance landed rather than trusting that it did. `ownership`
+   * is untouched, because `OwnershipPanel` unmounts itself for anything but `here`.
+   */
+  const atNine = detail({ version: 9, name: 'Renamed on the other device' })
+
+  /**
+   * The window-focus refetch, landing.
+   *
+   * Written straight into the cache rather than by swapping the MSW handler and waiting: this is the
+   * *effect* of a refetch, it is synchronous, and it leaves nothing for a `waitFor` to race with.
+   */
+  function theQueryAdvances(next: ThingDetailResponse) {
+    act(() => {
+      queryClient.setQueryData(thingDetailKey(THING_ID), next)
+    })
+  }
+
+  /** The heading is drawn from the query, so it is the proof that the advance reached the screen. */
+  async function theScreenObserved(name: string) {
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(name))
+  }
+
+  it('PATCHes the version the PANEL WAS OPENED at, not the one the query has now', async () => {
+    const patched: unknown[] = []
+    server.use(
+      http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json(detail({ ownership: 'lent', version: 10 }))
+      }),
+    )
+    await renderDetail(atSeven)
+
+    await userEvent.click(screen.getByRole('button', { name: 'It’s not with me any more' }))
+    // Opening it is the moment the user read the screen and decided — the moment the precondition is
+    // taken (`OwnershipPanel`'s `opened`, which holds the version rather than a boolean).
+    expect(screen.getByLabelText('Who has it')).toBeInTheDocument()
+
+    theQueryAdvances(atNine)
+    // The divergence, proven: the heading redraws from version 9 while the panel below it still holds the
+    // version 7 the user opened it against. Without this the test would pass against a cache that never
+    // moved, and so would prove nothing at all about which of the two is sent.
+    await theScreenObserved('Renamed on the other device')
+    expect(screen.getByLabelText('Who has it')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Lent out — still mine' }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    /**
+     * `7`. Sending `9` would satisfy the server's precondition and destroy the rename in silence; sending
+     * `7` is what lets the server refuse, and the refusal is what the user is shown
+     * ("surfaces a refused write rather than appearing to have saved", above).
+     */
+    expect(patched[0]).toMatchObject({ version: 7, ownership: 'lent' })
+  })
+
+  it('DELETEs with the version the confirmation was RAISED at, not the one it closed on', async () => {
+    const deleted: string[] = []
+    server.use(
+      http.delete(`*/api/v1/things/${THING_ID}`, ({ request }) => {
+        deleted.push(new URL(request.url).search)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    await renderDetail(atSeven)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete this thing' }))
+    theQueryAdvances(atNine)
+    await theScreenObserved('Renamed on the other device')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, delete it' }))
+
+    await waitFor(() => expect(deleted).toHaveLength(1))
+    /**
+     * Debt D41, and the stakes are highest here: a delete is the one write this app cannot undo — there is
+     * no restore endpoint — so a delete carrying a version nobody looked at destroys an unseen edit with
+     * no way back. `?version=7` is what makes the server able to say no.
+     */
+    expect(deleted[0]).toBe('?version=7')
+  })
+
+  /**
+   * The banner is the one control with no opening step, so its snapshot is keyed to the ownership triple
+   * it **renders** — see `useVersionShown`. These two tests are the two halves of that, and they pull in
+   * opposite directions on purpose: freezing at mount breaks the second, and reading live breaks the first.
+   */
+  it('brings a thing back with the version the SENTENCE arrived with', async () => {
+    const patched: unknown[] = []
+    server.use(
+      http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json(detail({ version: 6 }))
+      }),
+    )
+    const lentAtTwo = detail({
+      ownership: 'lent',
+      ownership_who: 'Priya',
+      ownership_since: '2026-07-30',
+      version: 2,
+    })
+    await renderDetail(lentAtTwo)
+
+    // A different name and a much later version, but the SAME ownership triple — so the sentence on the
+    // banner is unchanged and the version it was populated from is still 2.
+    theQueryAdvances({ ...lentAtTwo, version: 5, name: 'Renamed on the other device' })
+    await theScreenObserved('Renamed on the other device')
+    expect(screen.getByText('Lent to Priya · 30 Jul 2026')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'It’s back with me' }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    expect(patched[0]).toMatchObject({ version: 2, ownership: 'here' })
+  })
+
+  it('RE-SEEDS when the away-state itself changes, so a bring-back cannot 409 by construction', async () => {
+    /**
+     * The other half, and the reason the snapshot is not simply frozen at mount.
+     *
+     * The banner only appears *because* something set the thing away, and that write advanced the version.
+     * A version captured when this component first mounted would therefore be the pre-handover one, and
+     * **every** "It's back with me" would be refused with a 409 the user could do nothing about. Keying on
+     * the displayed triple means each away-state's banner carries the version that state arrived with.
+     */
+    const patched: unknown[] = []
+    server.use(
+      http.patch(`*/api/v1/things/${THING_ID}`, async ({ request }) => {
+        patched.push(await request.json())
+        return HttpResponse.json(detail({ version: 9 }))
+      }),
+    )
+    await renderDetail(
+      detail({
+        ownership: 'lent',
+        ownership_who: 'Priya',
+        ownership_since: '2026-07-30',
+        version: 2,
+      }),
+    )
+    expect(screen.getByText('With someone else')).toBeInTheDocument()
+
+    // The handover the user just made elsewhere: a new away-state, at a new version.
+    theQueryAdvances(
+      detail({
+        ownership: 'gone',
+        ownership_who: 'Sam',
+        ownership_since: '2026-07-30',
+        version: 8,
+      }),
+    )
+    await waitFor(() => expect(screen.getByText('No longer yours')).toBeInTheDocument())
+
+    // "Undo" rather than "It's back with me" — `gone` has no event that reverses it.
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(patched).toHaveLength(1))
+    // `8`, the version the sentence now on screen was populated from — not the stale `2`.
+    expect(patched[0]).toMatchObject({ version: 8, ownership: 'here' })
+  })
+})
+
 // ── The whole screen ─────────────────────────────────────────────────────────
 
 describe('the whole screen', () => {
@@ -1064,7 +1258,7 @@ describe('the whole screen', () => {
     })
   })
 
-  it('is CALM about a 404, and names the reason it is probably a 404 today', async () => {
+  it('is CALM about a 404, and never blames the deployment for it', async () => {
     server.use(
       http.get(`*/api/v1/things/${THING_ID}`, () =>
         HttpResponse.json(
@@ -1077,11 +1271,20 @@ describe('the whole screen', () => {
 
     expect(await screen.findByText('This thing isn’t here')).toBeInTheDocument()
     /**
-     * Three causes it cannot tell apart — deleted, another space (invariant 4: never a 403), and Things
-     * not being switched on at all (things.md §10), which is the actual one today. The copy names all
-     * three and speculates about none.
+     * TWO causes it cannot tell apart — deleted, or another space (invariant 4: never a 403) — named in
+     * the same words `documents.$documentId.tsx` uses for its own 404.
+     *
+     * It used to name a third, "or Things isn’t switched on yet", from when the client shipped ahead of
+     * the API. The server half exists (things.md §10), so that sentence was the app telling a user a
+     * falsehood about its own deployment. The negative assertion is the guard: this screen must never
+     * explain a missing record by pointing at unbuilt infrastructure.
      */
-    expect(screen.getByText(/isn’t switched on yet/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'It may have been deleted, or the link is wrong. Nothing else to read into it.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/switched on|not (a )?route|isn’t built/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Back to things' })).toBeInTheDocument()
   })
 
@@ -1174,15 +1377,15 @@ describe('a thing’s photos', () => {
     const asked: string[] = []
     server.use(
       /**
-       * A **RegExp**, not a path string, and it is not a style choice.
+       * An **exact** RegExp, and the exactness is the regression guard.
        *
-       * MSW matches path strings with `path-to-regexp`, where a `:` opens a parameter — so
-       * `photos::presign-download` is parsed as a literal colon followed by a param called
-       * `presign-download`, and it does not match the literal URL the client sends. The documents side
-       * gets away with a string because its verbs carry a *single* colon. conventions/api.md §2 is why
-       * the URL has two.
+       * §2 of conventions/api.md governs Fastify **registration**, not the wire: the `::` in
+       * `things.routes.ts` is an escape for one literal colon, so the URL a client sends has a single
+       * one. This handler is written to match only that. A path string would not do — MSW parses one
+       * with `path-to-regexp`, where `:presign` reads as a parameter, so `files:x-download` and
+       * `files::presign-download` both match it and reintroducing the `::` would pass.
        */
-      http.post(/\/photos::presign-download$/, async ({ request }) => {
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:presign-download$/, async ({ request }) => {
         const body = (await request.json()) as { photo_id: string }
         asked.push(body.photo_id)
         return HttpResponse.json(
@@ -1214,6 +1417,37 @@ describe('a thing’s photos', () => {
     expect(screen.getByText('2 photos')).toBeInTheDocument()
   })
 
+  /**
+   * Two rows can carry `is_hero: true` at once, and that is the **server's** design rather than a bug.
+   *
+   * `presign-upload { make_hero: true }` writes the intention onto the unconfirmed row (things.schema.ts
+   * permits it), and the demotion of its siblings happens at `:confirm`. So between the presign and the
+   * confirm — or forever, if the upload was abandoned — a detail response holds a confirmed hero and an
+   * unconfirmed pretender. Every client path filters `uploaded_at !== null` first, which is what makes it
+   * benign; this pins that order, because reading `is_hero` first would put a photo with no bytes in the
+   * frame and presign a URL for it.
+   */
+  it('ignores an UNCONFIRMED is_hero row — bytes first, then the flag', async () => {
+    const asked = servePhotoBytes()
+    await renderDetail(
+      detail({
+        name: 'Boiler',
+        photos: [
+          photo({ id: HERO, is_hero: true }),
+          // A presign whose upload never completed, carrying the intention it was created with.
+          photo({ id: SECOND, is_hero: true, uploaded_at: null }),
+        ],
+      }),
+    )
+
+    const image = await screen.findByRole('img', { name: 'Boiler' })
+    expect(image).toHaveAttribute('src', `https://r2.test/${HERO}.jpg`)
+    // Not presigned at all, so not merely un-drawn: the unconfirmed row costs no round-trip.
+    expect(asked).toEqual([HERO])
+    // And it is not in the strip either, so the count is of real photos.
+    expect(screen.getByText('1 photo')).toBeInTheDocument()
+  })
+
   it('draws the picker instead of an empty frame when there is no photo', async () => {
     await renderDetail(detail({ photos: [] }))
     // The comp's own words on the wizard's photo step. An inert empty box would be furniture.
@@ -1241,8 +1475,8 @@ describe('a thing’s photos', () => {
     servePhotoBytes()
     const bodies: unknown[] = []
     server.use(
-      // A RegExp for the same reason as the download handler above — the `::` in the path.
-      http.post(/\/photos::presign-upload$/, async ({ request }) => {
+      // Exact, for the same reason as the download handler above: one colon on the wire.
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:presign-upload$/, async ({ request }) => {
         bodies.push(await request.json())
         return HttpResponse.json(
           {
@@ -1275,6 +1509,58 @@ describe('a thing’s photos', () => {
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0]).toEqual({ mime: 'image/jpeg', size_bytes: 5, make_hero: false })
+  })
+
+  /**
+   * The whole three-step dance, and the point of it is the **paths**.
+   *
+   * The client wrote `photos::presign-upload`, `::confirm` and `::presign-download`, so every photo verb
+   * 404ed against the real API while all of this looked wired. The `::` in `things.routes.ts` is Fastify's
+   * **registration** escape for one literal colon (conventions/api.md §2, and `things.test.ts` asserts the
+   * generated OpenAPI paths with a single one) — it never reaches a URL.
+   *
+   * So the three handlers are anchored to the exact single-colon paths, and `onUnhandledRequest: 'error'`
+   * in `test/setup.ts` finishes the guard: put the escape back and the request matches nothing.
+   */
+  it('presigns, PUTs and CONFIRMS — each at its single-colon path, not the `::` registration form', async () => {
+    const paths: string[] = []
+    let confirmed: unknown = null
+    server.use(
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:presign-upload$/, ({ request }) => {
+        paths.push(new URL(request.url).pathname)
+        return HttpResponse.json(
+          {
+            photo_id: SECOND,
+            upload_url: 'https://r2.test/put',
+            storage_key: 'spaces/x/things/y/z',
+            expires_at: '2026-07-30T13:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+      // The bytes go straight to storage — never through the API (ADR-0008).
+      http.put('https://r2.test/put', () => new HttpResponse(null, { status: 200 })),
+      http.post(/\/api\/v1\/things\/[^/]+\/photos:confirm$/, async ({ request }) => {
+        paths.push(new URL(request.url).pathname)
+        confirmed = await request.json()
+        return HttpResponse.json(photo({ id: SECOND, is_hero: true }), { status: 201 })
+      }),
+    )
+
+    await renderDetail(detail({ name: 'Boiler', photos: [] }))
+    const input = document.querySelector('input[type="file"]')
+    await userEvent.upload(
+      input as HTMLInputElement,
+      new File(['bytes'], 'boiler.jpg', { type: 'image/jpeg' }),
+    )
+
+    await waitFor(() => expect(paths).toHaveLength(2))
+    expect(paths).toEqual([
+      `/api/v1/things/${THING_ID}/photos:presign-upload`,
+      `/api/v1/things/${THING_ID}/photos:confirm`,
+    ])
+    // The photo is named in the body on `:confirm`, never in the path — api.md §2 rule 2.
+    expect(confirmed).toEqual({ photo_id: SECOND })
   })
 
   it('refuses a PDF before any bytes move, and says why', async () => {

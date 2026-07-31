@@ -494,15 +494,24 @@ export type ThingHoldersResponse = z.infer<typeof thingHoldersResponseSchema>
 // ── Photo endpoints ──────────────────────────────────────────────────────────
 
 /**
- * `POST /things/:id/photos::presign-upload`.
+ * `POST /things/:id/photos:presign-upload`.
  *
  * **No storage key, path, or destination filename** — invariant 6 and ADR-0008. `z.strictObject`
  * gets that for free: there is no key here for one to land in.
  *
- * Note the `::` in the route. A `:verb` needs the double colon and **may only follow a static
- * segment**; the photo is named in the *body* on the download verb for exactly the reason
- * `documents.md` §5 gives — `/photos/:photoId:presign-download` generates a broken OpenAPI path even
- * though Fastify routes it correctly. conventions/api.md §2.
+ * ── ONE colon on the wire. The `::` is a REGISTRATION escape and never reaches a URL ──
+ *
+ * `things.routes.ts` registers this as `photos::presign-upload`, because Fastify reads a bare `:` as
+ * the start of a path parameter (conventions/api.md §2 rule 1). That escape is Fastify's, not HTTP's:
+ * the URL a client sends has a **single** colon. This comment used to write the double one, and a
+ * client that copied the `::` out of a doc made **every photo verb 404 in production** — the bug fixed
+ * in commit 1840167. `thing-detail.test.tsx` now anchors its handlers to the single-colon paths with
+ * exact RegExps so putting the escape back matches nothing.
+ *
+ * The other half of §2 still applies to the shape of these routes: a `:verb` **may only follow a
+ * static segment**, so the photo is named in the *body* on the download and confirm verbs rather than
+ * in the path — `/photos/:photoId:presign-download` routes correctly but generates the broken OpenAPI
+ * path `/photos/{photoId}:{presign}-download`, and §3 calls the OpenAPI document the contract.
  */
 export const presignPhotoUploadRequestSchema = z.strictObject({
   mime: photoMimeSchema,

@@ -52,6 +52,39 @@ type OwnershipFields = Pick<
 >
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  The version the away-state ON SCREEN was populated from. ADR-0024's precondition, for a
+ *  control that has no "open" step to take it at.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Every other write in the app takes its precondition at the moment the user opens the thing that
+ * commits it — a form's `defaultValues`, a picker, a confirmation panel. The banner has no such moment:
+ * it is one tap on a control that is always live. So the snapshot is keyed to what the banner **says**
+ * — the ownership triple `awayLabel` renders — and re-seeds when that sentence changes.
+ *
+ * Keying it that way, rather than freezing at mount, is what stops a guaranteed false conflict: the
+ * panel below writes `lent`, the version advances, and the banner appears for the first time. A version
+ * frozen at mount would be the pre-loan one, so **every** "It's back with me" would 409. Re-seeding on
+ * the displayed triple means the banner's precondition is the version that away-state arrived with.
+ *
+ * A change to some *other* column of the same thing still refuses the write, and that is correct rather
+ * than unfortunate: ADR-0024 versions the record, not the field, and part 5 puts field-level merge
+ * explicitly out of scope.
+ */
+function useVersionShown(thing: OwnershipFields): number {
+  const shown = `${thing.ownership}|${thing.ownership_who ?? ''}|${thing.ownership_since ?? ''}`
+  const [seeded, setSeeded] = useState({ shown, version: thing.version })
+
+  // Setting state during render is React's own "adjust state when a prop changes" pattern: the render
+  // is discarded and re-run immediately, so nothing downstream ever sees the mismatched pair.
+  if (seeded.shown !== shown) {
+    setSeeded({ shown, version: thing.version })
+    return thing.version
+  }
+  return seeded.version
+}
+
+/**
  * The banner, at the top of the screen when the thing is **away**.
  *
  * At the top rather than beside the delete control, because it changes how everything under it should be
@@ -64,6 +97,7 @@ type OwnershipFields = Pick<
 export function OwnershipBanner({ thing }: { thing: OwnershipFields }) {
   const [error, setError] = useState<string | null>(null)
   const update = useUpdateThing(thing.id)
+  const versionShown = useVersionShown(thing)
 
   if (thing.ownership === 'here') return null
 
@@ -73,15 +107,18 @@ export function OwnershipBanner({ thing }: { thing: OwnershipFields }) {
     setError(null)
     try {
       /**
-       * The version the screen was **rendered from** — ADR-0024. Not a fresh read: a patch carrying a
-       * just-refetched version defeats the precondition it exists to enforce. If the record moved on
-       * while this banner was on screen, the server refuses with 409 rather than overwriting.
+       * The version the sentence on this banner was **populated from** — ADR-0024, and see
+       * `useVersionShown`. Not `thing.version` read at the moment of the tap: `useThing` refetches on
+       * window focus, so a banner left on screen while the app was backgrounded comes back holding a
+       * newer version, and a patch carrying that just-refetched number defeats the precondition it
+       * exists to enforce — the server's `where version = :expected` matches and whatever changed
+       * elsewhere is overwritten in silence.
        *
        * All three fields, and the two nulls are the point: returning a thing to `here` clears who has
        * it and when it left, in one statement, for the same reason `relation` cannot outlive `holder`.
        */
       await update.mutateAsync({
-        version: thing.version,
+        version: versionShown,
         ownership: 'here',
         ownership_who: null,
         ownership_since: null,
@@ -192,19 +229,27 @@ export function awayLabel(
  * answer" here without a second ink button.
  */
 export function OwnershipPanel({ thing }: { thing: OwnershipFields }) {
-  const [open, setOpen] = useState(false)
+  /**
+   * The version the screen was showing when this panel was **opened**, or `null` while it is shut.
+   *
+   * One piece of state rather than an `open` boolean beside a version, so the two cannot disagree and
+   * so `setAway` has nothing live to reach for. Opening the panel is the moment the user read the
+   * screen and decided, which is the moment ADR-0024's precondition is taken — not the moment of the
+   * final tap, by which point a focus refetch may have handed us a version nobody looked at.
+   */
+  const [opened, setOpened] = useState<number | null>(null)
   const [who, setWho] = useState('')
   const [error, setError] = useState<string | null>(null)
   const update = useUpdateThing(thing.id)
 
   if (thing.ownership !== 'here') return null
 
-  async function setAway(ownership: 'lent' | 'gone') {
+  async function setAway(ownership: 'lent' | 'gone', versionRead: number) {
     setError(null)
     try {
       await update.mutateAsync({
-        // The version this screen was rendered from — see the note in `OwnershipBanner`.
-        version: thing.version,
+        // The version the panel was opened at — see the note on `opened` and in `OwnershipBanner`.
+        version: versionRead,
         ownership,
         /**
          * `null` rather than `''` for a name the user did not give. An empty string is a blank that is
@@ -221,7 +266,7 @@ export function OwnershipPanel({ thing }: { thing: OwnershipFields }) {
         // record tomorrow for anyone east of Greenwich late in the evening.
         ownership_since: isoToday(),
       })
-      setOpen(false)
+      setOpened(null)
       setWho('')
     } catch (caught) {
       setError(
@@ -232,10 +277,15 @@ export function OwnershipPanel({ thing }: { thing: OwnershipFields }) {
     }
   }
 
-  if (!open) {
+  if (opened === null) {
     return (
       <section className="mt-6 border-t border-rule pt-4">
-        <Button variant="secondary" className="w-full text-ink-2" onClick={() => setOpen(true)}>
+        <Button
+          variant="secondary"
+          className="w-full text-ink-2"
+          // Snapshots the version the user is acting on. See the note on `opened`.
+          onClick={() => setOpened(thing.version)}
+        >
           It’s not with me any more
         </Button>
       </section>
@@ -274,7 +324,7 @@ export function OwnershipPanel({ thing }: { thing: OwnershipFields }) {
             // Weight, not fill. See the block comment above.
             className="min-h-[3.125rem] justify-start border-[1.5px] border-ink bg-sunken text-left"
             disabled={update.isPending}
-            onClick={() => void setAway('lent')}
+            onClick={() => void setAway('lent', opened)}
           >
             {named ? `Lent to ${who.trim()} — still mine` : 'Lent out — still mine'}
           </Button>
@@ -282,14 +332,14 @@ export function OwnershipPanel({ thing }: { thing: OwnershipFields }) {
             variant="secondary"
             className="min-h-[3.125rem] justify-start bg-sunken text-left"
             disabled={update.isPending}
-            onClick={() => void setAway('gone')}
+            onClick={() => void setAway('gone', opened)}
           >
             {named ? `Handed to ${who.trim()} — new owner` : 'Sold or given away — new owner'}
           </Button>
           <Button
             variant="quiet"
             onClick={() => {
-              setOpen(false)
+              setOpened(null)
               setWho('')
               setError(null)
             }}

@@ -1,6 +1,7 @@
 import type { DocumentDetailResponse } from '@life-manager/shared'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
+import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/label'
@@ -27,8 +28,23 @@ import {
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authed/documents/$documentId')({
-  component: DocumentDetailPage,
+  component: DocumentDetailRoute,
 })
+
+/**
+ * The route reads the param; the screen takes it as a prop.
+ *
+ * Split for the same reason `home.tsx` exports `NowPage`: `Route.useParams()` resolves against the
+ * *generated* route id, so a component that calls it can only be rendered under the real route tree —
+ * which puts the whole `_authed` guard, the persister and the provider stack between a test and the one
+ * screen it wants to assert on. With the id as a prop, `DocumentDetailPage` mounts under a two-route
+ * memory router (`useNavigate` and the back `<Link>` still need one) and the version precondition below
+ * becomes testable.
+ */
+function DocumentDetailRoute() {
+  const { documentId } = Route.useParams()
+  return <DocumentDetailPage documentId={documentId} />
+}
 
 /**
  * Document detail. domains/documents.md §7, ADR-0025 §7.
@@ -45,12 +61,22 @@ export const Route = createFileRoute('/_authed/documents/$documentId')({
  * That order is why the previous four-equal-`Card` stack is gone: it gave "Delete" the same visual
  * weight as the expiry date.
  */
-function DocumentDetailPage() {
-  const { documentId } = Route.useParams()
+export function DocumentDetailPage({ documentId }: { documentId: string }) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  /**
+   * The version this screen was showing when the delete confirmation was RAISED, or `null` when it
+   * is not raised — ADR-0024 and debt D41.
+   *
+   * A boolean plus `detail.version` read at the moment of the tap was the same defeat of the
+   * precondition the edit form had: `useDocument` refetches on window focus, so a confirmation left
+   * open while the app was backgrounded came back holding a newer version, and the delete then
+   * carried a precondition it had just been handed rather than the one the user decided against.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  /** Set when an edit went to the outbox instead of the server (ADR-0024). Cleared by the next edit. */
+  const [queuedEdit, setQueuedEdit] = useState(false)
 
   const document = useDocument(documentId)
   const update = useUpdateDocument(documentId)
@@ -145,7 +171,10 @@ function DocumentDetailPage() {
             variant="quiet"
             size="bare"
             className="px-1 text-meta"
-            onClick={() => setEditing((previous) => !previous)}
+            onClick={() => {
+              setQueuedEdit(false)
+              setEditing((previous) => !previous)
+            }}
           >
             {editing ? 'Cancel' : 'Edit'}
           </Button>
@@ -156,13 +185,32 @@ function DocumentDetailPage() {
             initial={detail}
             submitLabel="Save changes"
             onCancel={() => setEditing(false)}
-            onSubmit={async (values) => {
-              // The version this form was populated FROM, not a fresh read — that is the whole
-              // point of the precondition (ADR-0024). If the document changed while the form was
-              // open, or while the edit sat in the outbox offline, the server refuses with 409
-              // rather than overwriting the other change.
-              await update.mutateAsync({ ...values, version: detail.version })
+            onSubmit={async (values, seededVersion) => {
+              /**
+               * `seededVersion` is the version the form's FIELDS were populated from — handed back by
+               * `DocumentForm`, frozen at its mount. Not `detail.version`, which is live: a focus
+               * refetch can advance it while the inputs still hold the older values, and stamping
+               * old values with the new version is how the server's `where version = :expected`
+               * matches and another device's edit disappears (ADR-0024).
+               *
+               * The `?? detail.version` arm is unreachable — this form is only rendered with
+               * `initial`, so the version is always a number — and it is a fallback rather than a
+               * `!` because `noNonNullAssertion` is a lint error and sending the live version is a
+               * far better failure than crashing on a save.
+               */
+              const result = await update.mutateAsync({
+                ...values,
+                version: seededVersion ?? detail.version,
+              })
               setEditing(false)
+              /**
+               * Offline the mutation resolves `{ queued: true }` and nothing has been saved yet
+               * (ADR-0024). Closing the form without saying so redraws the *unchanged* cache, which
+               * reads as a save that reverted — so the queued branch says what happened, exactly as
+               * `BelongsTo` does for the link. `Document` has no `queued` key, so this narrows
+               * without a cast.
+               */
+              if ('queued' in result) setQueuedEdit(true)
             }}
           />
         ) : (
@@ -208,6 +256,13 @@ function DocumentDetailPage() {
             />
           </>
         )}
+
+        {queuedEdit && (
+          <Alert variant="notice" className="mt-2">
+            Saved on this device. The change will be sent when you’re back online — you can watch it
+            in the outbox. The details above are still the last ones the server has.
+          </Alert>
+        )}
       </section>
 
       {/* ── 3. Scans ── */}
@@ -227,7 +282,7 @@ function DocumentDetailPage() {
 
       {/* ── 5. Delete ── */}
       <section className="mt-7 border-t border-rule pt-4">
-        {confirmingDelete ? (
+        {confirmingDelete !== null ? (
           <div className="flex flex-col gap-2">
             <p className="text-body text-ink-2 [text-wrap:pretty]">
               {/*
@@ -253,17 +308,19 @@ function DocumentDetailPage() {
                 className="border border-status-late"
                 disabled={remove.isPending}
                 onClick={async () => {
-                  // The version this screen was rendered from — debt D41. If the document was
-                  // changed elsewhere while this confirmation was open, the delete is refused with
-                  // 409 rather than destroying the newer version.
-                  await remove.mutateAsync({ id: documentId, version: detail.version })
+                  // `confirmingDelete` is the version the screen was showing when this confirmation
+                  // was raised — debt D41. Not `detail.version`, which a focus refetch can advance
+                  // while the panel sits open: re-reading it would hand the delete a precondition it
+                  // has just been given, so a document edited elsewhere in the meantime would be
+                  // destroyed instead of refused with 409.
+                  await remove.mutateAsync({ id: documentId, version: confirmingDelete })
                   setToast('Deleted')
                   await navigate({ to: '/documents' })
                 }}
               >
                 {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => setConfirmingDelete(false)}>
+              <Button variant="secondary" size="sm" onClick={() => setConfirmingDelete(null)}>
                 Keep it
               </Button>
             </div>
@@ -273,7 +330,9 @@ function DocumentDetailPage() {
             variant="destructive"
             size="bare"
             className="px-0"
-            onClick={() => setConfirmingDelete(true)}
+            // Snapshots the version the user is deciding against, not the one that happens to be in
+            // the cache when they tap "Yes, delete it". See the note on the state.
+            onClick={() => setConfirmingDelete(detail.version)}
           >
             Delete this document
           </Button>

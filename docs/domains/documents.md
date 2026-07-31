@@ -319,7 +319,9 @@ the expiry ladder and the navigation rule; this section records what the screens
   returns to the list the user was reading.
 
   **Whose is a panel, not a cycle**, and it is **not drawn until a second person exists** — the same
-  "draw it the day the thing exists" rule that keeps the domain switcher off the title. Its options are
+  "draw it the day the thing exists" rule that keeps the sum-insured card off the Things list until a
+  contents policy is filed. (This sentence used to cite the *domain switcher*; there is no longer one —
+  [ADR-0031](../decisions/0031-things-is-a-fourth-tab.md) made Things a fourth tab and deleted it.) Its options are
   *Mine* plus one per known holder. Note the vocabulary split, which is deliberate: the filter says
   **Mine** because it selects a set of documents, while the form says **Me** because it names a person.
 - **Document detail** — back link → eyebrow type → serif title → a status block tinted by expiry state,
@@ -341,7 +343,7 @@ the expiry ladder and the navigation rule; this section records what the screens
   > Priya lit **her chip and the dashed one together**, with an editable second copy of her name
   > below. Choosing **Me** then left an empty *Their name* open beneath it, reading as a required
   > field. Both bugs were invisible to tests asserting on the submitted payload — the payload was
-  > correct the whole time — and took *rendering the edit screen* to find (debt D37/D43).
+  > correct the whole time — and took *rendering the edit screen* to find (debt D37/D64).
   >
   > So: open when the current name has no chip, or when the user asked. Picking any chip closes it.
 - **Create / edit** — title-first, everything else progressively disclosed; **title is the only required
