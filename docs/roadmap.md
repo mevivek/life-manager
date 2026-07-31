@@ -31,6 +31,21 @@ and `gcloud builds triggers update webhook` cannot replace it). Two changes went
 The recreate was run from a clone at `f78aebf`, because `--inline-config` reads a local file — a stale
 checkout would have installed a stale pipeline with nothing to say so.
 
+**It then had to be recreated twice more the same day**, and the middle one is worth knowing about: the
+config installed at 03:29 was *rejected at submission* by Cloud Build, because a bash comment in the
+guard's script contained `$` + `UPPERCASE` as an example of the escaping rule it was explaining. Inside a
+YAML `|` block a `#` line is part of the step's args, so the example was live config. Every build failed
+with **zero steps run** and no step output; the cause was visible only in
+`gcloud builds describe --format="yaml(status,statusDetail,failureInfo)"`, because `gcloud builds log`
+cannot read this project's logs at all (`CLOUD_LOGGING_ONLY`, so there is no logs bucket). Fixed in
+`f222740`, with `scripts/check-cloudbuild-subs.mjs` added to `pnpm lint` to catch the class before a push
+— it cannot be caught in the pipeline, since a rejected config runs no steps. Debt **D82**.
+
+**Trigger recreated a third time at 04:04 UTC on 2026-07-31**, from a clone carrying `f222740`, with
+`_BEFORE`, `_REF` and `_SHA` all verified present afterwards. Three recreates in one day is the real cost
+of D25, and the practical lesson is the verification: read the substitutions and the step list back, and
+treat a non-empty `steps[].id` on the next build as the proof that the config was accepted.
+
 **What is left is not code.** Turn reminders on from the You screen, call the endpoint again, and see the
 notification. Until one has actually been *seen*, M1's "done when" is unmet. Then lens 4 of the review
 wants a week of real use. See §4.6–7 below.
