@@ -312,16 +312,25 @@ the expiry ladder and the navigation rule; this section records what the screens
   > [backlog entry](../product/idea-backlog.md) that proposed this screen actually posed: *what needs
   > doing* — and, now, *when is the next thing*.
 
-- **Documents** (`/documents`) — the archive. A sticky header carrying search plus five filter chips
-  (**type · tag · whose · expires before · scan**), then the full list sorted soonest-first, then
-  `Load 20 more`. Every chip maps to a real query parameter and filters **server-side**; filter state
-  lives in the **URL**, so the Now screen's nudge can link into a filtered view and a back-navigation
-  returns to the list the user was reading.
+- **Documents** (`/library?scope=documents`) — the archive, now a **scope of the library** rather than
+  a screen of its own ([ADR-0032](../decisions/0032-one-library-tab.md)). `/documents` still resolves:
+  it is a redirect that carries its search params across. A sticky header carrying the scope pills and
+  a folding search, then five filter chips (**type · tag · whose · expires before · scan**), then the
+  full list sorted soonest-first, then `Load 20 more`. Every chip maps to a real query parameter and
+  filters **server-side**; filter state lives in the **URL**, so the Now screen's nudge can link into a
+  filtered view and a back-navigation returns to the list the user was reading.
+
+  **The chips survive a comp that deletes them.** Handoff 5 draws the library header with the scope
+  pills and nothing else. Keeping them is a recorded deviation, not an oversight — ADR-0032
+  § *Deviation* — because the Now screen deep-links into `?scan=no` and rule 13 below specifies the
+  Whose filter. Retiring them needs a human yes (invariant 12), not a navigation change.
 
   **Whose is a panel, not a cycle**, and it is **not drawn until a second person exists** — the same
   "draw it the day the thing exists" rule that keeps the sum-insured card off the Things list until a
   contents policy is filed. (This sentence used to cite the *domain switcher*; there is no longer one —
-  [ADR-0031](../decisions/0031-things-is-a-fourth-tab.md) made Things a fourth tab and deleted it.) Its options are
+  [ADR-0031](../decisions/0031-things-is-a-fourth-tab.md) made Things a fourth tab and deleted it, and
+  [ADR-0032](../decisions/0032-one-library-tab.md) then merged the two collections into one screen
+  whose scope pills are a filter, not navigation.) Its options are
   *Mine* plus one per known holder. Note the vocabulary split, which is deliberate: the filter says
   **Mine** because it selects a set of documents, while the form says **Me** because it names a person.
 - **Document detail** — back link → eyebrow type → serif title → a status block tinted by expiry state,
@@ -423,7 +432,8 @@ apps/api/src/lib/idempotency.*     Idempotency-Key, closing debt D9
 packages/shared/src/documents.ts   Zod contract, incl. custom_attrs per doc_type
 packages/shared/src/reminders.ts   the generic half
 apps/web/src/features/documents/   list, detail, form, files, reminders, expiry badge
-apps/web/src/routes/_authed/documents.*.tsx
+apps/web/src/routes/_authed/library.tsx         the archive, as a scope (ADR-0032)
+apps/web/src/routes/_authed/documents.*.tsx     detail and new; index.tsx is now a redirect
 apps/web/src/components/TabBar.tsx persistent app chrome — read it before adding a route
 apps/web/src/components/ui/skeleton.tsx
 apps/web/public/push-sw.js         without this, a delivered notification shows nothing

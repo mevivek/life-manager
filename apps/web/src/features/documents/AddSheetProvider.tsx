@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+import { AddPicker } from './AddPicker'
 import { type CaptureIntent, CaptureSheet } from './CaptureSheet'
 
 /**
@@ -20,22 +21,33 @@ import { type CaptureIntent, CaptureSheet } from './CaptureSheet'
  * The sheet is still rendered **here**, above the shell, for the original reason: mounted inside the
  * fixed tab bar it would be clipped by it and stack below the content it is meant to cover.
  *
- * ── One sheet, three doors, and the shape of the API is deliberate ──
+ * ── One sheet, four doors, and the shape of the API is deliberate ──
  *
  * [ADR-0030](../../../../docs/decisions/0030-capture-as-a-stepped-wizard.md) gives capture two tracks
- * and one entry point, plus the *"filing against a thing"* variant from things.md §7. All three are
- * the same component with a different `CaptureIntent`, so this exposes three zero-or-one-argument
- * functions rather than one function taking a track.
+ * and one entry point, plus the *"filing against a thing"* variant from things.md §7. All of those are
+ * the same component with a different `CaptureIntent`, so this exposes zero-or-one-argument functions
+ * rather than one function taking a track.
  *
- * **`openAdd` stays argument-free on purpose.** Both existing call sites pass it straight to
- * `onClick`, so widening it to `openAdd(options?)` would hand it a `MouseEvent` as its intent — which
- * type-checks, does nothing visible, and would be a genuinely nasty thing to find later.
+ * **`openPicker` is the fourth, and it is the default door now.**
+ * [ADR-0032](../../../../docs/decisions/0032-one-library-tab.md) merged the two collection screens
+ * into one, so the Add pill on it can no longer infer a track from where it was tapped. It opens
+ * `AddPicker`, which asks once and then calls `openAdd` or `openAddThing` — see that component for
+ * why the question is a fork rather than a seventh wizard step.
+ *
+ * **`openAdd` stays argument-free on purpose.** Its call sites pass it straight to `onClick`, so
+ * widening it to `openAdd(options?)` would hand it a `MouseEvent` as its intent — which type-checks,
+ * does nothing visible, and would be a genuinely nasty thing to find later.
  */
 
 type AddSheetValue = {
-  /** The common case: a document, from step one. */
+  /**
+   * The default door: ask which track, then start it. Every Add control that is **not** already
+   * inside one domain uses this — the Now header, and the library's pill.
+   */
+  openPicker: () => void
+  /** The document track, from step one. Used once the track is known. */
   openAdd: () => void
-  /** The Things list's own Add — the track is known, so the sheet skips asking. */
+  /** A thing's own screen — the track is known, so the sheet skips asking. */
   openAddThing: () => void
   /** A document filed against a thing, from a papers checklist. Drops the `type` step. */
   openAddAgainst: (intent: {
@@ -53,24 +65,54 @@ export function AddSheetProvider({ children }: { children: ReactNode }) {
    * what keeps "which track, against which thing" from being able to disagree with "is it open".
    */
   const [intent, setIntent] = useState<CaptureIntent | null>(null)
+  /**
+   * The picker's own open state, deliberately **separate** from `intent` rather than a third
+   * `CaptureIntent` variant.
+   *
+   * They are two different sheets with two different lifetimes: picking a track closes this one and
+   * opens that one, and a `track: 'unknown'` intent would have made `CaptureSheet` responsible for
+   * rendering a screen that is not one of its six steps. Keeping them apart is also what makes
+   * "picker open, wizard closed" unrepresentable as anything other than what it is.
+   */
+  const [picking, setPicking] = useState(false)
 
-  const openAdd = useCallback(() => setIntent({ track: 'document' }), [])
-  const openAddThing = useCallback(() => setIntent({ track: 'thing' }), [])
+  const openPicker = useCallback(() => setPicking(true), [])
+  const openAdd = useCallback(() => {
+    setPicking(false)
+    setIntent({ track: 'document' })
+  }, [])
+  const openAddThing = useCallback(() => {
+    setPicking(false)
+    setIntent({ track: 'thing' })
+  }, [])
   const openAddAgainst = useCallback<AddSheetValue['openAddAgainst']>(
     ({ thing, preset, title }) => setIntent({ track: 'document', forThing: thing, preset, title }),
     [],
   )
   const close = useCallback(() => setIntent(null), [])
+  const closePicker = useCallback(() => setPicking(false), [])
 
   // Memoised so every consumer does not re-render each time this tree does.
   const value = useMemo<AddSheetValue>(
-    () => ({ openAdd, openAddThing, openAddAgainst }),
-    [openAdd, openAddThing, openAddAgainst],
+    () => ({ openPicker, openAdd, openAddThing, openAddAgainst }),
+    [openPicker, openAdd, openAddThing, openAddAgainst],
   )
 
   return (
     <AddSheetContext.Provider value={value}>
       {children}
+      {/*
+        Both sheets are rendered here, above the shell, for the reason in this file's header: mounted
+        inside the fixed tab bar they would be clipped by it. Only one is ever open — picking a track
+        closes the picker in the same state update that opens the wizard, so there is no frame with
+        two dialogs stacked.
+      */}
+      <AddPicker
+        open={picking}
+        onClose={closePicker}
+        onPickDocument={openAdd}
+        onPickThing={openAddThing}
+      />
       <CaptureSheet open={intent !== null} onClose={close} intent={intent ?? undefined} />
     </AddSheetContext.Provider>
   )
@@ -92,11 +134,16 @@ export function useAddSheet(): AddSheetValue {
 }
 
 /**
- * The document-track opener on its own, which is what every existing Add control wants.
+ * The opener a general-purpose Add control wants — the picker, since ADR-0032.
+ *
+ * **It used to return `openAdd`, the document track**, which was right while Documents and Things
+ * each had their own screen and their own pill. They do not: the Now header and the library's pill
+ * both sit above a list holding *both* kinds, so starting the document wizard from either is a guess
+ * that is wrong about half the time.
  *
  * Kept as its own hook rather than folded into `useAddSheet` because the call sites pass it directly
  * to `onClick` — see the note on `openAdd` above.
  */
 export function useOpenAdd(): () => void {
-  return useAddSheet().openAdd
+  return useAddSheet().openPicker
 }

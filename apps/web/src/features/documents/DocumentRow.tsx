@@ -52,6 +52,19 @@ export type DocumentRowProps = {
    */
   chevron?: boolean
   /**
+   * How wide the leading glyph column is.
+   *
+   * `narrow` (14px) is the default and the right thing on a list of documents alone: the column exists
+   * only to stop titles shifting as the glyph changes shape between states, so it is sized to the
+   * widest glyph and no wider.
+   *
+   * `wide` is **52px — the width of `ThingRow`'s thumbnail** — and exists for the merged library
+   * (ADR-0032), where document and thing rows alternate. Without it the two kinds indent their titles
+   * differently and the list reads as two lists that got shuffled together rather than one ledger.
+   * The glyph stays 14px and centres in the wider column; nothing about it grows.
+   */
+  glyphColumn?: 'narrow' | 'wide'
+  /**
    * The number line and its Copy / Show controls — ADR-0027. Absent means no number is drawn at all.
    *
    * Passed in rather than owned here, because the archive's header toggle reveals **every** row at
@@ -76,6 +89,7 @@ export function DocumentRow({
   expiry: precomputed,
   divided = false,
   chevron = false,
+  glyphColumn = 'narrow',
   number,
   className,
 }: DocumentRowProps) {
@@ -127,9 +141,15 @@ export function DocumentRow({
         aria-label={expiryAccessibleName(document.title, document.expires_on, today)}
         className="flex min-w-0 flex-1 items-center gap-3.5 py-row-pad active:bg-sunken"
       >
-        {/* A fixed 14px column so titles line up whichever glyph a row happens to carry — the gauge is
-            14px wide and the dash is 2px tall, and without the column the text would shift per state. */}
-        <span className="flex w-3.5 shrink-0 items-center justify-center">
+        {/* A fixed column so titles line up whichever glyph a row happens to carry — the gauge is
+            14px wide and the dash is 2px tall, and without the column the text would shift per state.
+            14px alone, or 52px to match a thing's thumbnail in the merged library. See `glyphColumn`. */}
+        <span
+          className={cn(
+            'flex shrink-0 items-center justify-center',
+            glyphColumn === 'wide' ? 'w-[52px]' : 'w-3.5',
+          )}
+        >
           <ExpiryGlyph state={expiry.state} />
         </span>
 

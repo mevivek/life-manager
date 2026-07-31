@@ -303,18 +303,26 @@ rather than a preparatory refactor. Debt **D58**.
 
 Two, plus changes to three that already existed.
 
-**Things (list).** Its own tab in the bottom bar — **Now · Documents · Things · You**
-([ADR-0031](../decisions/0031-things-is-a-fourth-tab.md)) — then a **sum insured** card, kind filter
-chips, and the rows.
+**Things (list).** A **scope of the library** at `/library?scope=things`
+([ADR-0032](../decisions/0032-one-library-tab.md)) — the bar is **Now · Everything · You** and this
+domain shares the middle tab with Documents. `/things` still resolves; it is a redirect carrying its
+search params across. The screen is the scope pills and a folding search, then a **sum insured** card,
+kind filter chips, and the rows — all unchanged from when it was its own route.
 
-> **There is no domain switcher, and re-adding one is the mistake this note exists to prevent.**
-> ADR-0029 shipped Things as segmented `Documents` / `Things` pills under the collection title, on the
-> strength of ADR-0025 §4's *three tabs, forever*. **ADR-0031 reverses both**, on the evidence that
-> the maintainer opened the shipped app and did not find the domain — the exact reopening condition
-> ADR-0029 wrote for itself. `DomainSwitcher.tsx` is **deleted**, not left unreferenced, and both
-> collection routes carry a comment saying the pills are gone. Do not put a domain control back on a
-> collection screen. The switcher *pattern* returns only when the bar is measurably full, inside a
-> tab and never as a dropdown — [design.md §8](../conventions/design.md) holds the 390px procedure.
+> **The scope pills are not the domain switcher coming back**, and the difference is the whole reason
+> ADR-0032 is a different decision from ADR-0031 rather than a reversal of it.
+>
+> ADR-0029 shipped Things as segmented `Documents` / `Things` pills that **navigated between two
+> screens**, on the strength of ADR-0025 §4's *three tabs, forever*. ADR-0031 reversed both on the
+> evidence that the maintainer opened the shipped app and did not find the domain, made Things a
+> fourth tab, and deleted `DomainSwitcher.tsx`. **ADR-0032 merges the two collections instead**: one
+> screen, one list, and pills that *filter* it. They are `<button>`s with `aria-pressed`, not links —
+> `features/library/scope.ts` argues it, and `library.test.tsx` asserts the pathname does not change.
+>
+> So: still **no second navigation control**, and still no dropdown, ever. Things is one tap from
+> anywhere, which is what ADR-0031 bought and this keeps. The switcher *pattern* returns as a
+> navigation only when the bar is measurably full — [design.md §8](../conventions/design.md) holds the
+> 390px procedure, and three tabs has room.
 
 - A row is a 52×40 thumbnail, the name plus an optional holder pill, then a **cover bar** with its tag
   and words, then the meta line and a document count. A `lent` or `gone` state adds a fourth line.

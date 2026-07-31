@@ -114,7 +114,8 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
             It may have been deleted, or the link is wrong. Nothing else to read into it.
           </p>
           <Link
-            to="/documents"
+            to="/library"
+            search={{ scope: 'documents' }}
             className="mt-4 inline-flex min-h-tap items-center rounded-2 border border-rule-2 px-4 text-body font-medium"
           >
             Back to documents
@@ -315,7 +316,7 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
                   // destroyed instead of refused with 409.
                   await remove.mutateAsync({ id: documentId, version: confirmingDelete })
                   setToast('Deleted')
-                  await navigate({ to: '/documents' })
+                  await navigate({ to: '/library', search: { scope: 'documents' } })
                 }}
               >
                 {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
@@ -355,7 +356,8 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
 function BackLink() {
   return (
     <Link
-      to="/documents"
+      to="/library"
+      search={{ scope: 'documents' }}
       className="-ml-1 inline-flex min-h-tap items-center gap-[7px] px-1 text-body font-medium text-ink-2"
     >
       <span

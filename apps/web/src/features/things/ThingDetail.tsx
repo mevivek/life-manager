@@ -208,7 +208,10 @@ export function ThingDetail({
         before it could be read. (`documents.$documentId.tsx` sets one and then navigates, which is why
         it never appears there either — not repeated.)
       */}
-      <DeleteThing thing={detail} onDeleted={() => void navigate({ to: '/things' })} />
+      <DeleteThing
+        thing={detail}
+        onDeleted={() => void navigate({ to: '/library', search: { scope: 'things' } })}
+      />
     </div>
   )
 }
@@ -216,15 +219,20 @@ export function ThingDetail({
 /**
  * Back to the collection.
  *
- * Always "Things" rather than remembering where the user came from. The comp tracks an origin screen and
- * relabels the link, but a back link whose text changes between visits is harder to learn than one that
- * always names the same place — and the tab bar already offers Now. A real `<Link>` rather than browser
- * back, because a deep link from a notification has no history to return to.
+ * Always the Things scope of the library rather than remembering where the user came from. The comp
+ * tracks an origin scope and relabels the link ("Everything" when you arrived from All); a back link
+ * whose text changes between visits is harder to learn than one that always names the same place, and
+ * the tab bar already offers the way back to Everything in one tap. A real `<Link>` rather than
+ * browser back, because a deep link from a notification has no history to return to.
+ *
+ * `search={{ scope: 'things' }}` and not a bare `/library`: landing on All after backing out of a
+ * thing means hunting for the row you were just reading among the documents.
  */
 function BackLink() {
   return (
     <Link
-      to="/things"
+      to="/library"
+      search={{ scope: 'things' }}
       className="-ml-1 inline-flex min-h-tap items-center gap-[7px] px-1 text-body font-medium text-ink-2"
     >
       <span
@@ -287,7 +295,8 @@ function NotHere({ error, onRetry }: { error: unknown; onRetry: () => void }) {
 
         {notFound ? (
           <Link
-            to="/things"
+            to="/library"
+            search={{ scope: 'things' }}
             className="mt-4 inline-flex min-h-tap items-center rounded-2 border border-rule-2 px-4 text-body font-medium"
           >
             Back to things

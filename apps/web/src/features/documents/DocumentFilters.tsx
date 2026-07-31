@@ -106,21 +106,24 @@ export function DocumentFilters({
 
   return (
     <>
-      <Input
-        type="search"
-        value={filters.q}
-        onChange={(event) => onChange({ ...filters, q: event.target.value })}
-        placeholder="Title, issuer, notes, tag"
-        aria-label="Search documents"
-        className="mt-3 h-12"
-      />
+      {/*
+        ── The search field used to be here, and it is now the library header's ──
+
+        [ADR-0032](../../../../docs/decisions/0032-one-library-tab.md) merges Documents and Things into
+        one screen with a scope switch, so a search box owned by the *document* filters could only ever
+        search one of the three scopes. `LibrarySearch` owns it now: one field, above the scope pills,
+        searching whatever scope is showing.
+
+        `filters.q` is still part of this type and still drives `hasAnyFilter`, because it is still a
+        filter — it is just no longer typed into here.
+      */}
 
       {/*
         A horizontally scrolling chip row. `overflow-x-auto` with `shrink-0` chips rather than wrapping
         — four filters that wrap onto two lines push the first row of results below the fold on a
         390px screen, and the filter row is not the content.
       */}
-      <div className="-mx-gutter mt-2.5 flex gap-[7px] overflow-x-auto px-gutter pb-0.5">
+      <div className="-mx-gutter mt-3 flex gap-[7px] overflow-x-auto px-gutter pb-0.5">
         <Chip
           size="sm"
           selected={filters.type !== ''}

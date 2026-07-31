@@ -63,6 +63,10 @@ describe('CLAUDE.md stays a router', () => {
    * The specific contradiction that shipped: Status said four tabs while the routing table still said
    * "three tabs, forever", citing an ADR that had been reversed. ADR-0031 made Things a fourth tab and
    * deleted DomainSwitcher; the doc was updated in one place and not the other.
+   *
+   * The count has since changed twice more — ADR-0032 merged the two collections and the bar is three
+   * tabs again — which is exactly why this is checked against `TABS` rather than against a literal.
+   * The assertion below never needed editing for any of it.
    */
   it('states the same number of tabs that TabBar actually renders', () => {
     const written = CLAUDE_MD.match(/\*\*(One|Two|Three|Four|Five|Six) tabs/i)
@@ -79,16 +83,37 @@ describe('CLAUDE.md stays a router', () => {
     ).toBe(TABS.length)
   })
 
-  it('does not still claim a count that a reversed ADR set', () => {
-    // "three tabs, forever" (ADR-0025 §4) was reversed by ADR-0031 on evidence.
+  /**
+   * ── This used to hardcode the wrong count, and that made it wrong twice ──
+   *
+   * It read `not.toMatch(/three tabs/i)`, because at the time "three tabs, forever" was the stale
+   * claim ADR-0031 had just reversed. ADR-0032 merged the collections and the bar is three tabs
+   * again — so the literal it banned became the correct answer, and the test would have failed the
+   * build for stating the truth.
+   *
+   * The durable version bans **every count except the one `TABS` actually has**. It cannot rot,
+   * because the thing it compares against is the source rather than a snapshot of it.
+   */
+  it('does not state a tab count anywhere that a superseding ADR has replaced', () => {
+    const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six']
+    const stale = words.filter(
+      (word, index) =>
+        index !== TABS.length && new RegExp(`\\b${word} tabs\\b`, 'i').test(CLAUDE_MD),
+    )
+    expect(
+      stale,
+      `CLAUDE.md still says "${stale.join('", "')} tabs" somewhere, but the bar has ${TABS.length}. ` +
+        'Delete the line rather than adding a caveat beside it — leaving both is how this broke the ' +
+        'first time.',
+    ).toEqual([])
+  })
+
+  it('does not claim any tab count is permanent', () => {
+    // "three tabs, forever" (ADR-0025 §4) was written once and broken twice — by ADR-0031, then by
+    // ADR-0032. design.md §8 holds the 390px measurement that decides when the bar is full.
     expect(
       CLAUDE_MD,
-      'CLAUDE.md contains "three tabs" — ADR-0031 reversed that. Delete the line, do not add a caveat.',
-    ).not.toMatch(/three tabs/i)
-    expect(
-      CLAUDE_MD,
-      'CLAUDE.md claims a tab count is permanent. design.md §8 holds the 390px measurement that ' +
-        'decides when the bar is full; no count is forever.',
+      'CLAUDE.md claims a tab count is permanent. No count is forever; §8 holds the measurement.',
     ).not.toMatch(/tabs,? forever/i)
   })
 })

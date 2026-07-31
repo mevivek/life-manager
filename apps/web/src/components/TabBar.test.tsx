@@ -171,6 +171,11 @@ async function renderBarAt(path: string, documents: Document[] = []) {
   })
   const children = [
     createRoute({ getParentRoute: () => rootRoute, path: '/home', component: () => null }),
+    // `/library` is the Everything tab's own route; `/documents` and `/things` are the redirect
+    // stubs, and both detail routes still light it. All five are declared so the bar is asserted
+    // against real matches rather than against the router's not-found fallback.
+    createRoute({ getParentRoute: () => rootRoute, path: '/library', component: () => null }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/outbox', component: () => null }),
     createRoute({ getParentRoute: () => rootRoute, path: '/documents', component: () => null }),
     createRoute({
       getParentRoute: () => rootRoute,
@@ -202,47 +207,47 @@ function currentTabLabel(): string | null {
 }
 
 describe('the tab set', () => {
-  it('is four tabs, in the comp’s order: Now · Documents · Things · You', async () => {
-    // ADR-0031. This was three tabs and ADR-0025 §4 said "forever"; ADR-0029 shipped Things as a pill
-    // switcher under the Documents title, and the maintainer reported that did not match the design.
-    // Asserting the ORDER as well as the set, because the bar's order is the comp's and a domain
-    // inserted after You would read as an afterthought.
+  it('is three tabs, in the comp’s order: Now · Everything · You', async () => {
+    // ADR-0032. The bar has now been three, four (ADR-0031, when Things became its own tab) and three
+    // again — this time because the two collections MERGED rather than because one was hidden behind
+    // the other. Asserting the ORDER as well as the set, because the bar's order is the comp's and a
+    // tab inserted after You would read as an afterthought.
     await renderBarAt('/home')
     expect(screen.getAllByRole('link').map((link) => link.textContent?.trim())).toEqual([
       'Now',
-      'Documents',
-      'Things',
+      'Everything',
       'You',
     ])
   })
 
-  it('links Things at a bare `/things`, with no search params to supply', async () => {
-    // `things.index.tsx`'s search schema carries `.default('')` on every field precisely so this link
-    // typechecks. If those defaults are removed the router demands all three here.
+  it('links Everything at a bare `/library`, with no search params to supply', async () => {
+    // `library.tsx`'s search schema carries `.default()` on all ten fields precisely so this link
+    // typechecks. If those defaults are removed the router demands every one of them here.
     await renderBarAt('/home')
-    expect(screen.getByRole('link', { name: 'Things' })).toHaveAttribute('href', '/things')
+    expect(screen.getByRole('link', { name: 'Everything' })).toHaveAttribute('href', '/library')
   })
 })
 
 describe('which tab is lit', () => {
-  it('lights Things on the collection, and still on a single thing', async () => {
-    // The `startsWith` match, which is the whole reason this test renders. A detail screen must keep
-    // its collection's tab lit — the same agreement `/documents/$documentId` already has.
-    await renderBarAt('/things')
-    expect(currentTabLabel()).toBe('Things')
+  it('lights Everything on the library itself', async () => {
+    await renderBarAt('/library')
+    expect(currentTabLabel()).toBe('Everything')
   })
 
-  it('lights Things from a thing’s detail route', async () => {
+  it('lights Everything from a thing’s detail route', async () => {
+    // The multi-prefix match, which is the whole reason this test renders. `/things/$thingId` is not
+    // under `/library`, so a single `startsWith` would blank the bar one level down — which tells the
+    // user they have left the app's structure.
     await renderBarAt('/things/33333333-3333-4333-8333-333333333333')
-    expect(currentTabLabel()).toBe('Things')
+    expect(currentTabLabel()).toBe('Everything')
   })
 
-  it('lights Documents from a document’s detail route, and not Things', async () => {
-    // The control case: two `startsWith` matches that must not overlap. A prefix collision here would
-    // light two tabs, and `aria-current` on two links is a screen reader announcing two locations.
+  it('lights Everything from a document’s detail route too — both collections, one tab', async () => {
+    // The claim the four-tab bar could not make, and the point of the merge: a document and a thing
+    // are the same *place* now, so walking into either keeps the same tab lit rather than swapping
+    // which one is current.
     await renderBarAt('/documents/44444444-4444-4444-8444-444444444444')
-    expect(currentTabLabel()).toBe('Documents')
-    expect(screen.getByRole('link', { name: 'Things' })).not.toHaveAttribute('aria-current')
+    expect(currentTabLabel()).toBe('Everything')
   })
 
   it('lights exactly one tab, never two', async () => {
@@ -253,19 +258,26 @@ describe('which tab is lit', () => {
     expect(lit).toHaveLength(1)
     expect(lit[0]?.textContent?.trim()).toBe('You')
   })
+
+  it('does not light Everything from an unrelated route', async () => {
+    // The control case for a three-prefix match: `/outbox` shares no prefix with any of them, and a
+    // sloppy `some()` (an empty match list, say) would light the tab everywhere.
+    await renderBarAt('/outbox')
+    expect(currentTabLabel()).toBeNull()
+  })
 })
 
-describe('the Now badge, with a fourth tab beside it', () => {
-  it('stays off when nothing is dated, and Things keeps the current marker', async () => {
-    // The badge is the one piece of the bar that carries meaning rather than navigation, and adding a
-    // tab is exactly the kind of change that moves it onto the wrong link.
-    await renderBarAt('/things', [
+describe('the Now badge, with the library tab beside it', () => {
+  it('stays off when nothing is dated, and Everything keeps the current marker', async () => {
+    // The badge is the one piece of the bar that carries meaning rather than navigation, and changing
+    // the tab set is exactly the kind of change that moves it onto the wrong link.
+    await renderBarAt('/library', [
       ledgerDocument({ id: 'aaaaaaa1-0000-4000-8000-000000000000', expires_on: null }),
     ])
 
     // No expiry ⇒ nothing needs attention ⇒ no badge, and the Now link keeps its plain name.
     expect(screen.getByRole('link', { name: 'Now' })).toBeInTheDocument()
-    expect(currentTabLabel()).toBe('Things')
+    expect(currentTabLabel()).toBe('Everything')
   })
 
   it('names the count on the Now link when something is expired', async () => {

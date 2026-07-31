@@ -54,7 +54,8 @@ Template: [0000-adr-template.md](0000-adr-template.md).
 | [0028](0028-external-trigger-for-the-daily-scan.md) | An external scheduler triggers the daily scan over HTTP | accepted | **Amends 0012: pg-boss keeps the queue, loses the clock.** A pg-boss cron cannot fire on a scale-to-zero service, so `POST /maintenance:run-daily` does the scan inline, authenticated by a constant-time-compared `X-Cron-Key` and serialised by an advisory lock. Avoids **D8** rather than accepting it |
 | [0029](0029-the-things-domain.md) | The Things domain — and cover is not expiry | accepted — **navigation decision superseded by 0031** | The second domain, pulled forward from M4. **Cover gets its own four-state ladder** (a depleting bar, 60-day boundary) because a lapsed warranty is not an invalid document. Ownership is `here`/`lent`/`gone`, never a delete. One nullable `thing_id` links the two domains. The domain, the ladder and the link stand; only its *"switcher, not a fourth tab"* paragraph is reversed by **0031** |
 | [0030](0030-capture-as-a-stepped-wizard.md) | Capture is a stepped wizard, two tracks | accepted | Replaces the single-page form: `type→whose→title→number→dates→scan` for a document, `kind→name→detail→purchase→warranty→photo` for a thing. **Q2 is unchanged** — one required field per track, and every other step draws *Skip for now* |
-| [0031](0031-things-is-a-fourth-tab.md) | Things is a fourth tab | accepted | **Reverses 0025 §4's "three tabs, forever" and 0029's switcher.** The bar is `Now · Documents · Things · You`; `DomainSwitcher` is deleted. Evidence, per 0029's own reopening condition: the maintainer used the shipped app and did not find the domain. Explicitly makes **no** "four tabs, forever" claim — the trigger for the fifth is a 390px measurement, and the switcher *pattern* returns inside a tab when the bar is full |
+| [0031](0031-things-is-a-fourth-tab.md) | Things is a fourth tab | accepted — **navigation superseded by 0032** | **Reversed 0025 §4's "three tabs, forever" and 0029's switcher**, on evidence: the maintainer used the shipped app and did not find the domain. Its refusal to claim "four tabs, forever", its 390px measurement procedure and its two navigation rules all stand; the four-tab bar itself is replaced by **0032** |
+| [0032](0032-one-library-tab.md) | Documents and Things share one tab | accepted | **Supersedes 0031's fourth tab.** The bar is `Now · Everything · You`; `/library` holds both collections with `All / Documents / Things` scope pills, `All` interleaving them by the date that bites first. Not 0029's switcher returning — that navigated between two screens and could never render `All`. Add now asks which track (a fork, **not** a seventh wizard step). Deviates from the comp by keeping the per-domain filters, and says why |
 
 **Amendments** (see the rule above): [0006](0006-space-based-ownership.md) 2026-07-27 — the
 personal-space guarantee restated in terms of what is actually enforced, because Better Auth cannot
@@ -96,8 +97,9 @@ first
 0022 Web Push library · 0012 pg-boss
 
 **Adding a screen, or touching how anything looks**
-0025 the Ledger design system — tokens, the expiry ladder (its §4 tab rule is superseded) · 0031 the
-tab bar as it is now: four tabs, and how to tell when it is full · 0003 SPA shell · 0024 what a write
+0025 the Ledger design system — tokens, the expiry ladder (its §4 tab rule is superseded) · 0032 the
+tab bar as it is now: three tabs, one library screen, and where Add asks what you are adding · 0031
+how to tell when the bar is full · 0003 SPA shell · 0024 what a write
 does with no network, and what the cache holds · 0026 why a passport number is stored in full and why
 it is not encrypted · 0029 the second status ladder · 0030 why capture has steps
 

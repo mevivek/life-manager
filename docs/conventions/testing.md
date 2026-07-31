@@ -168,9 +168,10 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-07-30 on a settled tree, three consecutive runs: 745 passed / 0 skipped** with a
-database (web 467 · api 222 · shared 56); **546 passed / 199 skipped** without one — every skip is the
-API's. **Re-measure rather than citing this**: the figure in this repo has been wrong three separate
+**Measured 2026-07-31 after ADR-0032: 771 passed / 0 skipped** with a database
+(web 493 · api 222 · shared 56); **572 passed / 199 skipped** without one — every skip is the API's,
+and the API's count is unchanged because that change was client-only.
+**Re-measure rather than citing this**: the figure in this repo has been wrong three separate
 times, once by 17 tests, and once because a session did the arithmetic instead of running the suite.
 Note also that `pnpm --filter @life-manager/api test` on its own hits the D77 timeout flake roughly half
 the time on a 4-core container, where the full three-package run rarely does — the suite you run changes

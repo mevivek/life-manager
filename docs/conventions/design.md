@@ -21,8 +21,8 @@ Warm paper, ink-black hierarchy. A **serif for what a human wrote** (titles, dat
 **Colour is spent only on status** — a document's expiry (§2) or a thing's cover (§2a), and nothing
 else. There is no brand accent and adding one breaks the system rather than extending it. Elevation is a
 **1px hairline**, not a shadow; three things lift (§5). Light and dark are at **full parity**. The bar
-is **four tabs — Now · Documents · Things · You**, and how many it holds is a *measurement*, not a
-promise (§8).
+is **three tabs — Now · Everything · You**, with documents and things sharing one library screen, and
+how many it holds is a *measurement*, not a promise (§8).
 
 ---
 
@@ -314,70 +314,83 @@ problems in four cards read as four sections.
 
 ---
 
-## 8. Navigation: four tabs — Now · Documents · Things · You
+## 8. Navigation: three tabs — Now · Everything · You
 
 `apps/web/src/components/TabBar.tsx`. Permanently visible, always labelled, in the comp's order.
-[ADR-0031](../decisions/0031-things-is-a-fourth-tab.md).
+[ADR-0032](../decisions/0032-one-library-tab.md).
 
 **A tab is a place.** That is the rule the names follow from, and it is why Add is *not* one: it opens
-a sheet and leaves you where you were, so it belonged on the surfaces it acts on — a text button in
-the Now header, an ink pill on each collection — rather than in a bar of destinations. ADR-0025 §4 named
-the third tab Add; the second design handoff replaced it with You, which is a place, and gave the
-account, sign-out and theme controls that §10 said they needed.
+a sheet and leaves you where you were, so it belongs on the surfaces it acts on — a text button in the
+Now header, an ink pill on the library — rather than in a bar of destinations.
 
-**Now stays a single cross-domain deadline feed** regardless of the tab count, because a car's MOT and a
-passport's expiry belong in one list.
+**Everything is one screen holding both collections.** `/library`, with `?scope=all|documents|things`
+in the URL. `All` is the default and interleaves documents and things **by the date that bites first**
+— a document's expiry, a thing's earlier of cover-end and service-due. `/documents` and `/things` are
+redirects into the matching scope; the detail routes keep their own addresses and both light the
+Everything tab, which is why `Tab.match` is a list of prefixes rather than one string.
 
-**Each domain keeps its own Add.** Inside a domain the answer to "what are you adding" is already known,
-so Documents' pill opens the document track and Things' opens the thing track
-([ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md)).
+**The scope pills are buttons, and that is not an exception to the `<Link>` rule below.** They
+navigate nowhere — same route, one search param, one list narrowed. `aria-pressed`, not
+`aria-current`. See `features/library/scope.ts`.
 
-**A detail screen keeps its collection's tab lit.** `/things/$thingId` lights Things,
-`/documents/$documentId` lights Documents — a `startsWith` match on the pathname. A bar that goes blank
-one level down tells the user they have left the app's structure. `TabBar.test.tsx` renders both.
+**Add asks which track.** There is one Add pill above a list holding both kinds, so it opens
+`AddPicker` — *"What are you adding?"*, two options. **This is a fork, not a wizard step**: capture is
+six steps with exactly one required field per track ([ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md)),
+and folding the question in would make it a seventh step and a second required answer. Doors that
+already know their track — a thing's own screen, a papers checklist — skip the picker.
+
+> **This section said *"each domain keeps its own Add"* and that is now wrong.** It was a rule about
+> two screens, each of which knew what it held. One screen holding both cannot know.
+
+**Now stays a single cross-domain deadline feed**, because a car's MOT and a passport's expiry belong
+in one list. It is now the *second* place organised that way rather than the only one.
+
+**Search folds behind a toggle** in the library header, and the button stays lit while a query is set.
+A permanent field is 48px of chrome above the first result on every visit, including the many that are
+browsing rather than looking something up. What it must never do is hide the reason a list is short —
+hence the lit button and the summary line.
 
 ### How many tabs the bar holds is a measurement, not a promise
 
-This section said **"three tabs, forever"** and **"domains never become tabs"** for two milestones, and
-both are now wrong. The history is worth carrying, because the reasoning still applies to the *fifth*
-tab even though the conclusion did not survive the fourth:
+The bar has been three, then four, then three again. Do not read the current number as settled, and
+**do not write "three tabs, forever"** — that exact sentence was written once and broken twice:
 
-1. **ADR-0025 §4** withdrew an even earlier plan to grow the bar one tab per domain, and decided three
-   tabs *forever*: at fortnightly usage a user relearns the bar every time they open the app, so a
-   smaller bar is a real advantage. Domains were to be a switcher on the middle tab's title.
-2. **ADR-0029** honoured that when Things arrived and shipped `DomainSwitcher` — `Documents` / `Things`
-   pills beneath the title — naming its cost: *Things is two taps from Now rather than one.*
-3. **[ADR-0031](../decisions/0031-things-is-a-fourth-tab.md) reverses it, on evidence.** The maintainer
-   opened the shipped app and reported that Things living on the Documents screen did not match the
-   design — the exact reopening condition ADR-0029 wrote for itself. Handoff 4's `thingsNav` knob
-   defaults to `tab` and the comp draws the four-tab bar; the switcher was its non-default branch.
-   `DomainSwitcher` is deleted rather than left unreferenced.
+1. **ADR-0025 §4** withdrew an even earlier plan to grow one tab per domain, and decided three tabs
+   *forever*: at fortnightly usage a user relearns the bar every time they open the app, so a smaller
+   bar is a real advantage. Domains were to be a switcher on the middle tab's title.
+2. **ADR-0029** honoured that when Things arrived and shipped `DomainSwitcher` — `Documents` /
+   `Things` pills beneath the title — naming its cost: *Things is two taps from Now rather than one.*
+3. **[ADR-0031](../decisions/0031-things-is-a-fourth-tab.md) reversed it on evidence.** The maintainer
+   opened the shipped app and could not find Things, because it lived under the Documents title.
+   Four tabs shipped; `DomainSwitcher` was deleted.
+4. **[ADR-0032](../decisions/0032-one-library-tab.md) goes back to three by merging the collections**,
+   which is a different move from 3 rather than a reversal of it. Things is still one tap from
+   anywhere and still not behind Documents; what changes is that the two stop being separate screens.
 
-**Do not write "four tabs, forever".** Four fit, measured. The bar's padding is fixed (`px-3.5`, plus an
-8px gap per seam), so at 390px a slot is **84.5px at four tabs, 66px at five, 54px at six** — against a
-"Documents" label that renders **63px**. Five leaves three pixels; six truncates.
-[roadmap.md](../roadmap.md) still has Money, the Vault, People and Notes.
-
-**Before adding a fifth tab, run this — it is §10 applied to the bar, and it is the trigger:**
+**Before adding a fourth tab, run this — it is §10 applied to the bar, and it is the trigger:**
 
 1. Render the bar at **390px**, in **both themes**, and at **`data-density="compact"`**.
-2. Read the longest label. Today that is **Documents**: **63px in an 84.5px slot**, one line, ~22px of
-   slack — *identical* in light, dark, compact and the grotesk face, because the bar pads itself with a
-   fixed `px-3.5` rather than `--gutter`, so density does not move it. At 430px the slot is 94.5px; at
-   360px it is 77px and still fits.
+2. Read the longest label. The bar's padding is fixed (`px-3.5`, plus an 8px gap per seam), so at
+   390px a slot is **115px at three tabs, 84.5px at four, 66px at five and 54px at six**. Today's
+   longest label is **Everything**, and three tabs leaves it room to spare. At four the reference
+   measurement is ADR-0031's: "Documents" rendered **63px in an 84.5px slot** — ~22px of slack, which
+   it called *real, but not comfortable*.
 3. If a label truncates (`scrollWidth > clientWidth`) or wraps, or a tab drops below `--tap-min` in
-   *width*, **the bar is full.** The answer then is the switcher **pattern**, returning inside the
-   domain-holding tab — not a shorter label, and not a dropdown.
+   *width*, **the bar is full.** The answer then is the scope-pill pattern this library already uses,
+   inside the tab that holds the domains — not a shorter label, and not a dropdown.
 
-Two rules the deleted switcher leaves behind, because they are about navigation rather than about pills:
+[roadmap.md](../roadmap.md) still holds Money, the Vault, People and Notes. ADR-0031's *What happens
+at domain three* still applies, including why the Vault is probably not a collection tab at all.
 
-- **No dropdown, ever, including in navigation.** ADR-0025 §4's mock drew a `Documents ⌄` chevron menu.
-  §6's no-dropdowns rule covers navigation too: a menu that must be opened to reveal a choice that would
-  fit on screen costs a tap and hides the options. A switcher, if one returns, is a visible row.
-- **Navigation is `<Link>`s carrying `aria-current="page"`, never buttons calling `navigate`.** A button
-  has no href, cannot be long-pressed or opened in a new tab, and `selected`-style styling announces
-  nothing to a screen reader. Exactly one tab may be current; two `aria-current`s is the app claiming
-  two locations.
+Two rules survive every one of these reversals, because they are about navigation itself:
+
+- **No dropdown, ever, including in navigation.** ADR-0025 §4's mock drew a `Documents ⌄` chevron
+  menu. §6's no-dropdowns rule applies to navigation too: a menu that must be opened to reveal a
+  choice that would fit on screen costs a tap and hides the options. A switcher is a visible row.
+- **Navigation is `<Link>`s carrying `aria-current="page"`, never buttons calling `navigate`.** A
+  button has no href, cannot be long-pressed or opened in a new tab, and `selected`-style styling
+  announces nothing to a screen reader. Exactly one tab may be current; two `aria-current`s is the app
+  claiming two locations.
 
 ### Now is cross-domain, and shape is what separates the domains on it
 
@@ -385,6 +398,11 @@ The horizon merges thing events into the document timeline rather than sectionin
 with a mono kicker ("Warranty ends", "Service due") is a thing; the existing **round** dot with no
 kicker is a document. Two section headers would have been the easy version and would have destroyed the
 one property Now has — that it answers *"what is next"* without asking which domain it is in.
+
+The library's `All` scope follows the same principle and separates the two kinds the same way: a
+document keeps its expiry glyph, a thing keeps its photo thumbnail, and neither list is sectioned.
+`DocumentRow`'s glyph column widens to 52px there so the titles line up with the thumbnails — without
+it the two kinds indent differently and it reads as two lists shuffled together.
 
 ---
 
@@ -473,12 +491,17 @@ apps/web/src/lib/theme.ts                    light/dark resolution; index.html m
 apps/web/src/lib/feel.ts + useFeel.tsx       density / face / voice preferences (§12)
 apps/web/src/lib/voice.ts                    the two copy registers (§12)
 apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton stat
-apps/web/src/components/TabBar.tsx           four tabs — Now · Documents · Things · You (§8)
+apps/web/src/components/TabBar.tsx           three tabs — Now · Everything · You (§8)
 apps/web/src/components/PhotoViewer.tsx      the full-screen image viewer for scans and photos
 apps/web/src/features/documents/
   ExpiryStatus.tsx                           the expiry ladder — five states (§2)
   DocumentRow.tsx                            the row every document list is made of
   CaptureSheet.tsx                           the stepped wizard, both tracks (ADR-0030)
+  AddPicker.tsx                              "What are you adding?" — the fork before the wizard (§8)
+apps/web/src/features/library/
+  scope.ts                                   the three scopes, and why the pills are buttons (§8)
+  mergeRows.ts                               All, ordered by the date that bites first (§8)
+  LibrarySearch.tsx                          the folding search, its toggle and its summary line (§8)
 apps/web/src/features/things/
   CoverStatus.tsx                            the cover ladder — four states, the second and last (§2a)
   ThingRow.tsx                               the row every thing list is made of
