@@ -1,5 +1,7 @@
+import type { Thing } from '@life-manager/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Chip } from '@/components/ui/chip'
@@ -7,9 +9,22 @@ import { Eyebrow } from '@/components/ui/label'
 import { Stat } from '@/components/ui/stat'
 import { useHolders } from '@/features/documents/useDocuments'
 import { toLedger, useLedger } from '@/features/documents/useLedger'
+import {
+  pushSupported,
+  usePushPublicKey,
+  useSubscribeToPush,
+  useUnsubscribeFromPush,
+} from '@/features/documents/usePush'
 import { BuildCard } from '@/features/health/BuildCard'
 import { meQueryOptions } from '@/features/spaces/useMe'
-import { api } from '@/lib/api'
+import { coverOf } from '@/features/things/CoverStatus'
+import { formatMoney } from '@/features/things/money'
+import {
+  findContentsPolicy,
+  fromMinorUnits,
+  totalInsurable,
+} from '@/features/things/SumInsuredCard'
+import { useThings } from '@/features/things/useThings'
 import type { Feel } from '@/lib/feel'
 import { endSession } from '@/lib/session'
 import { useFeel } from '@/lib/useFeel'
@@ -77,6 +92,39 @@ function YouPage() {
   const ledger =
     documents.data === undefined ? null : toLedger(documents.data.data, documents.data.next_cursor)
   const approx = ledger !== null && !ledger.complete ? '+' : ''
+
+  /**
+   * The things, for the figures and the App rows handoff 5 adds.
+   *
+   * The same unfiltered key the library's sum-insured card uses, so on a session that has already
+   * opened Everything this is served from cache rather than refetched. `next_cursor` drives its own
+   * `+` for exactly the reason the ledger's does: past one page a count is a floor.
+   */
+  const thingsQuery = useThings({ sort: 'name', order: 'asc', limit: 100 })
+  const things = thingsQuery.data?.data ?? []
+  const thingsApprox = thingsQuery.data != null && thingsQuery.data.next_cursor !== null ? '+' : ''
+
+  /** What you still own. A `gone` thing keeps its record but is not a possession any more. */
+  const owned = things.filter((thing) => thing.ownership !== 'gone')
+
+  /**
+   * Every date the daily scan is watching, across both domains — a document's expiry, a thing's
+   * warranty end, a thing's next service. Counted on `owned` rather than on everything, because a
+   * warranty on something you handed on is not a date anyone is waiting for.
+   */
+  const datesWatched =
+    (ledger?.datedCount ?? 0) +
+    owned.filter((thing) => thing.warranty_ends_on !== null || thing.service_due_on !== null).length
+
+  /** Warranties that have run out. `coverOf` is the one ladder that decides what "ended" means. */
+  const outOfCover = owned.filter((thing) => coverOf(thing).state === 'ended').length
+
+  /**
+   * Lent out and handed on, counted separately because they are different facts: one is an open loop
+   * you may want to close, the other is settled (things.md §4 rule 4, and the reason a thing row tints
+   * the two differently).
+   */
+  const elsewhere = describeElsewhere(things)
 
   const space = me.data?.spaces[0] ?? null
   /** Holders other than the owner. `+ 1` for "you" is done at the render, so the zero case is clear. */
@@ -150,8 +198,20 @@ function YouPage() {
         <Eyebrow>What we hold</Eyebrow>
         <dl className="mt-3.5 flex flex-wrap gap-x-7 gap-y-4">
           <Figure term="Documents filed" value={count(ledger?.loadedCount, approx)} />
-          <Figure term="Expiries watched" value={count(ledger?.datedCount, approx)} />
-          <Figure term="Missing a scan" value={count(ledger?.withoutScan.length, approx)} />
+          {/*
+            Things owned, beside documents filed — handoff 5. The app holds two collections now, and a
+            "what we hold" section that counted only one of them was answering half its own question.
+
+            `gone` is excluded: a thing you handed on is still a record, deliberately (things.md §4
+            rule 4), but it is not something you *own*, and this figure is captioned as ownership.
+          */}
+          <Figure term="Things owned" value={count(owned.length, thingsApprox)} />
+          {/*
+            *Dates watched*, replacing *Expiries watched* — one figure across both domains, because a
+            warranty ending and a service falling due are watched by exactly the same daily scan as a
+            passport expiring. Two separate figures would have implied two mechanisms.
+          */}
+          <Figure term="Dates watched" value={count(datesWatched, approx || thingsApprox)} />
           {/*
             Only once someone else is filed for. On a single-person archive "1 including you" is a
             statistic about nothing, and it would imply the app does something with people that it
@@ -193,6 +253,50 @@ function YouPage() {
       <section className="mt-5">
         <Eyebrow>App</Eyebrow>
         <dl className="mt-1">
+          {/*
+            ── What you own, in four sentences — handoff 5 ──
+
+            These are answers rather than settings, which is why they sit in `App` as read-only rows.
+            Each one is a question the library can show you but not *state*: the library draws a bar,
+            a cover tag and a dimmed row; this says the number out loud.
+
+            All four are derived from the same helpers those screens use — `totalInsurable`,
+            `coverOf`, `awayLabel` — never re-implemented here. Two screens computing "what do I own"
+            separately is how they come to disagree, and the disagreement would be invisible until
+            somebody put them side by side.
+          */}
+          <ValueOfThings things={owned} approx={thingsApprox} />
+          <Stat
+            term="Out of cover"
+            value={
+              outOfCover === 0
+                ? 'Nothing'
+                : `${outOfCover}${thingsApprox} ${outOfCover === 1 ? 'thing' : 'things'}`
+            }
+            note={
+              outOfCover === 0
+                ? 'Everything with a warranty is still inside it'
+                : 'Worth knowing before you call anyone'
+            }
+          />
+          <Stat
+            term="Missing a scan"
+            value={
+              (ledger?.withoutScan.length ?? 0) === 0
+                ? 'None'
+                : // Singular at one. "1 documents" shipped for exactly one render of this screen and
+                  // is the kind of thing only a screenshot catches.
+                  `${count(ledger?.withoutScan.length, approx)} ${
+                    ledger?.withoutScan.length === 1 ? 'document' : 'documents'
+                  }`
+            }
+            note={
+              (ledger?.withoutScan.length ?? 0) === 0
+                ? 'Every document has a file against it'
+                : 'A number without a picture of the thing it came from'
+            }
+          />
+          <Stat term="Elsewhere" value={elsewhere.value} note={elsewhere.note} />
           <Stat term="Sharing" value="Single user" note="Family sharing later" />
           <Stat
             term="Theme"
@@ -374,6 +478,86 @@ function NotYet({ label, children }: { label: string; children: React.ReactNode 
  * sends you to Now to act.
  */
 /**
+ * *Value of things* — the same total the library's sum-insured bar draws, said as a sentence.
+ *
+ * ── It renders nothing without a contents policy, and that is not a bug ──
+ *
+ * The total is only meaningful in a currency, and the currency this app trusts is the **policy's**,
+ * never a guessed symbol (`money.ts`, and the `£` the comp hardcodes). `findContentsPolicy` is what
+ * supplies it. With no policy filed there is no currency to state the total in and no cover to state
+ * it against, so the row is absent rather than showing a bare number — the same "draw it the day the
+ * thing exists" rule the sum-insured card itself follows.
+ *
+ * `totalInsurable` is imported, never re-implemented: it encodes that `gone` things are excluded and
+ * that a thing priced in another currency is skipped rather than converted. A second copy here could
+ * disagree with the bar on the library, and nobody would notice until they compared the two screens.
+ */
+function ValueOfThings({ things, approx }: { things: Thing[]; approx: string }) {
+  const ledger = useLedger()
+  const policy = findContentsPolicy(ledger.data?.data ?? [])
+  if (policy === null) return null
+
+  const total = totalInsurable(things, policy.currency)
+  const format = (amount: string) => formatMoney(amount, policy.currency, 'whole') ?? ''
+  const value = format(fromMinorUnits(total.minorUnits))
+  const short = total.minorUnits > toMinor(policy.value)
+
+  return (
+    <Stat
+      term="Value of things"
+      value={`${value}${approx}`}
+      /*
+        The note carries the comparison, and names what the number LEAVES OUT. A total that silently
+        omits three things priced in another currency is a total that is wrong by an unknown amount,
+        so `skipped` is stated rather than swallowed — the same reason the card's own footer states it.
+      */
+      note={[
+        short
+          ? `More than the ${format(policy.value)} your ${policy.document.title.toLowerCase()} covers`
+          : `Within the ${format(policy.value)} your ${policy.document.title.toLowerCase()} covers`,
+        total.skipped === 0 ? null : `${total.skipped} priced in another currency, not counted`,
+      ]
+        .filter((part) => part !== null)
+        .join(' · ')}
+    />
+  )
+}
+
+/** `"14200.50"` → `1420050`, for the one comparison this screen makes. Mirrors `SumInsuredCard`. */
+function toMinor(decimal: string): number {
+  return Math.round(Number(decimal) * 100)
+}
+
+/**
+ * What is not with you: lent out, handed on, or neither.
+ *
+ * Two counts rather than one, because "3 elsewhere" would merge a loop you might want to close with
+ * one that is finished. When both are zero the row still draws — "Everything's with you" is a real
+ * answer, and this section is a list of answers.
+ */
+function describeElsewhere(things: Thing[]): { value: string; note: string } {
+  const lent = things.filter((thing) => thing.ownership === 'lent').length
+  const gone = things.filter((thing) => thing.ownership === 'gone').length
+
+  if (lent === 0 && gone === 0) {
+    return { value: 'Nothing', note: 'Everything you\u2019ve filed is with you' }
+  }
+
+  const parts = [
+    lent === 0 ? null : `${lent} lent out`,
+    gone === 0 ? null : `${gone} handed on`,
+  ].filter((part) => part !== null)
+
+  return {
+    value: parts.join(', '),
+    note:
+      gone === 0
+        ? 'Still yours, just not in the house'
+        : 'Handed-on things keep their record and stop counting toward cover',
+  }
+}
+
+/**
  * One big mono figure with its label beneath — the comp's `youStats` (lines 392–399).
  *
  * Still a `<dt>`/`<dd>` pair inside a `<dl>`, for the reason `ui/stat.tsx` gives: "Documents filed /
@@ -414,43 +598,125 @@ function count(value: number | undefined, approx: string): string {
 }
 
 function PushStatus() {
-  const publicKey = useQuery({
-    queryKey: ['push', 'public-key'],
-    queryFn: api.push.publicKey,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
+  const publicKey = usePushPublicKey()
+  const subscribe = useSubscribeToPush()
+  const unsubscribe = useUnsubscribeFromPush()
+  const [error, setError] = useState<string | null>(null)
+  /**
+   * `Notification.permission` is a live global rather than React state, so a grant or a revoke does
+   * not re-render anything on its own. This is bumped after either mutation to re-read it.
+   */
+  const [, bump] = useState(0)
 
   // No keys on this deployment: the feature vanishes entirely, here as everywhere else. A greyed-out
   // "notifications" row would teach the user about a feature that cannot work.
   if (publicKey.isPending || publicKey.data === null || publicKey.data === undefined) return null
 
-  const supported =
-    'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const supported = pushSupported()
+  const permission = supported ? Notification.permission : 'default'
 
   const { title, body } = !supported
     ? {
         title: 'This browser can’t do notifications',
         body: 'Add Life Manager to your home screen and open it from there.',
       }
-    : Notification.permission === 'denied'
+    : permission === 'denied'
       ? {
           title: 'Reminders are blocked by your phone',
           body: 'Settings → Notifications → Life Manager → Allow. The dates are still on Now either way.',
         }
-      : Notification.permission === 'granted'
+      : permission === 'granted'
         ? {
             title: 'Reminders are on',
             body: '90, 30 and 7 days before an expiry. Documents without an expiry stay silent — by design.',
           }
         : {
             title: 'Reminders are not on yet',
-            body: 'Now will offer once you have a document with an expiry date.',
+            body: '90, 30 and 7 days before anything expires. Nothing else.',
           }
+
+  const key = publicKey.data
 
   return (
     <Card className="mt-5 p-card">
-      <p className="text-row font-medium leading-snug">{title}</p>
-      <p className="mt-1 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">{body}</p>
+      {/*
+        ── The row carries a CONTROL now, not just a status — handoff 5 ──
+
+        You said what the state was and left the only way to change it on the Now screen's nudge,
+        which appears when a document has an expiry. So a user who turned reminders off, or who
+        dismissed the nudge, had no route back to them from the one screen named after their own
+        settings. That is the gap this closes.
+
+        **Three states, and only one of them gets a button.** `denied` is the phone's decision and no
+        web API can reverse it — a Turn on that cannot work is worse than the sentence explaining
+        where the switch actually lives. `unsupported` is the same. Only `default` and `granted` are
+        ours to change.
+      */}
+      <div className="flex items-start justify-between gap-3.5">
+        <div className="min-w-0">
+          <p className="text-row font-medium leading-snug">{title}</p>
+          <p className="mt-1 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">{body}</p>
+        </div>
+
+        {supported && permission === 'default' && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            disabled={subscribe.isPending}
+            onClick={() => {
+              setError(null)
+              subscribe.mutate(key, {
+                onSuccess: () => bump((n) => n + 1),
+                onError: (caught) =>
+                  setError(
+                    caught instanceof Error ? caught.message : 'Could not turn reminders on.',
+                  ),
+              })
+            }}
+          >
+            {subscribe.isPending ? 'Turning on…' : 'Turn on'}
+          </Button>
+        )}
+
+        {supported && permission === 'granted' && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            disabled={unsubscribe.isPending}
+            onClick={() => {
+              setError(null)
+              unsubscribe.mutate(undefined, {
+                onSuccess: () => bump((n) => n + 1),
+                onError: (caught) =>
+                  setError(
+                    caught instanceof Error ? caught.message : 'Could not turn reminders off.',
+                  ),
+              })
+            }}
+          >
+            {unsubscribe.isPending ? 'Turning off…' : 'Turn off'}
+          </Button>
+        )}
+      </div>
+
+      {/*
+        Turning off unsubscribes this browser; the phone's own permission stays granted, so Turn on
+        will not ask again. Said plainly, because otherwise "off" then "on" looks like it did nothing.
+      */}
+      {supported && permission === 'granted' && (
+        <p className="mt-2 text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
+          Turning them off stops this browser receiving them. Your phone keeps the permission, so
+          turning them back on will not ask again.
+        </p>
+      )}
+
+      {error !== null && (
+        <p className="mt-2 text-meta leading-relaxed text-status-late [text-wrap:pretty]">
+          {error}
+        </p>
+      )}
     </Card>
   )
 }

@@ -4,8 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DocumentListSkeleton } from '@/components/ui/skeleton'
 import { DocumentRow } from './DocumentRow'
-import { groupForReading } from './numberFormat'
-import { numberLabelFor } from './presets'
+import {
+  documentNumberProps,
+  libraryDocumentRowProps,
+  type NumberDisplay,
+} from './documentRowProps'
 import { useDocuments } from './useDocuments'
 
 /**
@@ -37,14 +40,7 @@ export type DocumentListProps = {
    * reveals every row at once. Local state per row could not be reached by it, and a boolean threaded
    * down from the page is simpler than a context for two consumers.
    */
-  numbers?: {
-    /** Ids currently revealed. A page-wide toggle is expressed by `revealAll`, not by filling this. */
-    revealedIds: ReadonlySet<string>
-    revealAll: boolean
-    onToggle: (documentId: string) => void
-    /** Called with the number's label after a successful copy, so the page can say so. */
-    onCopied: (label: string) => void
-  }
+  numbers?: NumberDisplay
 }
 
 export function DocumentList({
@@ -143,42 +139,31 @@ function DocumentPage({
 
   if (data.length === 0 && isFirst) return <>{emptyState}</>
 
-  const rows = data.map((document, index) => (
-    <DocumentRow
-      key={document.id}
-      document={document}
-      divided={variant === 'card' && index > 0}
-      chevron={variant === 'card'}
-      number={
-        numbers === undefined || document.identifier === null
-          ? undefined
-          : {
-              label: numberLabelFor(document.title, document.doc_type),
-              revealed: numbers.revealAll || numbers.revealedIds.has(document.id),
-              grouped: groupForReading(document.identifier),
-              onToggleReveal: () => numbers.onToggle(document.id),
-              onCopy: () => {
-                // `document.identifier` is non-null in this branch; the closure captures the narrowed
-                // value rather than re-reading it, so a re-render cannot make it null underneath.
-                const value = document.identifier ?? ''
-                void navigator.clipboard
-                  .writeText(value)
-                  .then(() => numbers.onCopied(numberLabelFor(document.title, document.doc_type)))
-                  .catch(() => {
-                    // Clipboard access can be refused (insecure origin, denied permission). Revealing
-                    // is the fallback that always works, because the value becomes selectable — never
-                    // a silent no-op.
-                    numbers.onToggle(document.id)
-                  })
-              },
-            }
-      }
-      // The archive's rows run full-bleed to the screen edges with a rule below each, so the list
-      // reads as a ledger page rather than as a stack of cards. The negative margin undoes the
-      // shell's gutter for the rule only; the content keeps it.
-      className={variant === 'divided' ? '-mx-gutter border-b border-rule px-gutter' : undefined}
-    />
-  ))
+  /*
+    ── Rows are built by `libraryDocumentRowProps`, NOT inline here ──
+
+    This function used to construct the row's props itself, which meant the library's `All` scope
+    (which builds its own) and this one could disagree — and they did: the same document rendered
+    with a 52px glyph column and no number controls in `All`, and a 14px column with Copy and Show
+    here, so changing the scope pill appeared to redraw the row. One builder, one shape.
+
+    `variant="card"` is the Now screen's grouping and keeps its own geometry: no full-bleed rule, a
+    chevron on every row, and the narrow glyph column, because there are no thumbnails beside it to
+    line up with.
+  */
+  const rows = data.map((document, index) =>
+    variant === 'card' ? (
+      <DocumentRow
+        key={document.id}
+        document={document}
+        divided={index > 0}
+        chevron
+        number={documentNumberProps(document, numbers)}
+      />
+    ) : (
+      <DocumentRow key={document.id} {...libraryDocumentRowProps(document, numbers)} />
+    ),
+  )
 
   return (
     <>

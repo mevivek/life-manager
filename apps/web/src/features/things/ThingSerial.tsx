@@ -72,6 +72,24 @@ export function ThingSerial({
 
   const label = SERIAL_LABELS[kind]
 
+  /**
+   * ── A vehicle's registration is NOT masked, and that is a decision rather than an omission ──
+   *
+   * Handoff 5 draws the plate in full, on the row and here, and the reasoning is that a registration
+   * is **painted on the outside of the object**. Masking a number that anyone standing behind the car
+   * can read is theatre: it costs the owner a tap on the one value they actually read aloud — to a
+   * mechanic, an insurer, a parking attendant — and protects nothing, because the threat the mask
+   * addresses is shoulders near the screen and the plate is already public to them.
+   *
+   * Every other kind stays masked. An IMEI, a laptop serial and a hallmark are all *inside* the
+   * object, and reading one off a stranger's screen is exactly the case rule 7's mask is for.
+   *
+   * This does not change what is stored or what the server returns — the value was always plaintext
+   * (things.md §4 rule 7, ADR-0026). It changes only whether this component hides it by default.
+   */
+  const isPlate = kind === 'vehicle'
+  const shown = isPlate || revealed
+
   // `== null` catches BOTH null and undefined — see the note on the prop. No serial, no card: an empty
   // bordered box under the facts reads as a field that failed to load.
   if (serial == null || serial.length === 0) return null
@@ -90,12 +108,12 @@ export function ThingSerial({
         */}
         <span
           className={
-            revealed
+            shown
               ? 'selectable min-w-0 flex-1 break-all font-mono text-number font-medium tracking-number'
               : 'min-w-0 flex-1 font-mono text-number font-medium tracking-mask'
           }
         >
-          {revealed ? serial : `•••• ${last4 ?? serial.slice(-4)}`}
+          {shown ? serial : `•••• ${last4 ?? serial.slice(-4)}`}
         </span>
         {/*
           44px (`--tap-min`), per design.md §6 — `Button`'s `sm` size is narrower, never shorter, so
@@ -104,15 +122,19 @@ export function ThingSerial({
           The accessible name says what the control DOES and names the field it does it to. There is
           more than one masked value in this app already, and "Hide" alone is ambiguous between them.
         */}
-        <Button
-          variant="secondary"
-          size="sm"
-          className="shrink-0"
-          onClick={() => setRevealed(!revealed)}
-          aria-label={revealed ? `Hide ${label}` : `Show ${label}`}
-        >
-          {revealed ? 'Hide' : 'Show'}
-        </Button>
+        {/* No Show/Hide on a plate — there is nothing hidden to toggle, and a control whose two
+            states look identical is worse than no control. */}
+        {!isPlate && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setRevealed(!revealed)}
+            aria-label={revealed ? `Hide ${label}` : `Show ${label}`}
+          >
+            {revealed ? 'Hide' : 'Show'}
+          </Button>
+        )}
       </div>
       <div className="mt-1.5 flex items-center gap-3.5">
         <Button

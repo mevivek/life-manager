@@ -4,7 +4,10 @@
 - **Date:** 2026-07-31
 - **Supersedes:** the navigation decision in [ADR-0031](0031-things-is-a-fourth-tab.md) (the fourth
   tab)
-- **Superseded by:** —
+- **Superseded by:** [ADR-0033](0033-handoff-5-the-rest.md), **in part** — only § *Deviation*, the
+  filter chips, which came off once the maintainer confirmed search alone is enough. That was this
+  ADR's own stated reopening condition. The navigation decision, the merged `All` ordering, the scope
+  pills and the Add picker all stand. The body below is left exactly as accepted (ADR-0015).
 
 ## Context
 

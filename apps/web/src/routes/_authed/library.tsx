@@ -5,7 +5,6 @@ import type {
   ThingKind,
   ThingListQuery,
 } from '@life-manager/shared'
-import { KIND_LABELS, thingKindSchema } from '@life-manager/shared'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { z } from 'zod'
@@ -14,11 +13,10 @@ import { Chip } from '@/components/ui/chip'
 import { ScreenSkeleton } from '@/components/ui/skeleton'
 import { Toast } from '@/components/ui/toast'
 import { useOpenAdd } from '@/features/documents/AddSheetProvider'
-import { DocumentFilters, type Filters } from '@/features/documents/DocumentFilters'
 import { DocumentList } from '@/features/documents/DocumentList'
 import { DocumentRow } from '@/features/documents/DocumentRow'
-import { useDocuments, useHolders } from '@/features/documents/useDocuments'
-import { useLedger } from '@/features/documents/useLedger'
+import { libraryDocumentRowProps, type NumberDisplay } from '@/features/documents/documentRowProps'
+import { useDocuments } from '@/features/documents/useDocuments'
 import { LibrarySearchField, SearchSummary, SearchToggle } from '@/features/library/LibrarySearch'
 import { mergeRows } from '@/features/library/mergeRows'
 import {
@@ -192,7 +190,6 @@ function LibraryPage() {
   const [revealAll, setRevealAll] = useState(false)
   const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(() => new Set())
   const [copied, setCopied] = useState<string | null>(null)
-  const [openPanel, setOpenPanel] = useState<'none' | 'type' | 'tag' | 'before' | 'who'>('none')
 
   const documentQuery = toDocumentQuery(search)
   const thingQuery = toThingQuery(search)
@@ -209,31 +206,34 @@ function LibraryPage() {
   const things = useThings(thingQuery)
 
   /**
-   * The unfiltered pages, for the things a filtered one cannot answer: which kinds exist, which tags
-   * exist, and the total to sit beside a filtered count. Deriving those from the *filtered* page would
-   * make each control's own options vanish as you use it.
+   * The unfiltered things page, for the sum-insured card.
    *
-   * `useLedger` rather than a fresh `useDocuments` — it is the same query key the Now screen and the
-   * tab bar's badge already use, so this is a read of a fetch that has happened, not a fourth request.
+   * The card is a statement about **everything you own** measured against one policy, so a filtered
+   * page would make it quietly wrong — it would total whatever survived a search. This shares its key
+   * with the unfiltered list, so with nothing narrowing it there is no second request.
+   *
+   * There is no unfiltered *documents* read any more. It existed to feed the tag chip its options and
+   * to sit an unfiltered total beside a filtered count, and both of those controls are gone.
    */
-  const allDocuments = useLedger()
   const allThings = useThings({ sort: 'name', order: 'asc', limit: THING_PAGE_SIZE })
-
-  const holders = useHolders()
-  const people = (holders.data ?? []).map((person) => person.holder)
 
   const documentRows = documents.data?.data ?? []
   const thingRows = things.data?.data ?? []
   const everyThing = allThings.data?.data ?? []
   const complete = documents.data?.next_cursor === null && things.data?.next_cursor === null
 
-  const filters: Filters = {
-    q: search.q,
-    type: search.type,
-    tag: search.tag,
-    before: search.before,
-    scan: search.scan,
-    who: search.who,
+  /** The revealed-number state, shared by the header toggle and every row (ADR-0027). */
+  const numbers: NumberDisplay = {
+    revealedIds,
+    revealAll,
+    onToggle: (documentId) =>
+      setRevealedIds((previous) => {
+        const next = new Set(previous)
+        if (next.has(documentId)) next.delete(documentId)
+        else next.add(documentId)
+        return next
+      }),
+    onCopied: setCopied,
   }
 
   /** Patch the URL. `replace` throughout, so a filter change does not stack a history entry. */
@@ -283,15 +283,38 @@ function LibraryPage() {
                 pending={documents.isPending || things.isPending}
                 failed={documents.isError || things.isError}
               />
+              {/*
+                The escape hatch for a filter with no chip.
+
+                With the chip row gone, a narrowing can only arrive from the URL — the Now screen's
+                `?scan=no` nudge, or a saved link. Without this, that list is short for a reason
+                nothing on screen explains and nothing on screen can undo, which is the one failure
+                the folded search was also designed to avoid. Drawn only when something is actually
+                narrowing, so it is never a control that does nothing.
+              */}
+              {hasNarrowing(search) && (
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  className="-my-1 shrink-0 px-1.5 text-meta text-ink-2 underline underline-offset-2"
+                  onClick={() => setSearch(CLEARED)}
+                >
+                  Clear
+                </Button>
+              )}
             </div>
 
             <div className="flex shrink-0 items-center gap-0.5">
               {/*
-                Show / hide every number on the page — ADR-0027. Only under Documents, and only when
-                the loaded page actually holds one. A control that reveals nothing is worse than no
-                control: it implies the list holds numbers it does not.
+                Show / hide every number on the page — ADR-0027. Drawn only when the loaded page
+                actually holds one: a control that reveals nothing is worse than no control, because
+                it implies the list holds numbers it does not.
+
+                **Not scope-gated.** A document row draws its number line in every scope now — one
+                row builder, one shape — so a toggle that appeared only under Documents would leave
+                the numbers on an `All` list with no way to hide them.
               */}
-              {scope === 'documents' && documentRows.some((row) => row.identifier !== null) && (
+              {documentRows.some((row) => row.identifier !== null) && (
                 <Button
                   variant="quiet"
                   size="sm"
@@ -331,11 +354,12 @@ function LibraryPage() {
           The scope switch. `aria-pressed` toggles, not links — see `scope.ts` for why this is not the
           navigation rule design.md §8 states.
 
-          Changing scope clears the filters, because they do not survive the crossing: `?kind=vehicle`
-          means nothing to a document and `?type=identity` means nothing to a thing, and carrying them
-          silently would produce a confidently empty list whose cause is a chip the current scope does
-          not draw. The search query is the one thing worth keeping — it is the same question asked of
-          a different pile, which is exactly what the summary line invites.
+          Changing scope clears every other narrowing, because none of it survives the crossing:
+          `?kind=vehicle` means nothing to a document and `?type=identity` means nothing to a thing.
+          That mattered more once the chips were removed, not less — a carried-over filter now has no
+          control drawing it, so the list would be short for a reason nothing on screen could explain.
+          The search query is the one thing kept: it is the same question asked of a different pile,
+          which is exactly what the summary line invites.
         */}
         <fieldset className="-mx-gutter mt-3 flex min-w-0 gap-1.5 overflow-x-auto border-0 px-gutter">
           <legend className="sr-only">Show</legend>
@@ -362,44 +386,29 @@ function LibraryPage() {
           />
         )}
 
+        {/*
+          ── The filter chips are gone, and this is where they were ──
+
+          Type / Tag / Expiring-before / Whose / Has-scan, and the Things kind row, all came off to
+          match handoff 5, which draws the library header as the scope pills and nothing else. The
+          maintainer confirmed search alone is enough, which is the trigger ADR-0032 § *Deviation*
+          wrote for itself.
+
+          **The query parameters survive the controls.** `?scan=no` still filters server-side, because
+          the Now screen's no-scan nudge links into it and an installed PWA can hold a saved URL. What
+          replaces the chips is the `Clear` beside the count: with no chip to show *why* a list is
+          short, there has to be one control that escapes it. Do not re-add a chip row without
+          superseding ADR-0032.
+        */}
+
         {/* Absent unless a contents policy is found, which is most of the time. See the component. */}
         {scope === 'things' && <SumInsuredCard things={everyThing} className="mt-3" />}
-
-        {scope === 'documents' && (
-          <DocumentFilters
-            filters={filters}
-            availableTags={collectTags(allDocuments.data?.data ?? [])}
-            openPanel={openPanel}
-            onOpenPanel={setOpenPanel}
-            people={people}
-            onChange={(next) => setSearch(next)}
-          />
-        )}
-
-        {scope === 'things' && (
-          <KindFilter
-            kinds={kindsPresent(everyThing)}
-            selected={search.kind}
-            onSelect={(kind) => setSearch({ kind })}
-          />
-        )}
       </div>
 
       {scope === 'documents' ? (
         <DocumentList
           query={documentQuery}
-          numbers={{
-            revealedIds,
-            revealAll,
-            onToggle: (documentId) =>
-              setRevealedIds((previous) => {
-                const next = new Set(previous)
-                if (next.has(documentId)) next.delete(documentId)
-                else next.add(documentId)
-                return next
-              }),
-            onCopied: setCopied,
-          }}
+          numbers={numbers}
           emptyState={
             <Empty
               scope="documents"
@@ -437,6 +446,7 @@ function LibraryPage() {
         <AllScope
           documents={documentRows}
           things={thingRows}
+          numbers={numbers}
           pending={documents.isPending || things.isPending}
           error={documents.error ?? things.error}
           onRetry={() => {
@@ -538,6 +548,7 @@ function Count({
 function AllScope({
   documents,
   things,
+  numbers,
   pending,
   error,
   onRetry,
@@ -547,6 +558,7 @@ function AllScope({
 }: {
   documents: readonly Document[]
   things: readonly Thing[]
+  numbers: NumberDisplay
   pending: boolean
   error: Error | null
   onRetry: () => void
@@ -564,13 +576,12 @@ function AllScope({
     <>
       {rows.map((row) =>
         row.kind === 'document' ? (
+          // Built by the SHARED builder, which is what stops a document row changing shape when the
+          // scope pill changes — see `documentRowProps.ts`. It also carries the 52px glyph column, so
+          // a document's title lines up with a thing's thumbnail.
           <DocumentRow
             key={`document-${row.id}`}
-            document={row.document}
-            // 52px, so a document's glyph column lines up with a thing's thumbnail. Without it the
-            // two kinds indent differently and the list reads as two lists shuffled together.
-            glyphColumn="wide"
-            className="-mx-gutter border-b border-rule px-gutter"
+            {...libraryDocumentRowProps(row.document, numbers)}
           />
         ) : (
           <ThingRow
@@ -657,58 +668,6 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
 }
 
 /**
- * The kind chips — `All` first, then only the kinds that actually appear.
- *
- * A `<fieldset>` with a `<legend>`, not a `div role="group"` (design.md §6): the legend is announced
- * before each pill, so a screen reader says "Kind, Vehicle" rather than a bare "Vehicle" — which on a
- * screen that also has a scope switch is genuinely ambiguous.
- */
-function KindFilter({
-  kinds,
-  selected,
-  onSelect,
-}: {
-  kinds: ThingKind[]
-  selected: string
-  onSelect: (kind: string) => void
-}) {
-  // One kind means one chip and an "All" that does nothing — "draw it the day it is needed".
-  if (kinds.length < 2) return null
-
-  return (
-    // `min-w-0` because a fieldset defaults to `min-width: min-content`, which stops the row
-    // scrolling and lets it push the page sideways instead.
-    <fieldset className="-mx-gutter mt-3 flex min-w-0 gap-[7px] overflow-x-auto border-0 px-gutter pb-0.5">
-      <legend className="sr-only">Kind</legend>
-      {/*
-        **"All kinds", not "All"** — and this was found by rendering the Things scope at 390px.
-
-        This row now sits directly beneath the scope pills, whose first chip is also "All". Two
-        adjacent selected-looking pills reading "All" above "All" is genuinely ambiguous: one means
-        every *record*, the other every *kind of thing*. On the old standalone Things screen there was
-        nothing above it to collide with. The legends already disambiguate them for a screen reader
-        ("Show" and "Kind"); this is the sighted reader's version of the same fix.
-      */}
-      <Chip size="sm" selected={selected === ''} onClick={() => onSelect('')}>
-        All kinds
-      </Chip>
-      {kinds.map((kind) => (
-        <Chip
-          key={kind}
-          size="sm"
-          selected={selected === kind}
-          // Tapping the selected chip clears it — a chip row with no "off" makes the first tap
-          // irreversible.
-          onClick={() => onSelect(selected === kind ? '' : kind)}
-        >
-          {KIND_LABELS[kind]}
-        </Chip>
-      ))}
-    </fieldset>
-  )
-}
-
-/**
  * How many things are out of cover, or that nothing is.
  *
  * Counted from `coverOf` rather than a second `warranty_ends_on < today` comparison — one ladder
@@ -726,25 +685,4 @@ function ThingsFooter({ things, complete }: { things: readonly Thing[]; complete
       {complete ? '' : ' Counted across what’s loaded so far.'}
     </p>
   )
-}
-
-/** Distinct tags across the loaded ledger page, alphabetical so the row does not reshuffle. */
-function collectTags(documents: readonly Document[]): string[] {
-  const tags = new Set<string>()
-  for (const document of documents) {
-    for (const tag of document.tags) tags.add(tag)
-  }
-  return [...tags].sort()
-}
-
-/**
- * Which kinds are present, in the contract's order.
- *
- * `thingKindSchema.options` rather than the order they happen to appear in the page: that order is
- * rough frequency of ownership, so the common case stays near the start of the row and the row does
- * not reshuffle when a thing is added.
- */
-function kindsPresent(things: readonly Thing[]): ThingKind[] {
-  const present = new Set(things.map((thing) => thing.kind))
-  return thingKindSchema.options.filter((kind) => present.has(kind))
 }

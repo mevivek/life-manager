@@ -18,7 +18,7 @@ deviation before "fixing" the code to match the comp.
 | `Life-Manager-handoff-2.dc.html` | Second handoff — replaced the **Add** tab with **You**; the 22-document preset chooser |
 | `Life-Manager-handoff-3.dc.html` | Third handoff — the full document identifier, holders (*"Whose document is it?"*), and the three **Feel** preferences (density · headings · voice) |
 | `Life-Manager-handoff-4.dc.html` | Fourth handoff — the **Things** domain (a second domain, pulled forward from M4), capture as a **stepped wizard**, a cross-domain horizon, and the document↔thing link. [ADR-0029](../decisions/0029-the-things-domain.md) and [ADR-0030](../decisions/0030-capture-as-a-stepped-wizard.md) |
-| `Life-Manager-handoff-5.dc.html` | Fifth handoff, **the authoritative one** — the tab bar goes back to **three tabs** with Documents and Things merged into one **Everything** library ([ADR-0032](../decisions/0032-one-library-tab.md)), Add asks which track, search folds behind a toggle. It also carries a **People** sub-domain, a Google-only sign-in screen, an expanded You screen and a public vehicle plate, **none of which is built** — see *What handoff 5 changed* below |
+| `Life-Manager-handoff-5.dc.html` | Fifth handoff, **the authoritative one** — the tab bar goes back to **three tabs** with Documents and Things merged into one **Everything** library ([ADR-0032](../decisions/0032-one-library-tab.md)), Add asks which track, search folds behind a toggle. Nearly all of it is built ([ADR-0033](../decisions/0033-handoff-5-the-rest.md) covers the rest); the **People** sub-domain and the **Google-only sign-in** are deliberately not — see *What handoff 5 changed* below |
 | `Life-Manager-icon.dc.html` | The **app icon** handoff, a separate bundle from the screen comps. Three variants (ink · paper · green), the 1024-grid geometry, and the two rationale blocks — *why the shortest bar is amber* and *why no glyph*. `apps/web/public/favicon.svg` implements the **ink** variant; the paper and green ones are drawn but unshipped, and D61 says why. **Its "Production notes" are misleading about the inset** — they say 66px on a 1024 grid while the art it was drawn from is 22% horizontally and centres the bars vertically at ~32%. The SVG's comment records which was followed |
 | `favicon-small-16px.svg` | **A proposal, not shipped.** The icon cut to two bars for 16–24px, where the three-bar mark's bars and gaps are ~1.1 device pixels each and merge into a smudge. Every value is a multiple of 64 — one device pixel at 16px — so it rasterises exactly. Wiring it is debt **D61** and needs a product call, because `favicon.svg` is also the raster source for the PNGs (`scripts/generate-icons.mjs`), where three bars read perfectly |
 | `support.js` | The Claude Design player runtime, shared byte-for-byte across all five. The comps reference it as a sibling (`./support.js`), which is why one copy sits beside them |
@@ -31,8 +31,9 @@ Add-tab-to-You move, the single-page capture form, the four-tab bar) and because
 read than to reconstruct.
 
 **Handoff 5 is the first one this repo has NOT implemented in full**, so do not read it as a
-description of the app. Its navigation half is built; its People half is not. The table below says
-which is which, and it is the thing to check before assuming a screen exists.
+description of the app. Two pieces are deliberately unbuilt — the **People** sub-domain (D84) and the
+**Google-only sign-in** (D85). The section below says exactly which is which, and it is the thing to
+check before assuming a screen exists.
 
 ## What handoff 4 changed, in one place
 
@@ -91,31 +92,40 @@ here before assuming a screen exists.**
   a fork, **not** a seventh wizard step (ADR-0030's one-required-field rule survives untouched).
 - **Search folds behind a magnifier toggle**, with a per-kind match summary beneath it.
 
-**Deviation, deliberate:** the comp deletes every filter chip — Type / Tag / Expiring-before / Whose /
-Has-scan, and the Things kind row — leaving only the scope pills. We kept them, drawn per scope. The
-argument is in ADR-0032 § *Deviation*; the short version is that the Now screen deep-links into
-`?scan=no` and documents.md §4 rule 13 specifies the Whose filter, so removing them is a product call
-with a human yes (invariant 12) rather than a side effect of a navigation change.
+**No deviations left on the library.** ADR-0032 originally kept the filter chips against a comp that
+draws none; [ADR-0033](../decisions/0033-handoff-5-the-rest.md) removed them once the maintainer
+confirmed search alone is enough. The query parameters stayed — `?scan=no` still works and still
+carries the Now screen's nudge — so what replaces the chips is a `Clear` beside the count.
+
+### Also built, per [ADR-0033](../decisions/0033-handoff-5-the-rest.md)
+
+- **One row builder.** A document row is the same shape in every scope. It was not: the merged list
+  and the paged one built rows separately, so a scope pill appeared to redraw the row.
+- **A vehicle's registration, unmasked and drawn as a plate**, on the row and the detail screen. Every
+  other serial stays masked — a plate is painted on the outside of the object.
+- **A row-level *Add scan***, on a document with neither a number nor a file.
+- **The You screen counts both domains** — *Things owned*, *Dates watched*, *Value of things*, *Out of
+  cover*, *Elsewhere* — and Reminders gains **Turn on / Turn off**.
+
+We do **not** draw the comp's second plate block beside the thing's title: the serial card two rows
+below already shows the same number with a Copy button, and one value twice on one screen is the kind
+of redundancy this codebase has refused before.
 
 ### Drawn but NOT built
 
-None of this exists in the app. An empty screen where the comp shows one of these is not a bug.
+Two things remain. An empty screen where the comp shows one of these is not a bug.
 
-- **A People sub-domain** — the largest of them. `People` under You, a person detail screen, an
+- **A People sub-domain** — debt **D84**. `People` under You, a person detail screen, an
   add/edit/remove sheet, and a *"Whose document is this?"* sheet on a document's detail. It turns
   `holder` from a free-text label into a **record**, which needs a `people` table, a repository, a
-  service and endpoints — a domain, not a screen. Today `holder` is still the string
-  [documents.md](../domains/documents.md) §4 rule 13 describes, and `GET /documents/holders` derives
-  the list from the documents themselves.
-- **A Google-only sign-in screen** — the comp drops the email and password fields entirely and
-  replaces them with one *Continue with Google* button plus a reassurance line.
-- **An expanded You screen** — *Things owned* and *Dates watched* stats, *Value of things*, *Out of
-  cover*, *Elsewhere* rows, a *People* row, and Turn-on / Turn-off buttons on Reminders (today it is
-  a status line).
-- **A public vehicle plate** — the comp stops masking a vehicle's registration, on the reasoning that
-  a plate is painted on the outside of the car, and draws it as a plate chip on both the row and the
-  detail screen. Today a vehicle's `serial` masks like every other.
-- **A row-level *Add scan* button**, and a `?` chevron on rows that have neither a number nor a file.
+  service and endpoints — a domain, not a screen. Deferred by the maintainer on 2026-07-31: M1 is not
+  finished, and one domain at a time is the rule. Today `holder` is still the string
+  [documents.md](../domains/documents.md) §4 rule 13 describes.
+- **A Google-only sign-in screen** — debt **D85**. The comp drops the email and password fields
+  entirely. **Declined**, because [ADR-0020](../decisions/0020-google-oauth-alongside-password.md)
+  considered and rejected exactly that on account-recovery grounds, and because the Google credentials
+  are optional in `env.ts` with nothing in the deploy config setting them. Doing it needs a superseding
+  ADR *and* confirmation the credentials are provisioned.
 
 ### Fixture changes that are NOT specifications
 

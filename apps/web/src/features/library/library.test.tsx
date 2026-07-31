@@ -338,3 +338,99 @@ describe('an empty library', () => {
     expect(screen.queryByText('Nothing matches')).not.toBeInTheDocument()
   })
 })
+
+describe('a row does not change shape when the scope changes', () => {
+  /**
+   * ── The defect this suite exists for ──
+   *
+   * The first cut of the library built `All`'s rows inline and let `DocumentList` build the
+   * `Documents` scope's, so the same passport rendered with a 52px glyph column and no number
+   * controls in one and a 14px column with Copy and Show in the other. Tapping a scope pill appeared
+   * to redraw the row. `documentRowProps.ts` is now the only builder; these are the assertions that
+   * keep it that way.
+   */
+  const WITH_NUMBER = document({
+    id: 'aaaaaaa9-0000-4000-8000-000000000000',
+    title: 'Aadhaar',
+    identifier: '729481038109',
+    identifier_last4: '8109',
+  })
+
+  it('offers the same number controls under All as under Documents', async () => {
+    const user = userEvent.setup()
+    stubApi({ documents: [WITH_NUMBER], things: [SWIFT] })
+    await renderAt('/library')
+
+    await screen.findByText('Aadhaar')
+    const inAll = screen
+      .getAllByRole('button', { name: /Aadhaar/ })
+      .map((b) => b.getAttribute('aria-label'))
+    expect(inAll).toContain('Copy Aadhaar number for Aadhaar')
+    expect(inAll).toContain('Show Aadhaar number for Aadhaar')
+
+    await user.click(scopePills().getByRole('button', { name: 'Documents' }))
+    await waitFor(() => expect(screen.queryByText('Maruti Swift')).not.toBeInTheDocument())
+
+    const inDocuments = screen
+      .getAllByRole('button', { name: /Aadhaar/ })
+      .map((b) => b.getAttribute('aria-label'))
+    expect(inDocuments).toEqual(inAll)
+  })
+
+  it('indents the title identically in both scopes', async () => {
+    // The 52px glyph column, which is what lines a document's title up with a thing's thumbnail. It
+    // was conditional on the scope, which is exactly the drift being prevented — so this reads the
+    // class off the rendered row rather than trusting the prop.
+    const user = userEvent.setup()
+    stubApi({ documents: [WITH_NUMBER], things: [SWIFT] })
+    const { container } = await renderAt('/library')
+    await screen.findByText('Aadhaar')
+
+    const columnIn = () => container.querySelector('[href^="/documents/"] > span')?.className ?? ''
+    const inAll = columnIn()
+    expect(inAll).toContain('w-[52px]')
+
+    await user.click(scopePills().getByRole('button', { name: 'Documents' }))
+    await waitFor(() => expect(screen.queryByText('Maruti Swift')).not.toBeInTheDocument())
+    expect(columnIn()).toBe(inAll)
+  })
+})
+
+describe('the filter chips are gone, and what replaced them', () => {
+  it('draws no filter chip row in any scope', async () => {
+    // Handoff 5 draws the library header as the scope pills and nothing else. The only pill group
+    // left is the scope switch — a second `group` here means a chip row came back.
+    const user = userEvent.setup()
+    await renderAt('/library')
+    await screen.findByText('Passport')
+
+    expect(screen.getAllByRole('group')).toHaveLength(1)
+
+    await user.click(scopePills().getByRole('button', { name: 'Documents' }))
+    await waitFor(() => expect(screen.queryByText('Maruti Swift')).not.toBeInTheDocument())
+    expect(screen.getAllByRole('group')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Type' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Whose' })).toBeNull()
+  })
+
+  it('still honours a filter that arrives in the URL, and offers a way out of it', async () => {
+    // `?scan=no` has no chip drawing it any more, so without the Clear the list would be short for a
+    // reason nothing on screen could explain OR undo. That is the failure the folded search also
+    // guards against.
+    const user = userEvent.setup()
+    const { router } = await renderAt('/library?scope=documents&scan=no')
+    await screen.findByRole('heading', { name: 'Documents' })
+
+    const clear = await screen.findByRole('button', { name: 'Clear' })
+    await user.click(clear)
+
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ scan: '' }))
+  })
+
+  it('does not draw Clear when nothing is narrowing', async () => {
+    // A control that does nothing is worse than no control.
+    await renderAt('/library')
+    await screen.findByText('Passport')
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+  })
+})

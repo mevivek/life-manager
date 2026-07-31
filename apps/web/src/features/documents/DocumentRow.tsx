@@ -248,21 +248,40 @@ export function DocumentRow({
       )}
 
       {/*
-        The no-scan marker: a dashed page outline. Dashed rather than a filled icon because it marks
-        an *absence*, and it is the same glyph the Now screen's nudge row uses so the two read as one
-        idea. `aria-hidden` — the row's accessible name does not mention it, because "no scan" is a
-        job rather than a status, and the nudge row is where that job is named.
+        ── No scan: a marker when the row is busy, a JOB when it is not ──
+
+        Handoff 5 turns the bare dashed glyph into an **Add scan** button on rows that have nothing
+        else on their right-hand side, which is the difference between labelling an absence and
+        offering to fix it. A row that already carries Copy and Show keeps the small glyph — three
+        controls on one row at 390px is where a miss lands on the wrong one.
+
+        **It is a `<Link>` to the document's Scans section, not a file picker.** Opening the OS picker
+        would mean firing `input.click()` after a navigation, which browsers refuse without a user
+        gesture on the same page — a control that silently does nothing on some devices is worse than
+        one that takes you to where the job is. The anchor lands on the section with its own Add
+        button already in reach.
       */}
-      {document.file_count === 0 && (
-        <span
-          aria-hidden="true"
-          className={cn(
-            'h-[17px] w-[13px] shrink-0 rounded-[2px] border-[1.5px] border-dashed border-ink-3',
-            // With the controls present the marker sits inside their gap rather than widening the row.
-            hasNumber ? 'ml-1' : 'ml-3.5',
-          )}
-        />
-      )}
+      {document.file_count === 0 &&
+        (hasNumber ? (
+          <span
+            aria-hidden="true"
+            className="ml-1 h-[17px] w-[13px] shrink-0 rounded-[2px] border-[1.5px] border-dashed border-ink-3"
+          />
+        ) : (
+          <Link
+            to="/documents/$documentId"
+            params={{ documentId: document.id }}
+            hash="scans"
+            aria-label={`Add a scan to ${document.title}`}
+            className="ml-3.5 flex min-h-tap shrink-0 items-center gap-[7px] rounded-2 border border-dashed border-rule-2 px-[11px] hover:border-ink"
+          >
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-[11px] shrink-0 rounded-[2px] border-[1.5px] border-dashed border-ink-3"
+            />
+            <span className="whitespace-nowrap text-meta font-medium text-ink-2">Add scan</span>
+          </Link>
+        ))}
 
       {/* Only on rows inside a card, where the row's edges give no other affordance. */}
       {chevron && (

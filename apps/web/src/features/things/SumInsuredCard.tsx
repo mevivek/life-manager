@@ -210,7 +210,16 @@ export function SumInsuredCard({
  *    number that is wrong in a way nobody can see; there is no rate here and inventing one would be
  *    the worst option of the three.
  */
-function totalInsurable(
+/**
+ * Exported for the You screen's *Value of things* row, which states the same total in a sentence.
+ *
+ * **One totaller, not two.** A second implementation on You could disagree with the bar on the
+ * library — different answers to "what do I own" on two screens of the same app — and the rules it
+ * encodes are not obvious: `gone` things are excluded because you no longer own them, and a thing
+ * priced in another currency is *skipped and counted* rather than converted, because adding ₹ to £
+ * produces a number that is simply wrong (see this file's header).
+ */
+export function totalInsurable(
   things: Thing[],
   currency: string,
 ): { minorUnits: number; skipped: number } {
@@ -231,7 +240,7 @@ function totalInsurable(
 }
 
 /**
- * `"14200.50"` → `1420050`.
+ * `"14200.50"` → `1420050`. Exported alongside `totalInsurable`, which returns minor units.
  *
  * Summed in **minor units as integers**, never as floats: `0.1 + 0.2` is the canonical reason
  * conventions/data.md §4 stores money as `numeric` and a decimal string, and a client that parses it
@@ -265,7 +274,7 @@ function toMinorUnits(decimal: string): number {
  * What stays here is the **summing**, because that is the part with a correctness requirement rather
  * than a presentation one — see `toMinorUnits`.
  */
-function fromMinorUnits(minorUnits: number): string {
+export function fromMinorUnits(minorUnits: number): string {
   const sign = minorUnits < 0 ? '-' : ''
   const absolute = Math.abs(minorUnits)
   return `${sign}${Math.floor(absolute / 100)}.${String(absolute % 100).padStart(2, '0')}`
