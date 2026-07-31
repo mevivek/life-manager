@@ -1,10 +1,9 @@
-import { getTableName, is, sql, Table } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { Client } from 'pg'
 import { expect, it } from 'vitest'
-import { describeDb, withCleanDatabase } from '../test/db.js'
+import { barrelTableNames, describeDb, withCleanDatabase } from '../test/db.js'
 import { db } from './client.js'
 import { migrate } from './migrate.js'
-import * as schema from './schema/index.js'
 
 /**
  * Proves the committed migration files actually apply and that the constraints they declare
@@ -27,22 +26,19 @@ import * as schema from './schema/index.js'
  * as a hand-maintained test count in CLAUDE.md, and the same defect as debt D33: an assertion that
  * can only pass.
  *
- * `getTableName` reads the name Drizzle itself will use in SQL, so this set is exactly what
+ * `barrelTableNames()` reads the name Drizzle itself will use in SQL, so its set is exactly what
  * `drizzle-kit` sees — which is the point. A table defined in a domain folder and never
  * re-exported from `db/schema/index.ts` is invisible to the barrel, hence to the generator, hence
  * missing in production while every local test passes. `scripts/check-schema-barrel.mjs` catches
  * that statically with no database; this catches it against a real one, having actually run the
  * migrations.
+ *
+ * It lives in `../test/db.js` because `truncateAll()` needs the identical set and a second copy of
+ * a reflection is a second thing to keep in step (debt D78, closed by this import). That copy
+ * narrowed to Drizzle's generic `Table`; the shared one narrows to `PgTable`, one class more
+ * specific, because `truncateAll` also needs `getTableConfig`'s `schema` field. Same names, same
+ * sorted `string[]`.
  */
-function barrelTableNames(): string[] {
-  // Widened to `unknown` first: the barrel also exports `pgEnum`s and helpers, and TypeScript will
-  // not accept a predicate narrowing to `Table` against that literal union of concrete table types.
-  return (Object.values(schema) as unknown[])
-    .filter((value): value is Table => is(value, Table))
-    .map((table) => getTableName(table))
-    .sort()
-}
-
 async function publicTableNames(client?: Client): Promise<string[]> {
   const query = `select table_name from information_schema.tables
                  where table_schema = 'public' and table_type = 'BASE TABLE'`
@@ -102,7 +98,7 @@ describeDb('schema', () => {
      */
     expect(
       barrel.length,
-      'reflected almost nothing — `is(value, Table)` may have stopped narrowing',
+      'reflected almost nothing — `barrelTableNames()` in test/db.ts may have stopped narrowing',
     ).toBeGreaterThanOrEqual(14)
   })
 
