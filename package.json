@@ -12,9 +12,10 @@
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "node scripts/check-schema-barrel.mjs && biome check .",
+    "lint": "node scripts/check-schema-barrel.mjs && node scripts/check-cloudbuild-subs.mjs && biome check .",
     "format": "biome check --write .",
-    "check:schema-barrel": "node scripts/check-schema-barrel.mjs"
+    "check:schema-barrel": "node scripts/check-schema-barrel.mjs",
+    "check:cloudbuild-subs": "node scripts/check-cloudbuild-subs.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",

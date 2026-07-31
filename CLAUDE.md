@@ -59,7 +59,7 @@ itself here means the routing has failed; fix the routing.
 | **Deciding what to build, or a technical call** | [`product/brain.md`](docs/product/brain.md). Scope needs a human yes — invariant 12 |
 | **Reviewing a milestone** | [`product/review-method.md`](docs/product/review-method.md); the register is [`review.md`](docs/product/review.md) |
 | **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 31 ADRs. Don't read them front to back |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D81**, each with a trigger. Check before "fixing" an apparent gap |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D82**, each with a trigger. Check before "fixing" an apparent gap |
 | **Running it locally** | [`README.md`](README.md) § Getting started |
 | **Anything else** | [`docs/README.md`](docs/README.md) — the fuller index this file delegates to |
 
@@ -155,6 +155,7 @@ Fuller tree: [architecture.md](docs/architecture.md). Three rules it does not sh
 | `apps/web/src/lib/startup.test.tsx` | `RestoreGate` and the route guard's `networkMode` (D49) |
 | `packages/shared/src/contract.test.ts` | Every response field is tolerant of an older server — the web and API deploy separately (D54) |
 | `scripts/check-schema-barrel.mjs` | A domain table missing from the barrel |
+| `scripts/check-cloudbuild-subs.mjs` | A `$UPPER` token Cloud Build rejects the whole config over — **it cannot be caught in the pipeline**, since a rejected config runs no steps (D82) |
 | `cloudbuild.deploy.yaml` | typecheck → lint → test → build → deploy on push. **The real pipeline** — Actions does not run here, and the workflow that claimed to is deleted (D24). Editing it needs a trigger delete-and-recreate (D25) |
 
 `pnpm` settings live in `pnpm-workspace.yaml`, not `.npmrc`.

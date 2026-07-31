@@ -140,8 +140,15 @@ steps:
           exit 0
         fi
 
-        # Lowercase shell variables on purpose: Cloud Build substitutes $UPPERCASE and ${UPPERCASE}
-        # before bash ever sees this script, so an uppercase name would need $$ escaping.
+        # Lowercase shell variables on purpose. Cloud Build resolves every dollar-prefixed
+        # upper-case name in this file — braced or not — as a substitution BEFORE bash sees the
+        # script, so an upper-case shell variable would need its dollar doubled to survive.
+        # Lower-case names are never touched.
+        #
+        # And note WHERE that applies: a `#` comment inside a `|` block is part of the step's args,
+        # not a YAML comment, so writing the offending token here even as an example is enough to
+        # have the whole config REJECTED before step one — which is exactly what happened on
+        # 2026-07-31 (debt D82). `scripts/check-cloudbuild-subs.mjs` now fails `pnpm lint` on it.
         base=""
         if [ -n "${_BEFORE}" ] \
            && [ "${_BEFORE}" != "0000000000000000000000000000000000000000" ] \
