@@ -396,8 +396,10 @@ function NowBody({
             rather than a scolding.
           */}
           <Link
-            to="/documents"
-            search={{ scan: 'no' }}
+            to="/library"
+            // The Documents scope, not All: `has_file` is a document-only filter, so landing on a
+            // list that also holds things would show rows the filter says nothing about.
+            search={{ scope: 'documents', scan: 'no' }}
             className="flex min-h-[3.75rem] items-center gap-3.5 rounded-3 border border-rule bg-sunken px-4 py-3.5 transition-colors active:bg-rule/40 hover:bg-rule/40"
           >
             <span

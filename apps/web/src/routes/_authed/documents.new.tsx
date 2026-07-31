@@ -32,7 +32,8 @@ function NewDocumentPage() {
   return (
     <div>
       <Link
-        to="/documents"
+        to="/library"
+        search={{ scope: 'documents' }}
         className="-ml-1 inline-flex min-h-tap items-center gap-[7px] px-1 text-body font-medium text-ink-2"
       >
         <span
@@ -47,8 +48,8 @@ function NewDocumentPage() {
       </h1>
 
       <CaptureWizard
-        onCancel={() => void navigate({ to: '/documents' })}
-        onDone={() => void navigate({ to: '/documents' })}
+        onCancel={() => void navigate({ to: '/library', search: { scope: 'documents' } })}
+        onDone={() => void navigate({ to: '/library', search: { scope: 'documents' } })}
       />
     </div>
   )

@@ -4,7 +4,14 @@
 - **Date:** 2026-07-30
 - **Supersedes:** the navigation decision in [ADR-0029](0029-the-things-domain.md) (the domain
   switcher), and the *three tabs, forever* rule in [ADR-0025](0025-ledger-design-system.md) §4
-- **Superseded by:** —
+- **Superseded by:** [ADR-0032](0032-one-library-tab.md) — the bar is `Now · Everything · You` and
+  the two collections share one screen. **What this ADR fixed is preserved rather than undone**:
+  Things is still one tap from anywhere and is not hidden behind Documents. What 0032 changes is that
+  the domains stop being separate *screens* at all, which is a shape this ADR did not consider — it
+  weighed a fourth tab against a switcher between two screens, and the merged list is neither. Its
+  *What happens at domain three* section, its measurement procedure, and its two navigation rules
+  (no dropdown; navigation is `<Link>`s with `aria-current`) all still hold. The body below is left
+  exactly as accepted (ADR-0015): read 0032 for what changed and why.
 
 ## Context
 
