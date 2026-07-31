@@ -35,8 +35,9 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 **Three caveats, all real:**
 
 - **CI is `cloudbuild.deploy.yaml`, not GitHub Actions.** Both halves now deploy on push (D22
-  fixed), but Actions never runs on this account, so `.github/workflows/ci.yml` enforces nothing
-  (debt D24) and editing the Cloud Build config needs a delete-and-recreate (debt D25).
+  fixed), but Actions never runs on this account, so the workflow file that claimed to enforce
+  anything was deleted (debt D24) and editing the Cloud Build config needs a delete-and-recreate
+  (debt D25).
 - **`SIGTERM` graceful shutdown is still unverified** (debt D14). Windows does not deliver POSIX
   signals — but Cloud Run does, and `--min-instances=0` fires it several times a day, so this is
   now checkable from the logs with no deploy required. Nobody has looked.

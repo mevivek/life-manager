@@ -8,8 +8,9 @@ people, and secrets that make up a life.
 not restate it, because asserting deployment status in five files is what drifted at M0 and again at M1
 (debt D28); § Deploying below covers *how* to deploy, not whether it has been.
 
-One caveat that matters more than it looks: **CI is not GitHub Actions.** `.github/workflows/ci.yml`
-is committed, looks authoritative, and never executes — see § Deploying.
+One caveat that matters more than it looks: **CI is not GitHub Actions**, and there is no workflow
+file — Actions has never run on this repository, so the `ci.yml` that used to sit there was deleted
+rather than fixed (debt D24). The pipeline is `cloudbuild.deploy.yaml` — see § Deploying.
 
 ---
 
@@ -441,12 +442,11 @@ nothing to already-built assets.
 assigned, no steps and no logs — an account-level block, on every commit, including ones predating
 any workflow change. Billing was corrected and a fresh push still failed identically.
 
-So **two files claim to be CI, and only one of them runs:**
-
-| File | Status |
-|---|---|
-| `.github/workflows/ci.yml` | **Never executes.** Kept because it is correct — if Actions is unblocked it takes over and the Cloud Build trigger can be deleted |
-| `cloudbuild.deploy.yaml` | **This is the real pipeline** |
+**One file is CI, and it is not a GitHub Actions workflow.** `cloudbuild.deploy.yaml` is the real
+pipeline. There is no `.github/workflows/ci.yml`: it described this same sequence in 194 convincing
+lines and executed nothing, so it was deleted on 2026-07-30 (debt D24) and
+[`.github/workflows/README.md`](.github/workflows/README.md) says why in its place. If Actions is
+ever unblocked, that stub is where to start — and then the Cloud Build trigger and its webhook can go.
 
 Trigger `deploy-api-on-push` is a **webhook** trigger, fired by a GitHub push webhook. A webhook
 trigger was chosen because it needs no browser step: connecting a repository to Cloud Build
