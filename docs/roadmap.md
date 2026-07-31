@@ -17,6 +17,20 @@ R2, VAPID, the Neon rotation and now `CRON_SECRET` plus the Cloud Scheduler job 
 documents are in; and the daily scan has been called against production and reported
 `found: 1, delivered: 0, undelivered: 1` — the mechanism working, with no push subscription to deliver to.
 
+**The Cloud Build trigger was deleted and recreated on 2026-07-31**, which is how a change to
+`cloudbuild.deploy.yaml` reaches production at all (debt **D25** — the trigger holds an inline snapshot
+and `gcloud builds triggers update webhook` cannot replace it). Two changes went live with it:
+
+- **`_BEFORE=$(body.before)` added to its substitutions**, which activates the D62 guard fix — the
+  pushed range rather than the tip alone. Verified present on the new trigger, along with the new
+  `checks` step, so the snapshot is confirmed to be the post-#32 config.
+- **No `machineType`**, confirmed by reading `build.options.machineType` off the live trigger and
+  getting nothing back. An earlier recreation had already picked that up, so the free tier was in
+  effect before this one.
+
+The recreate was run from a clone at `f78aebf`, because `--inline-config` reads a local file — a stale
+checkout would have installed a stale pipeline with nothing to say so.
+
 **What is left is not code.** Turn reminders on from the You screen, call the endpoint again, and see the
 notification. Until one has actually been *seen*, M1's "done when" is unmet. Then lens 4 of the review
 wants a week of real use. See §4.6–7 below.
