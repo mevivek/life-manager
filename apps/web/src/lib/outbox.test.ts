@@ -40,7 +40,6 @@ const documentBody = (overrides: Record<string, unknown> = {}) => ({
   identifier: null,
   holder: null,
   relation: null,
-  identifier_last4: null,
   issued_on: null,
   expires_on: null,
   country: null,

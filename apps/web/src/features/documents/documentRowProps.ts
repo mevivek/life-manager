@@ -25,18 +25,27 @@ import { numberLabelFor } from './presets'
  * site is how the two lists drift apart a second time.
  */
 
-/** The revealed-number state the archive's header toggle and the per-row buttons share (ADR-0027). */
+/**
+ * What a list has to supply for its rows to draw numbers at all (ADR-0027, amended by ADR-0036).
+ *
+ * It used to carry the revealed set, `revealAll` and a toggle, because the archive header had a
+ * page-wide Show. ADR-0036 replaced that with a device preference on the You screen, so reveal is
+ * per-row state inside `DocumentRow` and nothing about it needs hoisting. What is left is the one
+ * thing a row genuinely cannot do for itself: tell the *page* to say something.
+ */
 export type NumberDisplay = {
-  /** Ids the user has opened individually. A page-wide toggle is `revealAll`, not a filled set. */
-  revealedIds: ReadonlySet<string>
-  revealAll: boolean
-  onToggle: (documentId: string) => void
   /** Called with the number's label after a successful copy, so the page can say so. */
   onCopied: (label: string) => void
+  /**
+   * Called when the clipboard refuses — an insecure origin, a denied permission. Separate from
+   * `onCopied` so the page can say which happened; the failure used to be answered by revealing the
+   * row, which is neither available nor useful now that the value is on screen by default.
+   */
+  onCopyFailed: (label: string) => void
 }
 
 /**
- * The number line and its Copy / Show controls, or `undefined` when the row draws none.
+ * The number line and its Copy control, or `undefined` when the row draws none.
  *
  * `undefined` in two cases, and they are different: the caller passed no display state at all (the
  * Now screen's cards, which deliberately show no numbers), or this document simply has no identifier.
@@ -51,9 +60,7 @@ export function documentNumberProps(
 
   return {
     label,
-    revealed: numbers.revealAll || numbers.revealedIds.has(document.id),
     grouped: groupForReading(document.identifier),
-    onToggleReveal: () => numbers.onToggle(document.id),
     onCopy: () => {
       // `document.identifier` is non-null in this branch; the closure captures the narrowed value
       // rather than re-reading it, so a re-render cannot make it null underneath.
@@ -62,9 +69,10 @@ export function documentNumberProps(
         .writeText(value)
         .then(() => numbers.onCopied(label))
         .catch(() => {
-          // Clipboard access can be refused (insecure origin, denied permission). Revealing is the
-          // fallback that always works, because the value becomes selectable — never a silent no-op.
-          numbers.onToggle(document.id)
+          // Clipboard access can be refused (insecure origin, denied permission). Say so — the old
+          // fallback revealed the row, which is meaningless now that the number is on screen unless
+          // the user has asked otherwise. Never a silent no-op.
+          numbers.onCopyFailed(label)
         })
     },
   }

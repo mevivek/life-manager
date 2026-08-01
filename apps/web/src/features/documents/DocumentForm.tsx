@@ -284,21 +284,21 @@ export function DocumentForm({
       issued_on: initial?.issued_on ?? '',
       expires_on: initial?.expires_on ?? '',
       /**
-       * The FULL identifier, not the mask — ADR-0026.
+       * The FULL identifier — ADR-0026.
        *
-       * This read `initial?.identifier_last4` while the API stored only four characters. Now that it
-       * stores the whole value, populating the form from the mask would mean **opening a document,
-       * saving nothing, and having its number silently replaced by its own last four digits** — the
-       * edit form quietly destroying the field it was showing. `identifier` is on
-       * `DocumentDetailResponse` and nowhere else, which is exactly the shape this prop has.
+       * This read `initial?.identifier_last4` while the API stored only four characters. Once it
+       * began storing the whole value, populating the form from a mask would have meant **opening a
+       * document, saving nothing, and having its number silently replaced by its own last four
+       * digits** — the edit form quietly destroying the field it was showing. There is no mask field
+       * left to read by mistake (ADR-0036 dropped it), and this note stays because the shape of that
+       * bug outlived the column: seed an editor from a *display* value and you save the display.
        */
       /**
        * Formatted on load, not raw.
        *
        * Submitting the formatted string is consistent with create, which already stores what the field
-       * holds — and `identifier_last4` is derived from the END of the value, so grouping spaces cannot
-       * change the mask. What it avoids is an edit form that shows a saved number differently from the
-       * screen you just came from.
+       * holds. What it avoids is an edit form that shows a saved number differently from the screen
+       * you just came from.
        */
       identifier: formatNumber(storedFormat, initial?.identifier ?? ''),
       holder: initial?.holder ?? '',
@@ -744,8 +744,8 @@ export function DocumentForm({
           }}
         />
         <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
-          Stored in full, shown as the last four until you tap Reveal. Leave it blank if you don’t
-          have it to hand.
+          Stored in full, and shown in full — You lets you hide it behind the last four. Leave it
+          blank if you don’t have it to hand.
         </p>
       </div>
 

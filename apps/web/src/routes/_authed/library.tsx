@@ -29,7 +29,6 @@ import { coverOf } from '@/features/things/CoverStatus'
 import { SumInsuredCard } from '@/features/things/SumInsuredCard'
 import { ThingRow } from '@/features/things/ThingRow'
 import { useThings } from '@/features/things/useThings'
-import { cn } from '@/lib/utils'
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════════════
@@ -179,16 +178,16 @@ function LibraryPage() {
   const scope = search.scope
 
   /**
-   * Revealed numbers — ADR-0027. Two pieces of state, not one; the archive's note applies unchanged.
+   * The copy confirmation, and nothing else.
    *
-   * `revealAll` is the header toggle and `revealedIds` is the per-row one. With one set, turning the
-   * header off after revealing a single row would have to remember which rows the *user* opened, and
-   * turning it on would have to enumerate rows not yet fetched. Neither persists — a "keep revealed"
-   * preference would be a way to leave every number on screen permanently, which is the opposite of
-   * what masking is for.
+   * ── The page-wide Show/Hide that used to live here is gone — ADR-0036 ──
+   *
+   * It came with two pieces of state (`revealAll` for the header, `revealedIds` for the rows), which
+   * existed because one set could not answer both questions: turning the header off after opening a
+   * single row would have to remember which rows the *user* opened, and turning it on would have to
+   * enumerate rows not yet fetched. All of that was in service of a control that said, per page, what
+   * the You screen's preference now says once — so it and its state came out together.
    */
-  const [revealAll, setRevealAll] = useState(false)
-  const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(() => new Set())
   const [copied, setCopied] = useState<string | null>(null)
 
   const documentQuery = toDocumentQuery(search)
@@ -222,18 +221,12 @@ function LibraryPage() {
   const everyThing = allThings.data?.data ?? []
   const complete = documents.data?.next_cursor === null && things.data?.next_cursor === null
 
-  /** The revealed-number state, shared by the header toggle and every row (ADR-0027). */
+  /** What a row's Copy button reports back, so the page can say it (ADR-0027, amended by ADR-0036). */
   const numbers: NumberDisplay = {
-    revealedIds,
-    revealAll,
-    onToggle: (documentId) =>
-      setRevealedIds((previous) => {
-        const next = new Set(previous)
-        if (next.has(documentId)) next.delete(documentId)
-        else next.add(documentId)
-        return next
-      }),
-    onCopied: setCopied,
+    onCopied: (label) => setCopied(`${label} copied`),
+    // Never silent: a clipboard refused by an insecure origin or a denied permission says so, and the
+    // number is on screen to select either way.
+    onCopyFailed: (label) => setCopied(`Couldn’t copy the ${label} — select it on the row instead`),
   }
 
   /** Patch the URL. `replace` throughout, so a filter change does not stack a history entry. */
@@ -306,40 +299,16 @@ function LibraryPage() {
 
             <div className="flex shrink-0 items-center gap-0.5">
               {/*
-                Show / hide every number on the page — ADR-0027. Drawn only when the loaded page
-                actually holds one: a control that reveals nothing is worse than no control, because
-                it implies the list holds numbers it does not.
+                ── The page-wide Show/Hide was here, and ADR-0036 removed it ──
 
-                **Not scope-gated.** A document row draws its number line in every scope now — one
-                row builder, one shape — so a toggle that appeared only under Documents would leave
-                the numbers on an `All` list with no way to hide them.
+                It revealed every number on the loaded page at once, which is a per-page answer to a
+                question the user only ever answers once: whether numbers should be visible on this
+                device. That is a preference, and it lives on the You screen now. Two controls for one
+                decision is how they end up disagreeing — and this one could only ever speak for the
+                rows already fetched.
+
+                Do not re-add it without superseding ADR-0036.
               */}
-              {documentRows.some((row) => row.identifier !== null) && (
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  className="shrink-0 gap-1.5 text-meta text-ink-2"
-                  onClick={() => {
-                    setRevealAll((previous) => !previous)
-                    // Turning the page-wide toggle OFF clears rows the user opened individually
-                    // too. Otherwise "hide" leaves numbers on screen, which is the one thing the
-                    // control promises not to do.
-                    setRevealedIds(new Set())
-                  }}
-                  aria-pressed={revealAll}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      'font-mono text-[0.6875rem] tracking-label uppercase',
-                      revealAll ? 'text-ink' : 'text-ink-3',
-                    )}
-                  >
-                    {revealAll ? '••••' : '1234'}
-                  </span>
-                  {revealAll ? 'Hide' : 'Show'}
-                </Button>
-              )}
               <SearchToggle
                 open={false}
                 active={search.q.trim() !== ''}
@@ -492,8 +461,10 @@ function LibraryPage() {
         Add
       </button>
 
-      {/* The copy confirmation. A PLAIN toast — there is nothing to undo about a clipboard write. */}
-      {copied !== null && <Toast message={`${copied} copied`} onDismiss={() => setCopied(null)} />}
+      {/* The copy outcome. A PLAIN toast — there is nothing to undo about a clipboard write, and a
+          refused one still has to be said out loud. The message is built by `numbers` above, because
+          success and failure are different sentences. */}
+      {copied !== null && <Toast message={copied} onDismiss={() => setCopied(null)} />}
     </div>
   )
 }

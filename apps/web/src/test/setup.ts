@@ -20,6 +20,16 @@ afterEach(() => {
   cleanup()
   // Undoes any per-test `server.use(...)` override, so tests stay order-independent (§5).
   server.resetHandlers()
+  /**
+   * And any preference a test wrote — the theme, the feel keys, `numbers` (ADR-0036).
+   *
+   * jsdom keeps one `localStorage` for the whole file, so a test that sets a preference silently
+   * changes what every test after it renders. That is the same order-dependence `resetHandlers`
+   * exists to prevent, and it now has real teeth: `feel.numbers` decides whether a number is drawn
+   * in full or masked, so a leak turns "shows the number" into a passing test of the wrong thing.
+   * `theme.test.ts` and `feel.test.ts` clear it themselves and can keep doing so; this is the floor.
+   */
+  localStorage.clear()
 })
 
 afterAll(() => {

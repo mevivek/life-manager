@@ -234,15 +234,16 @@ function YouPage() {
       {/* ── Reminders ── */}
       <PushStatus />
 
-      {/* ── Numbers ── */}
+      {/* ── Numbers ──
+          The card that used to *describe* masking now **owns** it — ADR-0036. Masking was
+          unconditional and reversed by a tap in three different places (a Reveal on the document
+          card, a Show on every row, a page-wide Show in the library header); it is one preference
+          here instead, and it is off by default. */}
       <Card tone="sunken" className="mt-5 p-card">
-        <p className="text-row font-medium leading-snug">
-          Numbers are stored, and hidden by default
-        </p>
+        <p className="text-row font-medium leading-snug">Numbers are kept in full</p>
         <p className="mt-1.5 text-body leading-relaxed text-ink-2 [text-wrap:pretty]">
-          Passport, Aadhaar, licence and policy numbers are kept in full, because a number you can’t
-          read is a number you’ll go and dig the original out for. On a document you see the last
-          four until you tap Reveal.
+          Passport, Aadhaar, licence and policy numbers are stored whole, because a number you can’t
+          read is a number you’ll go and dig the original out for.
         </p>
         {/*
           The comp says "kept in full and **encrypted at rest**". They are kept in full — ADR-0026 —
@@ -250,11 +251,29 @@ function YouPage() {
           for the vault. This paragraph is that sentence made true, and it is not a footnote: it is the
           only place the app tells its user how their Aadhaar number is actually held, so stating the
           limitation is what makes the sentence above it worth believing.
+
+          The last line is the honest framing of the setting below, and it is why hiding is a
+          preference rather than a protection: the value is in the response before anything is tapped
+          (ADR-0027), so what a mask buys is a stranger's glance, not a boundary.
         */}
         <p className="mt-2 text-meta leading-relaxed text-ink-3 [text-wrap:pretty]">
           They are not encrypted — the database holds them as text, like every other field. Hiding
           them is about shoulders near your screen, not about the server.
         </p>
+        <div className="mt-3.5 border-t border-rule pt-3.5">
+          <FeelChoice
+            label="On screen"
+            // "On this device" for the same reason the Feel section says it: this is localStorage,
+            // not the account, so the phone and the laptop can disagree on purpose.
+            hint="Hidden draws •••• and the last four, with a Show on each. On this device."
+            value={feel.numbers}
+            options={[
+              { value: 'shown', label: 'Shown' },
+              { value: 'hidden', label: 'Hidden' },
+            ]}
+            onChange={(value) => set('numbers', value as Feel['numbers'])}
+          />
+        </div>
       </Card>
 
       {/* ── App ── */}

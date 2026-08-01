@@ -99,14 +99,12 @@ export const things = pgTable(
      */
     serial: text('serial'),
 
-    /**
-     * The masked display form, derived from `serial` by `truncateSerialToLast4` on every write.
-     *
-     * Its own column rather than computed in the query, for the same reason
-     * `documents.identifier_last4` is: it is what rows render until the user reveals, and a
-     * client-derived mask would be a second implementation of a rule the server owns.
+    /*
+     * `serial_last4` was here, mirroring `documents.identifier_last4` — a derived copy of the last
+     * four characters of `serial`. Both were dropped by ADR-0036: serials are shown in full by
+     * default, and the mask a device asks for is cut from the value in the same response. Do not
+     * re-add it.
      */
-    serialLast4: text('serial_last4'),
 
     /** Starts the cover clock and drives the age line on the detail screen. */
     purchasedOn: date('purchased_on'),

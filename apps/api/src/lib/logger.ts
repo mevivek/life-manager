@@ -43,9 +43,10 @@ export const REDACTED_PATHS = [
    *
    * Until then the API truncated to four characters at the boundary, so the worst a log could leak
    * was a mask. It now stores the value in full, which means a request body or a detail response
-   * caught in a log line is a whole Aadhaar or passport number. `identifier_last4` is deliberately
-   * NOT redacted: it is the display form, it is in every list, and censoring it would make request
-   * logs unreadable while protecting nothing.
+   * caught in a log line is a whole Aadhaar or passport number.
+   *
+   * There is no `identifier_last4` to exempt any more — ADR-0036 dropped the derived column, and the
+   * mask is cut client-side. This one path is the whole rule for documents.
    */
   'identifier',
   '*.identifier',
@@ -56,9 +57,7 @@ export const REDACTED_PATHS = [
    * and in plaintext (invariant 7, ADR-0009), so a request body or a detail response caught in a log
    * line is a whole registration number.
    *
-   * `serial_last4` is deliberately NOT redacted, on the same reasoning as `identifier_last4`: it is
-   * the display form, it is on every list row, and censoring it would make request logs unreadable
-   * while protecting nothing.
+   * As with `identifier`, there is no `serial_last4` to exempt — ADR-0036 dropped it too.
    */
   'serial',
   '*.serial',

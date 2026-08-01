@@ -125,7 +125,6 @@ function ledgerDocument(overrides: Partial<Document> & { id: string }): Document
     holder: null,
     relation: null,
     identifier: null,
-    identifier_last4: null,
     thing_id: null,
     issued_on: null,
     expires_on: null,

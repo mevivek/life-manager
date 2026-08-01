@@ -31,7 +31,6 @@ function doc(overrides: Partial<Document> & { id: string }): Document {
     relation: null,
     // ADR-0027: the full value is on every document response, including the list.
     identifier: null,
-    identifier_last4: null,
     // ADR-0029: unlinked. The ledger partition does not read it, but the shape requires it.
     thing_id: null,
     issued_on: null,
@@ -201,7 +200,6 @@ function thing(overrides: Partial<Thing> & { id: string; name: string }): Thing 
     brand: null,
     model: null,
     serial: null,
-    serial_last4: null,
     purchased_on: null,
     price: null,
     currency: null,

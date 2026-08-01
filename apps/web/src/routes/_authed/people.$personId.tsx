@@ -122,7 +122,6 @@ function PersonRecords({
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(() => new Set())
 
   /** The `?holder=` value: the sentinel for you, the name itself for anybody else. */
   const holder = isYou ? YOU_PERSON_ID : name
@@ -134,23 +133,22 @@ function PersonRecords({
   const approx = documents.data?.next_cursor != null || things.data?.next_cursor != null ? '+' : ''
 
   /**
-   * Revealed numbers — ADR-0027, and only the per-row half.
+   * What a row's Copy button reports back — ADR-0027, amended by ADR-0036.
    *
-   * There is no page-wide "Show" here as there is on the library, and that is deliberate: a screen
-   * scoped to one person is the *worst* place to offer one tap that puts every identifier they hold on
-   * screen at once. Individually, as on every other list.
+   * This used to carry a revealed set and a per-row toggle, with a note explaining that there was no
+   * page-wide "Show" here as there was on the library: a screen scoped to one person is the *worst*
+   * place to offer one tap that puts every identifier they hold on screen at once.
+   *
+   * **That distinction is gone, and in the direction the note wanted.** ADR-0036 deleted the library's
+   * page-wide control outright and made masking a device preference, so no screen has a reveal-all and
+   * whether this person's numbers are visible is one answer given once on You — rather than a thing
+   * each list decides for itself. Reveal, where it applies at all, is per row and lives in `DocumentRow`.
    */
   const numbers: NumberDisplay = {
-    revealedIds,
-    revealAll: false,
-    onToggle: (documentId) =>
-      setRevealedIds((previous) => {
-        const next = new Set(previous)
-        if (next.has(documentId)) next.delete(documentId)
-        else next.add(documentId)
-        return next
-      }),
     onCopied: (label) => setToast(`${label} copied`),
+    // Never silent: a clipboard refused by an insecure origin or a denied permission says so, and the
+    // number is on screen to select either way.
+    onCopyFailed: (label) => setToast(`Couldn’t copy the ${label} — select it on the row instead`),
   }
 
   const attention = attentionOf(documentRows, isYou)

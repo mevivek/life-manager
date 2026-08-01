@@ -239,9 +239,8 @@ export type DocumentInsert = {
   title: string
   docType: DocumentType
   issuer: string | null
-  /** Full value — ADR-0026. Derived together with the mask by `identifierColumns` in the service. */
+  /** Full value — ADR-0026. Normalised by `identifierColumns` in the service, and stored as-is. */
   identifier: string | null
-  identifierLast4: string | null
   /** The thing this document belongs to, or `null` — ADR-0029. No FK yet; see the schema's note. */
   thingId: string | null
   issuedOn: string | null

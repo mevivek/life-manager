@@ -55,8 +55,7 @@ The logical document — "my passport" — independent of any particular scan of
 | `title` | `text not null` | Free text. The only field required at capture — see [Q2](../product/open-questions.md) |
 | `doc_type` | `enum not null` | `identity` · `financial` · `legal` · `warranty` · `receipt` · `certificate` · `other` |
 | `issuer` | `text null` | Who issued it. Free text with autocomplete — see §9 |
-| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on **every** document response including the list ([ADR-0027](../decisions/0027-identifier-in-the-list-response.md)). In pino's redaction list |
-| `identifier_last4` | `text null` | The **display** form, derived from `identifier` on every write. This is what lists show — §4 rule 6 |
+| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on **every** document response including the list ([ADR-0027](../decisions/0027-identifier-in-the-list-response.md)), and **shown** in full ([ADR-0036](../decisions/0036-numbers-shown-by-default.md)). In pino's redaction list |
 | `holder` | `text null` | Whose document it is, as a **label**. `null` means the owner's own — §4 rule 13 |
 | `relation` | `text null` | How the holder relates to the owner — "Wife", "Son (12)". Cosmetic, and `null` whenever `holder` is |
 | `issued_on` | `date null` | |
@@ -163,17 +162,22 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
 4. `version` is assigned by the server, monotonically per document. Clients never supply it.
 5. **The API always chooses `storage_key`.** A request containing a storage key, path, or
    destination filename is rejected ([ADR-0008](../decisions/0008-object-storage-r2.md)).
-6. **Store the full identifier; mask it for display.** Reversed by
-   [ADR-0026](../decisions/0026-store-the-full-identifier.md) — this rule previously truncated
-   to four characters at the API boundary. It now keeps the whole value in `identifier` and
-   **derives** `identifier_last4` from it server-side, so a client cannot send a mask that
-   disagrees with its number. **The full value is returned on every document response**, the
-   list included — [ADR-0027](../decisions/0027-identifier-in-the-list-response.md) reversed
-   0026's detail-only rule so the archive can show and copy a number without a round-trip, at
-   the cost of the persisted cache holding every number on the device (debt D47). Plaintext, by
-   explicit decision: encryption stays vault-only (invariant 7, ADR-0009), so no copy in the
-   app may claim otherwise. Revealing it in the UI is a display state, **not** an
-   authorization boundary.
+6. **Store the full identifier, and show it.** Rewritten twice. It originally truncated to four
+   characters at the API boundary; [ADR-0026](../decisions/0026-store-the-full-identifier.md)
+   reversed that and kept the whole value in `identifier`, with a derived `identifier_last4` as the
+   display form; [ADR-0027](../decisions/0027-identifier-in-the-list-response.md) put the full value
+   on **every** response including the list, at the cost of the persisted cache holding every number
+   on the device (debt D47); and [ADR-0036](../decisions/0036-numbers-shown-by-default.md) removed
+   the mask from in front of it.
+
+   As it stands: the whole value is stored, returned everywhere, and **rendered in full by default**.
+   `identifier_last4` no longer exists — the column, the derivation and the response field are all
+   gone, because a mask travelling in the same response as the value it masks is a copy of that
+   value. Hiding a number is the device preference `feel.numbers` (**off by default**, shared with a
+   thing's serial, set on the You screen), and when it is on the mask is cut client-side. Plaintext,
+   by explicit decision: encryption stays vault-only (invariant 7, ADR-0009), so no copy in the app
+   may claim otherwise. Hiding it in the UI is a display state, **not** an authorization boundary —
+   the value is in the payload before anything is tapped.
 7. Setting or changing `expires_on` reconciles that document's pending reminders. Clearing
    it deletes them.
 8. Default lead times are 90, 30, and 7 days before expiry — created automatically for
@@ -339,8 +343,10 @@ the expiry ladder and the navigation rule; this section records what the screens
   carrying the reminder chips → *Details* (including *Whose*, which reads **Mine** rather than
   disappearing — it is a `<dl>` of every field, the same way an absent country reads "Not set" — and the
   per-type `custom_attrs`, read-only) → the
-  `•••• last4` block and its explanation → *Scans* → a quiet text-only delete → **the page foot: when the
-  record was added, and when it last changed**. Inline preview is M2.
+  number block with Copy and its explanation → *Scans* → a quiet text-only delete → **the page
+  foot: when the record was added, and when it last changed**. Inline preview is M2. The number is
+  drawn in full unless `feel.numbers` is `hidden`, in which case it is `•••• last4` with a Reveal
+  ([ADR-0036](../decisions/0036-numbers-shown-by-default.md)).
 
   **The foot sits *below* the delete, and it is `RecordMeta` on both detail screens** — the same
   component the thing screen ends on ([things.md](things.md) §7), because two screens stating one fact in
@@ -357,6 +363,14 @@ the expiry ladder and the navigation rule; this section records what the screens
   own. The pill is `shrink-0` and the title `min-w-0 truncate`, so a long title shortens and the
   **name never does** — a name truncated to "Priy…" loses the only thing distinguishing two otherwise
   identical documents.
+- **A row's number is drawn bare — no label in front of it, and it wraps rather than truncating.**
+  ADR-0027 labelled it because the row showed `•••• 8109` and four characters need telling apart from
+  the four on the row below; once ADR-0036 showed the whole value, the title one line up was already
+  naming the document and the label was saying it twice. The label survives where it is not redundant:
+  as the **detail card's** heading, and as the accessible name of the row's Copy and Show controls
+  ("Copy Aadhaar number for Aadhaar"), which a screen reader has no title-then-value adjacency to
+  infer from. Truncating was the D37 clipping bug in a new place — a number you cannot finish reading
+  is worse than a mask, because a mask at least says it is one.
 - **The people picker** (`DocumentForm`) — *Whose document is it?* as a chip row: **Me**, one chip per
   known holder, and a dashed **Someone else** that opens *Their name* / *How they're related*.
 

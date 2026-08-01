@@ -63,8 +63,7 @@ not repeated. `space_id` is on every one of them (invariant 2).
 | `kind` | `enum not null` | `phone` · `laptop` · `tablet` · `vehicle` · `appliance` · `av` · `furniture` · `tool` · `valuable` · `other` |
 | `brand` | `text null` | The make. Free text with suggestions — §9(1) |
 | `model` | `text null` | |
-| `serial` | `text null` | **The full value**, plaintext, masked for display — the same decision as a document's `identifier` ([ADR-0026](../decisions/0026-store-the-full-identifier.md)). What it is *called* depends on the kind: IMEI, registration, hallmark, order number |
-| `serial_last4` | `text null` | The **display** form, derived from `serial` on every write. Never sent by a client |
+| `serial` | `text null` | **The full value**, plaintext, and shown in full — the same decisions as a document's `identifier` ([ADR-0026](../decisions/0026-store-the-full-identifier.md), [ADR-0036](../decisions/0036-numbers-shown-by-default.md)). What it is *called* depends on the kind: IMEI, registration, hallmark, order number |
 | `purchased_on` | `date null` | Starts the cover clock and drives `age` |
 | `price` | `numeric null` | What was paid. Never a float ([conventions/data.md](../conventions/data.md) §4) |
 | `currency` | `char(3) null` | Non-null whenever `price` is |
@@ -187,10 +186,14 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
    there rather than trusting a paraphrase. `null` means "mine" and is drawn as *absence*: no "Me"
    badge anywhere.
 
-7. **Store the full serial; mask it for display.** `serial_last4` is **derived** server-side, so a
-   client cannot send a mask that disagrees with its value. Plaintext, by the same explicit decision as
+7. **Store the full serial, and show it.** Amended by
+   [ADR-0036](../decisions/0036-numbers-shown-by-default.md): this rule used to add *"mask it for
+   display"* and carried a derived `serial_last4` column so a client could not send a mask that
+   disagreed with its value. Both are gone. Masking is now the device preference `feel.numbers`
+   (**off by default**, shared with documents, set on the You screen), and when it is on the mask is
+   cut from the full value client-side. Plaintext, by the same explicit decision as
    `documents.identifier` (invariant 7, [ADR-0009](../decisions/0009-sensitivity-tiers.md)) — so **no
-   copy in the app may say "encrypted"**. Revealing it is a display state, not an authorization
+   copy in the app may say "encrypted"**. Hiding it is a display state, not an authorization
    boundary. `serial` goes in pino's `REDACTED_PATHS` alongside `identifier`.
 
 8. **What the serial is *called* depends on the kind**, and the label is always visible. IMEI for a
@@ -311,12 +314,14 @@ and the rows. The **kind filter chips are gone** — [ADR-0033](../decisions/003
 matching handoff 5, which draws the library header as the scope pills and nothing else. `?kind=` still
 filters server-side; only the row of chips that drew it was removed.
 
-**A vehicle's registration is not masked** (ADR-0033). Rule 7 stores every serial in plaintext and
-rule 8 labels it per kind; what changes is that `ThingSerial` draws a `vehicle`'s in full with **no
-Show control**, and `ThingRow` draws it as a **plate** — the only serial that appears on a row at all.
-The reasoning is physical: a registration is painted on the outside of the object, so masking it
-protects nothing from shoulders near the screen and costs a tap on the one number an owner reads
-aloud. Every other kind — IMEI, laptop serial, hallmark — is *inside* the object and stays masked.
+**A vehicle's registration is never masked** (ADR-0033), at either setting of `feel.numbers`.
+`ThingSerial` draws a `vehicle`'s in full with **no Show control**, and `ThingRow` draws it as a
+**plate** — the only serial that appears on a row at all. The reasoning is physical: a registration is
+painted on the outside of the object, so hiding it protects nothing from shoulders near the screen and
+costs a tap on the one number an owner reads aloud. Since ADR-0036 every other kind is shown by
+default too; the difference that survives is that a plate is the one value the *preference* cannot
+reach, because an IMEI or a hallmark is **inside** the object and hiding one is a choice worth
+offering.
 
 > **The scope pills are not the domain switcher coming back**, and the difference is the whole reason
 > ADR-0032 is a different decision from ADR-0031 rather than a reversal of it.
@@ -344,7 +349,7 @@ aloud. Every other kind — IMEI, laptop serial, hallmark — is *inside* the ob
 
 **Thing (detail).** Hero photo → name and kind → ownership banner if away → the **cover card** (tag,
 dates, bar, words, age, and the service tag) → service history with *"Serviced today — log it"* →
-facts (bought, paid, kept) → the masked serial with Copy and Show → *"Papers this one needs"* for a
+facts (bought, paid, kept) → the serial with Copy (and Show, if masking is on) → *"Papers this one needs"* for a
 vehicle → *"Its documents"* → photos → *"Build a claim pack"* → *"It's not with me any more"* →
 delete → **the page foot: when the record was added, and when it last changed**.
 

@@ -2,20 +2,25 @@ import { SERIAL_LABELS, type ThingKind } from '@life-manager/shared'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { maskedNumber } from '@/lib/mask'
+import { useFeel } from '@/lib/useFeel'
 
 /**
- * The thing's serial: masked by default, revealed on request, copyable. The sibling of
- * `features/documents/IdentifierCard.tsx`, and it should stay recognisably one.
+ * The thing's serial: shown in full, copyable, masked only if the user asked for that. The sibling of
+ * `features/documents/IdentifierCard.tsx`, and it should stay recognisably one — including in this:
+ * **one preference governs both**, so a person who hides their Aadhaar number does not have to find a
+ * second switch for their IMEI.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
- *  The mask is a display state, NOT a security boundary — and nothing here is encrypted.
+ *  Shown by DEFAULT (ADR-0036). The mask is a preference, and never was a boundary.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
  * things.md §4 rule 7 stores the serial in **full, plaintext**, exactly as ADR-0026 does a document's
  * identifier. So the whole value is already in this component's props by the time it renders: it
  * arrived on the detail response and the server does not gate it. Hiding it is about **shoulders near
  * the screen** — authorization is server-side and UI gating is not a boundary, so this deliberately
- * does not pretend to be one.
+ * does not pretend to be one, and a mask that costs a tap on every reading of a serial you keep the
+ * app *for* is not worth making unconditional.
  *
  * And **no copy in this file may say "encrypted"**. Invariant 7 and ADR-0009 reserve
  * application-level encryption for the vault; this is not the vault. That is debt **D44**, and the
@@ -58,15 +63,13 @@ export function ThingSerial({
    * shape: the cache is the one input in the app that is older than the code reading it.
    */
   serial,
-  /** The mask, derived server-side (`serial_last4`). Shown until the user reveals. */
-  last4,
   /** Decides the label, per rule 8. */
   kind,
 }: {
   serial: string | null | undefined
-  last4: string | null | undefined
   kind: ThingKind
 }) {
+  const { feel } = useFeel()
   const [revealed, setRevealed] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -81,14 +84,17 @@ export function ThingSerial({
    * mechanic, an insurer, a parking attendant — and protects nothing, because the threat the mask
    * addresses is shoulders near the screen and the plate is already public to them.
    *
-   * Every other kind stays masked. An IMEI, a laptop serial and a hallmark are all *inside* the
-   * object, and reading one off a stranger's screen is exactly the case rule 7's mask is for.
+   * Every other kind is maskable — and, since ADR-0036, only actually masked when `feel.numbers` is
+   * `hidden`. An IMEI, a laptop serial and a hallmark are all *inside* the object, which is the case
+   * rule 7's mask is for; a plate is not, so it stays exempt at both settings rather than becoming a
+   * value the preference could hide. Nothing to toggle means no toggle drawn.
    *
    * This does not change what is stored or what the server returns — the value was always plaintext
-   * (things.md §4 rule 7, ADR-0026). It changes only whether this component hides it by default.
+   * (things.md §4 rule 7, ADR-0026). It changes only whether this component hides it.
    */
   const isPlate = kind === 'vehicle'
-  const shown = isPlate || revealed
+  const masking = feel.numbers === 'hidden' && !isPlate
+  const shown = !masking || revealed
 
   // `== null` catches BOTH null and undefined — see the note on the prop. No serial, no card: an empty
   // bordered box under the facts reads as a field that failed to load.
@@ -104,7 +110,11 @@ export function ThingSerial({
           "Version 1" clipping bug (D37) in a different field.
 
           Tracking is wide while masked, so `•••• 4471` reads as a deliberate format, and tight when
-          revealed, so a long value fits.
+          shown, so a long value fits.
+
+          The mask is derived here from the full value (`maskedNumber`) rather than read from a server
+          field — ADR-0036 dropped `serial_last4`, which was a copy of the last four characters of a
+          value sitting in the same response.
         */}
         <span
           className={
@@ -113,7 +123,7 @@ export function ThingSerial({
               : 'min-w-0 flex-1 font-mono text-number font-medium tracking-mask'
           }
         >
-          {shown ? serial : `•••• ${last4 ?? serial.slice(-4)}`}
+          {shown ? serial : maskedNumber(serial)}
         </span>
         {/*
           44px (`--tap-min`), per design.md §6 — `Button`'s `sm` size is narrower, never shorter, so
@@ -122,9 +132,10 @@ export function ThingSerial({
           The accessible name says what the control DOES and names the field it does it to. There is
           more than one masked value in this app already, and "Hide" alone is ambiguous between them.
         */}
-        {/* No Show/Hide on a plate — there is nothing hidden to toggle, and a control whose two
-            states look identical is worse than no control. */}
-        {!isPlate && (
+        {/* No Show/Hide on a plate, and none while numbers are shown — there is nothing hidden to
+            toggle in either case, and a control whose two states look identical is worse than no
+            control. */}
+        {masking && (
           <Button
             variant="secondary"
             size="sm"
@@ -151,8 +162,9 @@ export function ThingSerial({
               setTimeout(() => setCopied(false), 2000)
             } catch {
               // Clipboard access is refused in some contexts (an insecure origin, a denied
-              // permission). Revealing is the fallback that always works — the user can then select
-              // the value, which is what `selectable` is for. Never a silent no-op.
+              // permission). Showing the value is the fallback that always works — the user can then
+              // select it, which is what `selectable` is for. Never a silent no-op. With numbers
+              // shown it is already selectable, so this only has work to do while the mask is on.
               setRevealed(true)
             }
           }}
@@ -166,7 +178,10 @@ export function ThingSerial({
           furniture to read.
         */}
         <span className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
-          Stored in full so you don’t have to go and read it off the thing. Hidden until you ask.
+          Stored in full so you don’t have to go and read it off the thing.{' '}
+          {masking
+            ? 'Hidden until you ask, because you asked for that.'
+            : 'Shown because it’s yours.'}
         </span>
       </div>
     </Card>
