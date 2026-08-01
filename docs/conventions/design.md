@@ -511,6 +511,7 @@ apps/web/src/lib/voice.ts                    the two copy registers (§12)
 apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton stat
 apps/web/src/components/TabBar.tsx           three tabs — Now · Everything · You (§8)
 apps/web/src/components/PhotoViewer.tsx      the full-screen image viewer for scans and photos
+apps/web/src/components/RecordMeta.tsx       the page foot both detail screens end on — added / updated
 apps/web/src/features/documents/
   ExpiryStatus.tsx                           the expiry ladder — five states (§2)
   DocumentRow.tsx                            the row every document list is made of

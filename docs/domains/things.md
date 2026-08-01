@@ -346,8 +346,12 @@ aloud. Every other kind — IMEI, laptop serial, hallmark — is *inside* the ob
 dates, bar, words, age, and the service tag) → service history with *"Serviced today — log it"* →
 facts (bought, paid, kept) → the masked serial with Copy and Show → *"Papers this one needs"* for a
 vehicle → *"Its documents"* → photos → *"Build a claim pack"* → *"It's not with me any more"* →
-delete.
+delete → **the page foot: when the record was added, and when it last changed**.
 
+- **The page foot is `RecordMeta`, the same component the document screen ends on**
+  ([documents.md](documents.md) §7 holds the rules — local day, no `version`, no id). It is below the
+  delete rather than above it: provenance is the quietest fact on the screen and the only one nobody
+  opens the app to ask, so delete stays the last *control* while this reads last.
 - **"Papers this one needs" is a 2×2 grid, and only vehicles have one.** Four slots — registration,
   insurance, roadworthiness, service record. A filled slot is solid and carries the document's own
   expiry status; an empty one is dashed and says "Not filed". Tapping an empty slot opens capture
