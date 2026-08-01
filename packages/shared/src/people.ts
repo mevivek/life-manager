@@ -29,9 +29,19 @@ export const MAX_PERSON_NAME_LENGTH = 120
 export const MAX_RELATION_LENGTH = 60
 
 /**
- * The relations offered as chips, from the comp. **Suggestions, never an enum on the wire** — the
- * field takes any string, because "Flatmate", "Business partner" and "Mother-in-law" are all real
- * answers and a closed list would make the app argue with its user about their own household.
+ * The relations offered as chips. **Suggestions, never an enum on the wire** — the field takes any
+ * string, because "Flatmate", "Business partner" and "Mother-in-law" are all real answers and a
+ * closed list would make the app argue with its user about their own household.
+ *
+ * The comp's eight, plus **Sibling and Cousin** — asked for after using it, because the comp's list
+ * went straight from parents to `Household` and had no word for the rest of a family. They sit
+ * between Father and Household, which keeps the reading order intact: partner, children, parents,
+ * the wider family, then the catch-all.
+ *
+ * Ordering is not cosmetic — this array *is* the render order, and `Household` earns its place last
+ * by being the only entry that is not a person. Adding one here adds it to all three surfaces at
+ * once ([domains/people.md](../../../docs/domains/people.md) §7); the cost of a longer list is a row
+ * of chips at 390px, so **re-render before adding a tenth** rather than assuming it still fits.
  */
 export const RELATION_SUGGESTIONS = [
   'Wife',
@@ -41,6 +51,8 @@ export const RELATION_SUGGESTIONS = [
   'Daughter',
   'Mother',
   'Father',
+  'Sibling',
+  'Cousin',
   'Household',
 ] as const
 

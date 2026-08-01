@@ -112,8 +112,12 @@ None. Nothing here expires, and nothing about a name needs watching.
   three surfaces that ask: this sheet, the capture wizard's Whose step, and the full document form.
   The last two shipped as a bare input with no suggestions, which meant the answer list depended on
   which door you came in through. Chips rather than a `<select>`, per
-  [design.md §6](../conventions/design.md) — the eight fit on a 390px screen, and the value is free
+  [design.md §6](../conventions/design.md) — the list fits on a 390px screen, and the value is free
   text a closed list could not express. `RelationField.test.tsx` asserts all three use it.
+- **`RELATION_SUGGESTIONS`** (`packages/shared/src/people.ts`) is the list, and the only copy of it.
+  Adding one adds it to all three surfaces; every test walks the array rather than counting it, so a
+  new relation needs no test edits. What it does need is a **390px re-render** — "they all fit" is
+  the premise design.md §6 rests on, not a detail. Ten as of Sibling and Cousin.
 - **The "Whose document is this?" sheet** on a document's detail, which is what made the Whose field
   editable at last — it had been a no-op since the field was added.
 

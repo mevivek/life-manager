@@ -22,11 +22,14 @@ import { cn } from '@/lib/utils'
  * The request was for "a premade dropdown". This is that list, drawn as a visible row, because
  * [design.md §6](../../../../docs/conventions/design.md) refuses dropdowns and states the reason a
  * `<select>` would fail here: *a menu that must be opened to reveal a choice that would fit on screen
- * costs a tap and hides the options.* All eight fit on a 390px screen with room to spare — measured,
- * not assumed — so a select would add a tap, hide the answers behind it, and hand the styling to the
- * platform. It would also fight the field's other half: the value is **free text**, and a `<select>`
- * cannot express "Wife, or anything else you like" without an `Other…` escape hatch that is worse
- * than the text box already here.
+ * costs a tap and hides the options.* The whole list fits on a 390px screen — measured at each length
+ * it has had, most recently ten — so a select would add a tap, hide the answers behind it, and hand
+ * the styling to the platform. It would also fight the field's other half: the value is **free
+ * text**, and a `<select>` cannot express "Wife, or anything else you like" without an `Other…`
+ * escape hatch that is worse than the text box already here.
+ *
+ * That "it fits" is load-bearing rather than incidental: it is the premise the §6 rule turns on, so
+ * a list long enough to stop fitting is not a styling problem, it is grounds to revisit the rule.
  *
  * If a closed list is ever genuinely wanted, that is a change to `RELATION_SUGGESTIONS`' contract —
  * it is documented in `packages/shared/src/people.ts` as *suggestions, never an enum on the wire* —
@@ -91,17 +94,22 @@ export function RelationField({
         ))}
       </div>
       {/*
-        Every example in the placeholder is deliberately NOT one of the chips. The sentence's whole
-        job is "the list above is a shortcut, not the choices" — naming a relation that is already a
-        pill two rows up says the opposite, and the first 390px render caught it doing exactly that
-        with *Mother*. `RelationField.test.tsx` asserts the disjointness so a later edit cannot
-        quietly reintroduce it.
+        Every example here is deliberately NOT one of the chips. The sentence's whole job is "the
+        list above is a shortcut, not the choices" — naming a relation that is already a pill two
+        rows up says the opposite, and the first 390px render caught it doing exactly that with
+        *Mother*. `RelationField.test.tsx` asserts the disjointness so a later edit cannot quietly
+        reintroduce it.
+
+        It is also kept SHORT, and that half cannot be asserted: jsdom has no layout, so nothing in
+        the suite can see a placeholder run past the input. A three-example version clipped to
+        "…Mother-in-law, Busine" at 390px and only the render showed it. Two examples, and re-measure
+        if a third is ever added.
       */}
       <Input
         id={id}
         aria-label={fieldLabel}
         value={value}
-        placeholder="Or type it — Flatmate, Sister, Business"
+        placeholder="Or type it — Flatmate, Mother-in-law"
         onChange={(event) => onChange(event.target.value)}
       />
     </fieldset>

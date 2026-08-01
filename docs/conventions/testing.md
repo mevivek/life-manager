@@ -168,14 +168,13 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-08-01, merging People and `RelationField` with the page foot: 855 passed / 0 skipped**
-with a database (web 555 · api 244 · shared 56); **639 passed / 216 skipped** without one — every skip
-is the API's. Both sides of that merge had edited this line with their own measured figure, and
-**neither number was true of the merged tree** — which is the fourth time the count here has been
-wrong, and the first time it was wrong by arithmetic nobody did. Re-measure after a merge, not just
-after a change.
-**Re-measure rather than citing this**: the figure in this repo has been wrong three separate
-times, once by 17 tests, and once because a session did the arithmetic instead of running the suite.
+**Measured 2026-08-01 after Sibling and Cousin: 858 passed / 0 skipped** with a database
+(web 555 · api 244 · shared 59); **642 passed / 216 skipped** without one — every skip is the API's.
+**Re-measure rather than citing this.** The figure here has been wrong **four** times: once by 17
+tests, once because a session did the arithmetic instead of running the suite, and — most
+instructively — once at a *merge*, where both branches had edited this line with their own correct
+figure and **neither was true of the merged tree**. So re-measure after a merge too, not only after a
+change; two right numbers make a wrong one.
 Note also that `pnpm --filter @life-manager/api test` on its own hits the D77 timeout flake roughly half
 the time on a 4-core container, where the full three-package run rarely does — the suite you run changes
 what you see.
