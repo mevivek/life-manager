@@ -1,11 +1,11 @@
-import { type Person, RELATION_SUGGESTIONS, type RenamedResponse } from '@life-manager/shared'
+import type { Person, RenamedResponse } from '@life-manager/shared'
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Sheet } from '@/components/ui/sheet'
 import { countPhrase } from './personMeta'
+import { RelationField } from './RelationField'
 import { useCreatePerson, useDeletePerson, useUpdatePerson } from './usePeople'
 
 /**
@@ -171,44 +171,8 @@ function PersonForm({
         />
       </div>
 
-      {/*
-        A `<fieldset>` with a `<legend>`, not a `div role="group"` — design.md §6. The legend is
-        announced before each pill, so a screen reader hears "Relation, Wife" rather than a bare
-        "Wife" with no idea what it sets.
-      */}
-      <fieldset className="mt-4 flex flex-col gap-2 border-0 p-0">
-        <legend className="float-left font-mono text-label uppercase tracking-label text-ink-3">
-          Relation · optional
-        </legend>
-        {/*
-          `RELATION_SUGGESTIONS` is imported, never re-typed here. The shared module is explicit that
-          these are **suggestions and never an enum on the wire** — the field takes any string,
-          because "Flatmate" and "Mother-in-law" are real answers and a closed list would make the app
-          argue with its user about their own household. The free-text field below is that promise
-          kept: the chips are a shortcut into it, not a gate in front of it.
-        */}
-        <div className="clear-both flex flex-wrap gap-1.5 pt-0.5">
-          {RELATION_SUGGESTIONS.map((suggestion) => (
-            <Chip
-              key={suggestion}
-              size="sm"
-              selected={relation === suggestion}
-              // Tapping the lit chip clears it, so a relation chosen by mistake does not need the
-              // text field to undo.
-              onClick={() => setRelation((current) => (current === suggestion ? '' : suggestion))}
-            >
-              {suggestion}
-            </Chip>
-          ))}
-        </div>
-        <Input
-          id={relationId}
-          aria-label="Relation"
-          value={relation}
-          placeholder="Or type it — Mother, Flatmate, Business"
-          onChange={(event) => setRelation(event.target.value)}
-        />
-      </fieldset>
+      {/* The one relation field — chips plus free text. See `RelationField`. */}
+      <RelationField id={relationId} value={relation} onChange={setRelation} className="mt-4" />
 
       <Button
         size="lg"

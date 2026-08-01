@@ -108,6 +108,12 @@ None. Nothing here expires, and nothing about a name needs watching.
   shape everywhere ([ADR-0033](../decisions/0033-handoff-5-the-rest.md)).
 - **The person sheet** — add and edit, with the relation suggestions from `RELATION_SUGGESTIONS` plus
   free text. On edit it carries Remove, and the note stating how many records keep the name.
+- **`RelationField`** (`features/people/RelationField.tsx`) — **the only relation field**, on all
+  three surfaces that ask: this sheet, the capture wizard's Whose step, and the full document form.
+  The last two shipped as a bare input with no suggestions, which meant the answer list depended on
+  which door you came in through. Chips rather than a `<select>`, per
+  [design.md §6](../conventions/design.md) — the eight fit on a 390px screen, and the value is free
+  text a closed list could not express. `RelationField.test.tsx` asserts all three use it.
 - **The "Whose document is this?" sheet** on a document's detail, which is what made the Whose field
   editable at last — it had been a no-op since the field was added.
 
