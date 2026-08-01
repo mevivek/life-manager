@@ -1,4 +1,4 @@
-import { formatDateShort } from '@/features/documents/ExpiryStatus'
+import { localDay } from '@/lib/datetime'
 import { cn } from '@/lib/utils'
 
 /**
@@ -22,6 +22,9 @@ import { cn } from '@/lib/utils'
  * "Version 1" on a file row. Two meanings for one word on one screen is worse than an absent number.
  * The id is in the URL, and design.md §13's rule applies to both: a label must be one the value can
  * carry, and neither of these has a user-facing question it answers.
+ *
+ * The day drawn is the **reader's**, not UTC's — `lib/datetime.ts` holds that rule and the reasoning
+ * for the whole app (design.md §11).
  */
 export function RecordMeta({
   createdAt,
@@ -33,7 +36,7 @@ export function RecordMeta({
   updatedAt: string | null | undefined
   className?: string
 }) {
-  const added = formatStamp(createdAt)
+  const added = localDay(createdAt)
   /**
    * Nothing at all rather than "Added —".
    *
@@ -51,7 +54,7 @@ export function RecordMeta({
    * day*, not the raw timestamps: an edit ninety seconds after capture is not a fact worth a line, and
    * `2026-01-01T09:00:00Z` vs `…T09:01:30Z` would otherwise print the same date twice.
    */
-  const updated = formatStamp(updatedAt)
+  const updated = localDay(updatedAt)
 
   return (
     <section className={cn('mt-6 border-t border-rule pt-3.5', className)}>
@@ -61,30 +64,4 @@ export function RecordMeta({
       </p>
     </section>
   )
-}
-
-/**
- * An instant → `12 Jan 2026`, read from **local** date parts.
- *
- * ═══════════════════════════════════════════════════════════════════════════════════════
- *  `iso.slice(0, 10)` is wrong here, and it is wrong in the opposite direction to the usual bug.
- * ═══════════════════════════════════════════════════════════════════════════════════════
- *
- * Every other date in this app is a bare `YYYY-MM-DD` calendar date carrying no zone, which is why
- * `formatDate` slices the string instead of constructing a `Date` (see its note in `ExpiryStatus.tsx`).
- * `created_at` and `updated_at` are not that: they are `isoDateTimeSchema` — real instants, with a `Z`.
- * Slicing one takes the **UTC** calendar day, so a document captured at 18:00 on 30 July at UTC-07:00
- * reads back "Added 31 Jul" — the app disagreeing with the user about the day they did something.
- *
- * So the instant is resolved to the reader's own calendar day first, and only then handed to the one
- * month table the app has. `formatDateShort` rather than a second formatter for the same reason.
- */
-export function formatStamp(iso: string | null | undefined): string | null {
-  if (iso == null || iso === '') return null
-  const at = new Date(iso)
-  // `new Date('nonsense')` is an Invalid Date rather than a throw, and it renders as "NaN NaN NaN".
-  if (Number.isNaN(at.getTime())) return null
-  const month = String(at.getMonth() + 1).padStart(2, '0')
-  const day = String(at.getDate()).padStart(2, '0')
-  return formatDateShort(`${at.getFullYear()}-${month}-${day}`)
 }

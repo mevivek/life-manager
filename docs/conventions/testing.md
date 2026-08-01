@@ -168,8 +168,8 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-08-01 after the detail screens' page foot: 798 passed / 0 skipped** with a database
-(web 520 · api 222 · shared 56); **599 passed / 199 skipped** without one — every skip is the API's,
+**Measured 2026-08-01 after the page foot and the local-clock change: 804 passed / 0 skipped** with a
+database (web 526 · api 222 · shared 56); **605 passed / 199 skipped** without one — every skip is the API's,
 and the API's count has not moved across the last three changes, because each was client-only.
 **Re-measure rather than citing this**: the figure in this repo has been wrong three separate
 times, once by 17 tests, and once because a session did the arithmetic instead of running the suite.

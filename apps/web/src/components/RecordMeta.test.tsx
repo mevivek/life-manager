@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { formatStamp, RecordMeta } from './RecordMeta'
+import { RecordMeta } from './RecordMeta'
 
 /**
  * The page foot both detail screens end on.
@@ -9,6 +9,10 @@ import { formatStamp, RecordMeta } from './RecordMeta'
  * and whether an untouched record claims to have been updated. Both are one grey line at the bottom of a
  * screen, which is precisely why they need a test rather than a glance — the line is legible, plausible
  * and off by a day.
+ *
+ * The zone behaviour itself lives in `lib/datetime.test.ts`, pinned to two real zones. The fixtures here
+ * are **midday UTC** so their rendered day is the same in every real offset — this file is about the
+ * component's two branches, not about which clock it reads.
  */
 describe('RecordMeta', () => {
   it('states when the record was added', () => {
@@ -40,36 +44,5 @@ describe('RecordMeta', () => {
     const { container } = render(<RecordMeta createdAt={undefined} updatedAt={undefined} />)
 
     expect(container).toBeEmptyDOMElement()
-  })
-})
-
-describe('formatStamp', () => {
-  it('is the short form the rest of the app uses', () => {
-    expect(formatStamp('2026-09-12T00:00:00.000Z')).toBe('12 Sep 2026')
-  })
-
-  /**
-   * The bug this helper exists to avoid, asserted from **both** sides of midnight.
-   *
-   * `created_at` is an instant, not a calendar date, so `iso.slice(0, 10)` renders the UTC day and
-   * disagrees with the user about the day they did something. Building the instants from *local* parts
-   * is what makes the expectation deterministic in any zone: 00:30 on the 31st is still the 30th in UTC
-   * east of Greenwich, and 23:30 on the 30th is already the 31st in UTC west of it — so a UTC-slicing
-   * implementation fails one of these two wherever the runner is standing.
-   *
-   * (In a runner pinned to UTC the two agree and neither fails. That is a limit of the test, not of the
-   * helper: there is no zone in which the local day is wrong, and CI running in UTC is the case where
-   * the bug is invisible anyway.)
-   */
-  it('reads the reader’s calendar day, not UTC’s', () => {
-    expect(formatStamp(new Date(2026, 6, 31, 0, 30).toISOString())).toBe('31 Jul 2026')
-    expect(formatStamp(new Date(2026, 6, 30, 23, 30).toISOString())).toBe('30 Jul 2026')
-  })
-
-  it('is null for anything it cannot read', () => {
-    expect(formatStamp(null)).toBeNull()
-    expect(formatStamp('')).toBeNull()
-    // `new Date('nonsense')` is an Invalid Date rather than a throw, and would render "NaN NaN NaN".
-    expect(formatStamp('not a timestamp')).toBeNull()
   })
 })
