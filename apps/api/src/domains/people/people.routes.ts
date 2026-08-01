@@ -1,11 +1,12 @@
 import {
-  createPersonSchema,
+  personCreateSchema,
+  personDeleteQuerySchema,
+  personIdParamsSchema,
   personListResponseSchema,
   personSchema,
+  personUpdateSchema,
   problemSchema,
   renamedResponseSchema,
-  updatePersonSchema,
-  uuidSchema,
 } from '@life-manager/shared'
 import type { FastifyInstance } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
@@ -27,30 +28,13 @@ import * as service from './people.service.js'
  */
 
 /**
- * ── Two schemas defined here rather than imported, and why ──
+ * ── The params and the delete precondition come from `packages/shared` ──
  *
- * `packages/shared/src/people.ts` is the contract source (invariant 9, ADR-0004) and it defines the
- * body and response shapes — but **not** the path params or the delete's version precondition.
- * Things and Documents both export a `…IdParamsSchema` and a `…DeleteQuerySchema`; People has
- * neither, so they are declared here to keep the endpoints shaped like their siblings.
- *
- * These two do not mirror a shared schema, so they are not the duplication invariant 9 forbids — but
- * they *should* move to `packages/shared/src/people.ts` when that file is next edited, so the OpenAPI
- * document and a typed client agree by construction rather than by two files matching.
+ * They were declared here first, with a note to move them. They have moved: invariant 9 makes the
+ * shared schemas the only contract source, and a routes file declaring its own params is exactly how
+ * a second, subtly different shape gets born — one the OpenAPI document and a typed client would then
+ * disagree about by construction.
  */
-const personIdParamsSchema = z.object({ id: uuidSchema })
-
-/**
- * A query parameter rather than a body, because a `DELETE` with a body is poorly supported and
- * `fetch` will not reliably send one. `z.coerce` because a querystring is always a string.
- *
- * Required, per debt D41: a delete built against stale data is refused with 409 rather than
- * destroying an edit made somewhere else in the meantime. `z.strictObject` so an unknown query
- * parameter is rejected rather than ignored (conventions/api.md §7, debt D27).
- */
-const personDeleteQuerySchema = z.strictObject({
-  version: z.coerce.number().int().min(1),
-})
 
 /** The error responses every authenticated route can produce. Spread into each `response`. */
 const commonErrors = {
@@ -98,7 +82,7 @@ export async function peopleRoutes(app: FastifyInstance): Promise<void> {
           'the case `SELECT DISTINCT holder` could not express, and the reason this table exists. ' +
           'Nobody created here has an account, a sign-in, or a notification.',
         tags: ['people'],
-        body: createPersonSchema,
+        body: personCreateSchema,
         response: { 201: personSchema, ...mutationErrors },
       },
     },
@@ -123,7 +107,7 @@ export async function peopleRoutes(app: FastifyInstance): Promise<void> {
           'before a single record is rewritten.',
         tags: ['people'],
         params: personIdParamsSchema,
-        body: updatePersonSchema,
+        body: personUpdateSchema,
         response: { 200: renamedResponseSchema, ...mutationErrors },
       },
     },

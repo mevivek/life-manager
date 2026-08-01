@@ -1,6 +1,6 @@
 import type { Thing } from '@life-manager/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -16,6 +16,8 @@ import {
   useUnsubscribeFromPush,
 } from '@/features/documents/usePush'
 import { BuildCard } from '@/features/health/BuildCard'
+import { peopleSummary } from '@/features/people/personMeta'
+import { usePeople } from '@/features/people/usePeople'
 import { meQueryOptions } from '@/features/spaces/useMe'
 import { coverOf } from '@/features/things/CoverStatus'
 import { formatMoney } from '@/features/things/money'
@@ -129,6 +131,12 @@ function YouPage() {
   const space = me.data?.spaces[0] ?? null
   /** Holders other than the owner. `+ 1` for "you" is done at the render, so the zero case is clear. */
   const people = useHolders().data ?? []
+  /**
+   * The **directory** (ADR-0034), which is a different list from the holders above: this is the names
+   * the user has added, and that one is the names derived from records. The People row summarises the
+   * directory because that is the screen it opens.
+   */
+  const directory = usePeople().data?.data ?? []
 
   return (
     <div className="flex flex-1 flex-col">
@@ -252,6 +260,33 @@ function YouPage() {
       {/* ── App ── */}
       <section className="mt-5">
         <Eyebrow>App</Eyebrow>
+
+        {/*
+          ── People — the one row in this section that goes somewhere (handoff 5, ADR-0034) ──
+
+          A `<Link>` and not a `Stat` with a button, for the reason design.md §8 gives: navigation
+          carries an href so it can be focused, long-pressed and opened in a new tab. That is also why
+          it sits **outside** the `<dl>` below rather than inside it — an `<a>` is not a permitted child
+          of `<dl>`, and wrapping the whole row in one is what makes the row tappable rather than only
+          its value.
+
+          The summary names the people rather than counting them: at household size "You and Priya"
+          tells you what is behind the row, while "3 people" makes you open it to find out.
+        */}
+        <Link
+          to="/people"
+          className="flex min-h-12 items-baseline justify-between gap-3.5 border-b border-rule py-3"
+        >
+          <span className="text-body text-ink-2">People</span>
+          <span className="flex shrink-0 items-baseline gap-2 text-right">
+            <span className="text-body text-ink-3">{peopleSummary(directory)}</span>
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-1.5 shrink-0 rotate-45 border-t-[1.5px] border-r-[1.5px] border-rule-2"
+            />
+          </span>
+        </Link>
+
         <dl className="mt-1">
           {/*
             ── What you own, in four sentences — handoff 5 ──

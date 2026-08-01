@@ -38,10 +38,21 @@ export type ThingRowProps = {
   today?: Date
   /** A hairline above. Only the 2nd row onward inside a bordered card needs one. */
   divided?: boolean
+  /**
+   * Whether to draw the holder pill. `false` on a person's own page, where the name is the heading —
+   * see the same prop on `DocumentRow`.
+   */
+  showHolder?: boolean
   className?: string
 }
 
-export function ThingRow({ thing, today, divided = false, className }: ThingRowProps) {
+export function ThingRow({
+  thing,
+  today,
+  divided = false,
+  showHolder = true,
+  className,
+}: ThingRowProps) {
   /**
    * `Vehicle · Volkswagen`.
    *
@@ -99,7 +110,7 @@ export function ThingRow({ thing, today, divided = false, className }: ThingRowP
         */}
         <span className="flex items-baseline gap-[7px]">
           <span className="min-w-0 truncate text-row font-medium leading-snug">{thing.name}</span>
-          {thing.holder != null && thing.holder !== '' && (
+          {showHolder && thing.holder != null && thing.holder !== '' && (
             <span className="shrink-0 rounded-pill border border-rule-2 px-[7px] text-label font-medium text-ink-2">
               {thing.holder}
             </span>

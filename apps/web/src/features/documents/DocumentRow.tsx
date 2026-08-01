@@ -65,6 +65,15 @@ export type DocumentRowProps = {
    */
   glyphColumn?: 'narrow' | 'wide'
   /**
+   * Whether to draw the holder pill beside the title.
+   *
+   * `false` on a **person's own page**, where every row is that person's and the name is already the
+   * heading — three identical pills reading "Priya" under a heading reading "Priya" is noise, and the
+   * comp's person view draws none. Everywhere else it stays on: the pill is what distinguishes two
+   * otherwise identical documents in a mixed list.
+   */
+  showHolder?: boolean
+  /**
    * The number line and its Copy / Show controls — ADR-0027. Absent means no number is drawn at all.
    *
    * Passed in rather than owned here, because the archive's header toggle reveals **every** row at
@@ -90,6 +99,7 @@ export function DocumentRow({
   divided = false,
   chevron = false,
   glyphColumn = 'narrow',
+  showHolder = true,
   number,
   className,
 }: DocumentRowProps) {
@@ -168,7 +178,7 @@ export function DocumentRow({
             <span className="min-w-0 truncate text-row font-medium leading-snug">
               {document.title}
             </span>
-            {document.holder != null && document.holder !== '' && (
+            {showHolder && document.holder != null && document.holder !== '' && (
               <span className="shrink-0 rounded-pill border border-rule-2 px-[7px] text-[0.6875rem] font-medium text-ink-2">
                 {document.holder}
               </span>

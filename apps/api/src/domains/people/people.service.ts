@@ -1,9 +1,9 @@
 import type {
-  CreatePerson,
   Person,
+  PersonCreate,
   PersonListResponse,
+  PersonUpdate,
   RenamedResponse,
-  UpdatePerson,
 } from '@life-manager/shared'
 import type { ActorContext } from '../../auth/actor.js'
 import { db } from '../../db/client.js'
@@ -46,7 +46,7 @@ function writeSpaceOf(actor: ActorContext): string {
 /**
  * `relation` normalised to `null` when it is absent or blank.
  *
- * Trimmed already by `createPersonSchema` / `updatePersonSchema`, so this only has to fold `''` and
+ * Trimmed already by `personCreateSchema` / `personUpdateSchema`, so this only has to fold `''` and
  * `undefined` into `null`: a relation of empty string would render as *"Priya · "* on the detail
  * screen and would be a second value meaning "none" for every read to know about.
  *
@@ -93,13 +93,13 @@ export async function list(actor: ActorContext): Promise<PersonListResponse> {
 // ── Writes ───────────────────────────────────────────────────────────────────
 
 /**
- * **One required field.** `createPersonSchema` demands a name and nothing else — Q2 applied to a
+ * **One required field.** `personCreateSchema` demands a name and nothing else — Q2 applied to a
  * third domain (ADR-0030), and what *"Add someone"* needs to be a single tap plus a word.
  *
  * A person may exist with nothing filed under them. That is precisely the case
  * `SELECT DISTINCT holder` could not express, and the reason this table exists at all.
  */
-export async function create(actor: ActorContext, input: CreatePerson): Promise<Person> {
+export async function create(actor: ActorContext, input: PersonCreate): Promise<Person> {
   const spaceId = writeSpaceOf(actor)
 
   const id = await repository.insert(actor, spaceId, {
@@ -150,7 +150,7 @@ export async function create(actor: ActorContext, input: CreatePerson): Promise<
 export async function update(
   actor: ActorContext,
   id: string,
-  patch: UpdatePerson,
+  patch: PersonUpdate,
 ): Promise<RenamedResponse> {
   // Read before the conditional write, so a miss can be explained as 404 or 409. Cross-space is
   // already `undefined` here — `scoped()` filtered it — so this is the 404, never a 403 (invariant 4).
@@ -158,7 +158,7 @@ export async function update(
   if (existing === undefined) throw new NotFoundError('No such person.')
 
   const oldName = existing.name
-  // Trimmed by `updatePersonSchema`; absent means "do not change" (conventions/api.md §8).
+  // Trimmed by `personUpdateSchema`; absent means "do not change" (conventions/api.md §8).
   const newName = patch.name ?? oldName
   const nameChanged = newName !== oldName
 

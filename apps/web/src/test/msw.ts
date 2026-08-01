@@ -69,6 +69,14 @@ export const handlers = [
   http.get('*/api/v1/things', () => HttpResponse.json({ data: [], next_cursor: null })),
 
   http.get('*/api/v1/things/holders', () => HttpResponse.json({ data: [] })),
+
+  /*
+    The People directory, empty by default — the same "shell renders, no invented rows" rule the
+    handlers above follow. Without it every screen that draws the You row makes an unhandled request
+    per render, which `onUnhandledRequest: 'error'` turns into noise in suites that are about
+    something else entirely. Tests that want people install their own handler.
+  */
+  http.get('*/api/v1/people', () => HttpResponse.json({ data: [] })),
 ]
 
 export const server = setupServer(...handlers)

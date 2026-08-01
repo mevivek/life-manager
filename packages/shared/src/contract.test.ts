@@ -306,6 +306,23 @@ const BASELINE: Readonly<Record<string, readonly string[]>> = {
   spaceMembershipSchema: ['space_id', 'name', 'kind', 'role', 'joined_at'],
   meResponseSchema: ['user_id', 'email', 'spaces'],
 
+  // ── People (ADR-0034), and the auth capability probe (ADR-0035) ──
+  //
+  // Both are BRAND-NEW endpoints, which is the one case where a required response field is safe
+  // without the API having shipped first: a client that outruns the server gets a **404 for the whole
+  // route**, not a half-populated object, so there is no partial shape for Zod to throw on. The
+  // screens handle that — People renders its error state, and the sign-in screen falls back to the
+  // password form, which is the entire point of ADR-0035.
+  //
+  // This is the same call Things made when it was new (`THING_FIELDS` above). It does NOT extend to
+  // adding a field to one of these later: at that point the endpoint already exists, a lagging API
+  // returns the old shape, and the field must be `.nullish()`. `document_count`, `thing_count` and
+  // the two rename counters are already tolerant for exactly that reason.
+  personSchema: ['id', 'space_id', 'name', 'relation', 'version', 'created_at', 'updated_at'],
+  personListResponseSchema: ['data'],
+  renamedResponseSchema: ['person'],
+  authProvidersResponseSchema: ['google', 'password'],
+
   // ── Operational. `healthResponseSchema` is the one response a client MUST be able to read from
   //    any server age at all, since it is how the app detects the skew in the first place. ──
   healthResponseSchema: ['status', 'version', 'uptime_seconds', 'built_at'],

@@ -341,6 +341,30 @@ describeDb('people', () => {
 
   // ── ADR-0024 / D41: the version precondition ──────────────────────────────
 
+  /**
+   * The gap this closes: `personUpdateSchema` had no refine, so `{ version }` alone was a legal 200
+   * that bumped the version, reported "0 records moved" and changed nothing. A no-op that CONSUMES
+   * the caller's precondition is worse than a 400 — the client's next write then fails on a version
+   * it never chose to advance.
+   */
+  it('rejects a patch that changes nothing, rather than burning the precondition', async () => {
+    const user = await seedUserWithSpace(app)
+    const priya = await createPerson(app, user, { name: 'Priya' })
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/people/${priya.id}`,
+      ...authAs(user),
+      payload: { version: priya.version },
+    })
+
+    expect(response.statusCode).toBe(400)
+
+    // And the version is untouched, which is the half that actually bites.
+    const after = await app.inject({ method: 'GET', url: '/api/v1/people', ...authAs(user) })
+    expect(after.json().data[0].version).toBe(priya.version)
+  })
+
   it('ADR-0024: refuses a stale rename with 409 and renames NOTHING', async () => {
     const user = await seedUserWithSpace(app)
     const priya = await createPerson(app, user, { name: 'Priya' })
@@ -382,7 +406,7 @@ describeDb('people', () => {
     const user = await seedUserWithSpace(app)
     const priya = await createPerson(app, user, { name: 'Priya' })
 
-    // `version` is REQUIRED on `updatePersonSchema`, so a call site that forgets it is a 400 rather
+    // `version` is REQUIRED on `personUpdateSchema`, so a call site that forgets it is a 400 rather
     // than silently getting last-write-wins — over two other domains' tables, in this case.
     const patched = await app.inject({
       method: 'PATCH',

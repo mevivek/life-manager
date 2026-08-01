@@ -82,14 +82,19 @@ export type Person = z.infer<typeof personSchema>
 /**
  * `POST /api/v1/people`.
  *
+ * **Named `personCreateSchema`, not `createPersonSchema`** — noun-first, like every other domain.
+ * That is not only tidiness: `contract.test.ts`'s `REQUEST_SUFFIX` regex identifies a request by the
+ * `(Create|Update|Request|Query|Params)Schema$` suffix, so a verb-first name is walked as a
+ * **response** and its required fields are reported as D54 violations. The convention is load-bearing.
+ *
  * **One required field**, matching every other capture surface in this app (Q2, ADR-0030): a name is
  * enough, and the relation is offered but never demanded.
  */
-export const createPersonSchema = z.strictObject({
+export const personCreateSchema = z.strictObject({
   name: z.string().trim().min(1, 'A name is required').max(MAX_PERSON_NAME_LENGTH),
   relation: z.string().trim().max(MAX_RELATION_LENGTH).nullish(),
 })
-export type CreatePerson = z.infer<typeof createPersonSchema>
+export type PersonCreate = z.infer<typeof personCreateSchema>
 
 /**
  * `PATCH /api/v1/people/:id`.
@@ -101,12 +106,48 @@ export type CreatePerson = z.infer<typeof createPersonSchema>
  * for every row in the space that matched the *old* name, in the same transaction. That is the whole
  * of what "renames them everywhere they're filed" means (ADR-0034).
  */
-export const updatePersonSchema = z.strictObject({
-  version: z.number().int().min(1),
-  name: z.string().trim().min(1).max(MAX_PERSON_NAME_LENGTH).optional(),
-  relation: z.string().trim().max(MAX_RELATION_LENGTH).nullish(),
+export const personUpdateSchema = z
+  .strictObject({
+    version: z.number().int().min(1),
+    name: z.string().trim().min(1).max(MAX_PERSON_NAME_LENGTH).optional(),
+    relation: z.string().trim().max(MAX_RELATION_LENGTH).nullish(),
+  })
+  /*
+    `version` is a precondition, not a change, so `{ version: 3 }` alone is not an update — the same
+    refine `thingUpdateSchema` carries, and it is here because it was missing: without it a
+    version-only PATCH was a legal 200 that bumped the version, reported "0 records moved", and
+    changed nothing. A no-op that CONSUMES the caller's precondition is worse than a 400, because the
+    client's next write then fails on a version it never chose to advance.
+
+    `Object.keys` rather than checking fields by name: `relation: null` is a real change (clearing it),
+    and a `value !== undefined` test would reject it.
+  */
+  .refine((patch) => Object.keys(patch).some((key) => key !== 'version'), {
+    message: 'A patch must change at least one field',
+  })
+export type PersonUpdate = z.infer<typeof personUpdateSchema>
+
+// ── Params ───────────────────────────────────────────────────────────────────
+
+export const personIdParamsSchema = z.object({ id: uuidSchema })
+
+/**
+ * The version precondition for `DELETE /people/:id` — the same shape as a thing's and a document's,
+ * and for the same reason (debt D41): a delete built against stale data is refused with `409` rather
+ * than destroying an edit made somewhere else.
+ *
+ * A query parameter rather than a body, because a `DELETE` with a body is poorly supported and
+ * `fetch` will not reliably send one. `z.coerce` because a querystring is always a string, and
+ * `z.strictObject` so an unknown parameter is rejected rather than ignored (api.md §7, debt D27).
+ *
+ * **These two live here rather than in the routes file**, where they were first written. A routes
+ * file declaring its own params is how a second, subtly different shape gets born — one the OpenAPI
+ * document and a typed client would then disagree about by construction. Invariant 9.
+ */
+export const personDeleteQuerySchema = z.strictObject({
+  version: z.coerce.number().int().min(1),
 })
-export type UpdatePerson = z.infer<typeof updatePersonSchema>
+export type PersonDeleteQuery = z.infer<typeof personDeleteQuerySchema>
 
 // ── Responses ────────────────────────────────────────────────────────────────
 

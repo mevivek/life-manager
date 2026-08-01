@@ -2,7 +2,6 @@ import {
   type AuthProvidersResponse,
   authProvidersResponseSchema,
   type ConfirmUploadRequest,
-  type CreatePerson,
   type Document,
   type DocumentCreate,
   type DocumentDetailResponse,
@@ -21,7 +20,9 @@ import {
   type MeResponse,
   meResponseSchema,
   type Person,
+  type PersonCreate,
   type PersonListResponse,
+  type PersonUpdate,
   type PresignDownloadResponse,
   type PresignPhotoDownloadResponse,
   type PresignPhotoUploadRequest,
@@ -61,7 +62,6 @@ import {
   thingPhotoSchema,
   thingSchema,
   thingServiceSchema,
-  type UpdatePerson,
 } from '@life-manager/shared'
 import { z } from 'zod'
 import { API_ORIGIN } from './api-origin'
@@ -526,10 +526,10 @@ export const api = {
   people: {
     list: (): Promise<PersonListResponse> => request('/api/v1/people', personListResponseSchema),
 
-    create: (input: CreatePerson, idempotencyKey?: string): Promise<Person> =>
+    create: (input: PersonCreate, idempotencyKey?: string): Promise<Person> =>
       request('/api/v1/people', personSchema, { method: 'POST', body: input, idempotencyKey }),
 
-    update: (id: string, patch: UpdatePerson, idempotencyKey?: string): Promise<RenamedResponse> =>
+    update: (id: string, patch: PersonUpdate, idempotencyKey?: string): Promise<RenamedResponse> =>
       request(`/api/v1/people/${id}`, renamedResponseSchema, {
         method: 'PATCH',
         body: patch,
