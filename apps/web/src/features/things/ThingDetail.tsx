@@ -169,7 +169,7 @@ export function ThingDetail({
 
       {/* ── 4. The facts, then the number on the label ── */}
       <ThingFacts thing={detail} />
-      <ThingSerial serial={detail.serial} last4={detail.serial_last4} kind={detail.kind} />
+      <ThingSerial serial={detail.serial} kind={detail.kind} />
 
       {/* ── 5. Its papers ── */}
       <PapersChecklist

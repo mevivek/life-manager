@@ -29,7 +29,30 @@ describe('readFeel', () => {
     localStorage.setItem(FEEL_STORAGE_KEYS.density, 'compact')
     localStorage.setItem(FEEL_STORAGE_KEYS.face, 'grotesk')
     localStorage.setItem(FEEL_STORAGE_KEYS.voice, 'plain')
-    expect(readFeel()).toEqual({ density: 'compact', face: 'grotesk', voice: 'plain' })
+    localStorage.setItem(FEEL_STORAGE_KEYS.numbers, 'hidden')
+    expect(readFeel()).toEqual({
+      density: 'compact',
+      face: 'grotesk',
+      voice: 'plain',
+      numbers: 'hidden',
+    })
+  })
+
+  it('shows numbers unless the device has asked otherwise — ADR-0034', () => {
+    /**
+     * The default is the decision, so it is asserted rather than left to the object comparison above.
+     * Masking was unconditional before ADR-0034; `shown` is what makes the archive answer "what is my
+     * Aadhaar number" without a tap, and a session that flips this default back has reversed an ADR
+     * rather than changed a constant.
+     */
+    expect(readFeel().numbers).toBe('shown')
+
+    localStorage.setItem(FEEL_STORAGE_KEYS.numbers, 'hidden')
+    expect(readFeel().numbers).toBe('hidden')
+
+    // And a value from a build that spelled it differently falls back rather than masking by accident.
+    localStorage.setItem(FEEL_STORAGE_KEYS.numbers, 'masked')
+    expect(readFeel().numbers).toBe('shown')
   })
 
   it('falls back to the default for a value written by an older or broken build', () => {
@@ -55,15 +78,17 @@ describe('storeFeel', () => {
 
 describe('applyFeel', () => {
   it('stamps density and face onto <html>, including the default', () => {
-    applyFeel({ density: 'compact', face: 'grotesk', voice: 'plain' })
+    applyFeel({ density: 'compact', face: 'grotesk', voice: 'plain', numbers: 'shown' })
     expect(document.documentElement.dataset.density).toBe('compact')
     expect(document.documentElement.dataset.face).toBe('grotesk')
   })
 
-  it('never stamps voice — no stylesheet reads it, and an attribute nothing matches is a lie', () => {
-    applyFeel({ density: 'generous', face: 'serif', voice: 'plain' })
-    // The reason voice is threaded through React instead: CSS cannot rewrite a sentence.
+  it('never stamps voice or numbers — an attribute no stylesheet matches is a lie', () => {
+    applyFeel({ density: 'generous', face: 'serif', voice: 'plain', numbers: 'hidden' })
+    // Why both are threaded through React instead: CSS cannot rewrite a sentence, and it cannot
+    // choose between a value and a mask of it either.
     expect(document.documentElement.dataset.voice).toBeUndefined()
+    expect(document.documentElement.dataset.numbers).toBeUndefined()
   })
 })
 

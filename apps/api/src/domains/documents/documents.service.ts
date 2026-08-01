@@ -10,7 +10,6 @@ import {
   type DocumentType,
   type DocumentUpdate,
   type Reminder,
-  truncateToLast4,
   validateCustomAttrs,
 } from '@life-manager/shared'
 import type { ActorContext } from '../../auth/actor.js'
@@ -91,7 +90,6 @@ function toDocument(row: DocumentRow): Document {
      * device — is stated in ADR-0027 and tracked as debt D47.
      */
     identifier: row.identifier,
-    identifier_last4: row.identifierLast4,
     /** The thing this belongs to, or `null` — ADR-0029. Drawn as *Belongs to* on the detail screen. */
     thing_id: row.thingId,
     issued_on: row.issuedOn,
@@ -176,30 +174,25 @@ export async function getDetail(actor: ActorContext, id: string): Promise<Docume
 }
 
 /**
- * Both identifier columns, from one input value — the only place either is written.
+ * The identifier column, from one input value — the only place it is written.
  *
- * `identifier_last4` is **derived**, never supplied: a client cannot send a mask that disagrees with
- * the number it masks. Keeping the derivation in one function used by both create and update is what
- * stops the two drifting, which is the failure mode where an edit updates the full value and leaves
- * yesterday's last four on the row for every list to render.
+ * **This used to return two columns**, deriving `identifier_last4` beside the value so a client could
+ * not send a mask that disagreed with the number it masked. ADR-0034 dropped that column; the mask is
+ * cut client-side from the same value, which cannot disagree with itself.
  *
- * Trimmed first, because a number typed on a phone arrives with a trailing space more often than not
- * and the mask is taken from the *end* of the string — so an untrimmed value would mask to " 109 "
- * rather than "8109", visibly wrong in the one place the mask is shown.
+ * Trimmed, because a number typed on a phone arrives with a trailing space more often than not, and a
+ * mask is taken from the *end* of the string — so an untrimmed value would show as " 109 " rather
+ * than "8109" wherever a tail is drawn.
  *
  * An empty string collapses to `null` rather than being stored. `identifierInputSchema` is `min(1)`,
  * so the wire rejects `''` before it arrives and `DocumentForm` maps a blank field to `null` anyway —
  * this branch is for a value that trims down to nothing (`"   "`), which passes `min(1)` and is not an
  * identifier.
  */
-function identifierColumns(value: string | null | undefined): {
-  identifier: string | null
-  identifierLast4: string | null
-} {
-  if (value === null || value === undefined) return { identifier: null, identifierLast4: null }
+function identifierColumns(value: string | null | undefined): { identifier: string | null } {
+  if (value === null || value === undefined) return { identifier: null }
   const trimmed = value.trim()
-  if (trimmed === '') return { identifier: null, identifierLast4: null }
-  return { identifier: trimmed, identifierLast4: truncateToLast4(trimmed) }
+  return { identifier: trimmed === '' ? null : trimmed }
 }
 
 /**

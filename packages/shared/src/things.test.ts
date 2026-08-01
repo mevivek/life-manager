@@ -9,7 +9,6 @@ import {
   thingKindSchema,
   thingListQuerySchema,
   thingUpdateSchema,
-  truncateSerialToLast4,
 } from './things.js'
 
 /**
@@ -169,13 +168,5 @@ describe('the cover and service thresholds', () => {
     expect(COVER_ENDING_DAYS).toBe(60)
     expect(SERVICE_DUE_DAYS).toBe(45)
     expect(COVER_ENDING_DAYS).toBeGreaterThan(SERVICE_DUE_DAYS)
-  })
-})
-
-describe('truncateSerialToLast4', () => {
-  it('masks to the last four characters', () => {
-    expect(truncateSerialToLast4('C02XL0RTJGH7')).toBe('JGH7')
-    expect(truncateSerialToLast4('916')).toBe('916')
-    expect(truncateSerialToLast4('')).toBe('')
   })
 })

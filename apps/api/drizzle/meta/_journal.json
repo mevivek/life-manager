@@ -57,6 +57,13 @@
       "when": 1785428953435,
       "tag": "0007_nasty_leech",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785556082782,
+      "tag": "0008_outstanding_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

@@ -109,15 +109,14 @@ export const documents = pgTable(
      */
     identifier: text('identifier'),
 
-    /**
-     * The masked display form, derived from `identifier` by `truncateToLast4` on every write.
-     *
-     * Kept as its own column rather than computed in the query, because it is what rows render until
-     * the user reveals — and a client-derived mask would be a second implementation of a rule the
-     * server owns. A generated column would be tidier; a plain one keeps the derivation in the one
-     * service function that already owns it, next to the value it derives from.
+    /*
+     * `identifier_last4` was here — a derived copy of the last four characters of `identifier`,
+     * written on every save so a client could not send a mask that disagreed with its own number.
+     * Dropped by ADR-0034: numbers are shown in full by default, and the mask a device asks for is
+     * cut from the value in the same response. Two fields that always travelled together could never
+     * disagree, so the derivation was protecting nothing. Do not re-add it — the mask belongs to
+     * whoever is rendering it (`apps/web/src/lib/mask.ts`).
      */
-    identifierLast4: text('identifier_last4'),
 
     /**
      * The **thing** this document belongs to — [ADR-0029](../../../../../docs/decisions/0029-the-things-domain.md),

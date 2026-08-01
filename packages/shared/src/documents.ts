@@ -81,13 +81,15 @@ export const tagSchema = z
  * a vehicle registration — the number *is* the thing you need at a counter, far more often than the
  * scan is.
  *
- * So the full value is stored, and `identifier_last4` stays as the **display** form: it is what the
- * list and every row show, and what the detail screen shows until you tap Reveal. Two fields, one
- * derived from the other, because masking is a display state and not a storage decision.
+ * So the full value is stored, and it is also what is **displayed** — ADR-0034. There was a second
+ * column, `identifier_last4`, derived on every write and rendered until the user tapped Reveal; it is
+ * gone. Two fields travelling together in the same response cannot disagree, which was the only thing
+ * server-side derivation bought, and the second was a copy of the last four characters of the first.
+ * Masking is now a device preference, and the client cuts the tail itself.
  *
  * **It is stored as plaintext, by explicit decision.** Invariant 7 and ADR-0009 reserve
  * application-level encryption for the vault, and this is not the vault — so nothing here is
- * encrypted, and no copy in the app may claim it is. The fields stay in pino's redaction list, which
+ * encrypted, and no copy in the app may claim it is. The field stays in pino's redaction list, which
  * now matters more rather than less: the value that must not reach a log is a whole number instead of
  * four digits.
  */
@@ -102,7 +104,22 @@ export const holderSchema = z.string().trim().min(1).max(120)
 /** A relation — "Wife", "Son (12)". Short by design: it is a gloss on a name, not a biography. */
 export const relationSchema = z.string().trim().min(1).max(60)
 
-/** The masked display form, derived from the stored value: at most 4 characters. */
+/**
+ * A four-character tail, as `custom_attrs` records one: `document_number_last4`, `account_last4`,
+ * `payment_method_last4`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *  This is NOT the display mask any more. There is no `identifier_last4` column.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * It used to type a derived top-level column that mirrored the last four characters of `identifier`.
+ * [ADR-0034](../../../docs/decisions/0034-numbers-shown-by-default.md) dropped that column: numbers
+ * are shown in full, and the client derives the mask from the value it already has when the user has
+ * asked for one (`apps/web/src/lib/mask.ts`).
+ *
+ * What survives is this shape, still used by the `custom_attrs` keys that genuinely hold **only** a
+ * tail — a card's last four, where the full number must never be stored at all (documents.md §3).
+ */
 export const identifierLast4Schema = z.string().max(4)
 
 /**
@@ -112,16 +129,6 @@ export const identifierLast4Schema = z.string().max(4)
  * would be a filter that silently matches nothing.
  */
 export const HOLDER_MINE = 'mine'
-
-/**
- * The mask, as the one function that produces it.
- *
- * Still the only way `identifier_last4` is ever computed — the difference since ADR-0026 is that the
- * argument is no longer discarded afterwards.
- */
-export function truncateToLast4(value: string): string {
-  return value.slice(-4)
-}
 
 // ── custom_attrs, per doc_type ───────────────────────────────────────────────
 
@@ -278,8 +285,6 @@ export const documentSchema = z.object({
    * in pino's redaction list; the cache is the remaining exposure (debt D47).
    */
   identifier: z.string().nullable(),
-  /** The masked display form, DERIVED from `identifier` server-side. Never sent by a client. */
-  identifier_last4: identifierLast4Schema.nullable(),
   /**
    * The **thing** this document belongs to, or `null` — [ADR-0029](../../../docs/decisions/0029-the-things-domain.md).
    *

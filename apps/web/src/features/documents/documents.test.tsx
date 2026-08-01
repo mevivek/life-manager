@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 import { DocumentDetailPage } from '@/routes/_authed/documents.$documentId'
 import { server } from '@/test/msw'
+import { withNumbersHidden } from '@/test/preferences'
 import { useOpenAdd } from './AddSheetProvider'
 import { DocumentForm } from './DocumentForm'
 import { DocumentRow } from './DocumentRow'
@@ -89,7 +90,6 @@ const detailFixture: DocumentDetailResponse = {
   holder: null,
   relation: null,
   identifier: 'FAKEM1234567',
-  identifier_last4: '4567',
   thing_id: null,
   issued_on: null,
   expires_on: null,
@@ -301,7 +301,6 @@ async function renderWithRouter(ui: React.ReactElement) {
 const numbered = {
   ...detailFixture,
   identifier: '999988887777',
-  identifier_last4: '7777',
   title: 'Aadhaar',
   doc_type: 'identity' as const,
 }
@@ -317,45 +316,72 @@ describe('the number on an archive row', () => {
     expect(screen.queryByText('Me')).toBeNull()
   })
 
-  it('shows the label and the mask, not the value', async () => {
+  it('ADR-0034: shows the label and the whole number, with no Show control', async () => {
     await renderWithRouter(
       <DocumentRow
         document={numbered}
-        number={{
-          label: 'Aadhaar number',
-          revealed: false,
-          grouped: '9999 8888 7777',
-          onToggleReveal: () => {},
-          onCopy: () => {},
-        }}
+        number={{ label: 'Aadhaar number', grouped: '9999 8888 7777', onCopy: () => {} }}
       />,
     )
     expect(screen.getByText('Aadhaar number')).toBeInTheDocument()
-    expect(screen.getByText('•••• 7777')).toBeInTheDocument()
-    expect(screen.queryByText('9999 8888 7777')).toBeNull()
-  })
-
-  it('names both controls after the field AND the document', async () => {
-    // There can be more than one number on a screen — a hundred rows, in fact — so "Show" alone is
-    // ambiguous to anyone navigating by control name.
-    await renderWithRouter(
-      <DocumentRow
-        document={numbered}
-        number={{
-          label: 'Aadhaar number',
-          revealed: false,
-          grouped: '9999 8888 7777',
-          onToggleReveal: () => {},
-          onCopy: () => {},
-        }}
-      />,
-    )
-    expect(
-      screen.getByRole('button', { name: 'Show Aadhaar number for Aadhaar' }),
-    ).toBeInTheDocument()
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+    expect(screen.queryByText('•••• 7777')).toBeNull()
+    // Copy stays; Show has nothing to do, and a control whose two states look identical is worse
+    // than no control.
+    expect(screen.queryByRole('button', { name: /^Show / })).toBeNull()
     expect(
       screen.getByRole('button', { name: 'Copy Aadhaar number for Aadhaar' }),
     ).toBeInTheDocument()
+  })
+
+  it('masks and offers Show when the device asks for hidden numbers', async () => {
+    await renderWithRouter(
+      withNumbersHidden(
+        <DocumentRow
+          document={numbered}
+          number={{ label: 'Aadhaar number', grouped: '9999 8888 7777', onCopy: () => {} }}
+        />,
+      ),
+    )
+    // The mask is cut from the full value on this device — there is no `identifier_last4` any more.
+    expect(screen.getByText('•••• 7777')).toBeInTheDocument()
+    expect(screen.queryByText('9999 8888 7777')).toBeNull()
+
+    // There can be more than one number on a screen — a hundred rows, in fact — so "Show" alone is
+    // ambiguous to anyone navigating by control name.
+    await userEvent.click(screen.getByRole('button', { name: 'Show Aadhaar number for Aadhaar' }))
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Aadhaar number for Aadhaar' }))
+    expect(screen.getByText('•••• 7777')).toBeInTheDocument()
+  })
+
+  it('reveals one row at a time, never its neighbour', async () => {
+    /**
+     * The state moved INTO the row when ADR-0034 deleted the archive's page-wide Show, so this is
+     * the assertion that replaces "the header reveals every row": opening one number must not open
+     * the next one down. It is the failure a shared `revealedIds` set would produce if someone
+     * re-hoisted the state and keyed it wrong.
+     */
+    await renderWithRouter(
+      withNumbersHidden(
+        <>
+          <DocumentRow
+            document={numbered}
+            number={{ label: 'Aadhaar number', grouped: '9999 8888 7777', onCopy: () => {} }}
+          />
+          <DocumentRow
+            document={{ ...numbered, id: 'second', title: 'PAN card', identifier: '111122223333' }}
+            number={{ label: 'PAN', grouped: '111122223333', onCopy: () => {} }}
+          />
+        </>,
+      ),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Show Aadhaar number for Aadhaar' }))
+
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+    expect(screen.getByText('•••• 3333')).toBeInTheDocument()
+    expect(screen.queryByText('111122223333')).toBeNull()
   })
 
   it('keeps the buttons OUTSIDE the link, because interactive content cannot nest', async () => {
@@ -368,64 +394,36 @@ describe('the number on an archive row', () => {
      * someone later "simplifies" this back to buttons-inside-link, this fails.
      */
     const { container } = await renderWithRouter(
-      <DocumentRow
-        document={numbered}
-        number={{
-          label: 'Aadhaar number',
-          revealed: false,
-          grouped: '9999 8888 7777',
-          onToggleReveal: () => {},
-          onCopy: () => {},
-        }}
-      />,
+      withNumbersHidden(
+        <DocumentRow
+          document={numbered}
+          number={{ label: 'Aadhaar number', grouped: '9999 8888 7777', onCopy: () => {} }}
+        />,
+      ),
     )
     const link = container.querySelector('a')
     expect(link).not.toBeNull()
     expect(link?.querySelector('button')).toBeNull()
+    // Two here — Copy and Show — because this renders the masked case, which is the one with the
+    // most controls to get wrong.
     expect(container.querySelectorAll('button')).toHaveLength(2)
-  })
-
-  it('shows the grouped value once revealed, and flips the control to Hide', async () => {
-    await renderWithRouter(
-      <DocumentRow
-        document={numbered}
-        number={{
-          label: 'Aadhaar number',
-          revealed: true,
-          grouped: '9999 8888 7777',
-          onToggleReveal: () => {},
-          onCopy: () => {},
-        }}
-      />,
-    )
-    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Hide Aadhaar number for Aadhaar' }),
-    ).toBeInTheDocument()
   })
 
   it('draws no number and no controls when the prop is absent', async () => {
     // What the Now screen's cards want: rows without a number line.
     const { container } = await renderWithRouter(<DocumentRow document={numbered} />)
     expect(container.querySelectorAll('button')).toHaveLength(0)
-    expect(screen.queryByText('•••• 7777')).toBeNull()
+    expect(screen.queryByText('9999 8888 7777')).toBeNull()
   })
 
   it('draws no number line for a document that has none, even when asked to', async () => {
     const { container } = await renderWithRouter(
       <DocumentRow
-        document={{ ...numbered, identifier: null, identifier_last4: null }}
-        number={{
-          label: 'Number',
-          revealed: false,
-          grouped: '',
-          onToggleReveal: () => {},
-          onCopy: () => {},
-        }}
+        document={{ ...numbered, identifier: null }}
+        number={{ label: 'Number', grouped: '', onCopy: () => {} }}
       />,
     )
-    // A "•••• " with nothing after it, and two controls that copy an empty string, is worse than
-    // nothing at all.
+    // An empty number line, and controls that copy an empty string, is worse than nothing at all.
     expect(container.querySelectorAll('button')).toHaveLength(0)
   })
 
@@ -440,13 +438,25 @@ describe('the number on an archive row', () => {
 })
 
 describe('the identifier card', () => {
-  it('masks by default and reveals on request', async () => {
-    render(<IdentifierCard identifier="999988887777" last4="7777" label="Aadhaar number" />)
+  it('ADR-0034: shows the number outright, with nothing to tap first', () => {
+    render(<IdentifierCard identifier="999988887777" label="Aadhaar number" />)
 
-    // Masked first. The full value is already in the DOM's props — the mask is a display state, not a
-    // boundary (see the component's own note) — but it must not be the thing on screen.
+    expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
+    expect(screen.queryByText('•••• 7777')).toBeNull()
+    // No Reveal, because there is nothing hidden. This is the whole change: the value was always in
+    // the payload (ADR-0026/0027), so the tap protected nothing and cost the one field people open
+    // this screen to read.
+    expect(screen.queryByRole('button', { name: /Reveal/ })).toBeNull()
+  })
+
+  it('masks and reveals on request when the device asks for hidden numbers', async () => {
+    render(withNumbersHidden(<IdentifierCard identifier="999988887777" label="Aadhaar number" />))
+
+    // The mask is cut from the full value here, not read from a server field — ADR-0034 dropped
+    // `identifier_last4`. It is still a display state and not a boundary: the value is in the props
+    // either way, which is exactly why hiding it is a preference.
     expect(screen.getByText('•••• 7777')).toBeInTheDocument()
-    expect(screen.queryByText(/9999 8888 7777/)).toBeNull()
+    expect(screen.queryByText('9999 8888 7777')).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reveal Aadhaar number' }))
     expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
@@ -455,22 +465,20 @@ describe('the identifier card', () => {
     expect(screen.getByText('•••• 7777')).toBeInTheDocument()
   })
 
-  it('groups an all-digit number in fours, and leaves an alphanumeric one alone', async () => {
+  it('groups an all-digit number in fours, and leaves an alphanumeric one alone', () => {
     // 9999 8888 7777 is how an Aadhaar number is printed and read back aloud. A PAN is not grouped,
     // because inserting spaces into an alphanumeric code invents a format the document does not use.
-    const { unmount } = render(<IdentifierCard identifier="999988887777" last4="7777" />)
-    await userEvent.click(screen.getByRole('button', { name: /Reveal/ }))
+    const { unmount } = render(<IdentifierCard identifier="999988887777" />)
     expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
     unmount()
 
-    render(<IdentifierCard identifier="ABCDE1234F" last4="234F" />)
-    await userEvent.click(screen.getByRole('button', { name: /Reveal/ }))
+    render(<IdentifierCard identifier="ABCDE1234F" />)
     expect(screen.getByText('ABCDE1234F')).toBeInTheDocument()
   })
 
   it('renders nothing at all when the document has no number', () => {
     // An empty bordered box under "Details" reads as a field that failed to load.
-    const { container } = render(<IdentifierCard identifier={null} last4={null} />)
+    const { container } = render(<IdentifierCard identifier={null} />)
     expect(container).toBeEmptyDOMElement()
   })
 
@@ -484,7 +492,7 @@ describe('the identifier card', () => {
      * `identifier` key, and TanStack Query **rehydrates without re-running Zod**. So the first render
      * after a deploy is handed an object the schema says cannot exist. `undefined`, not `null`.
      */
-    const { container } = render(<IdentifierCard identifier={undefined} last4={undefined} />)
+    const { container } = render(<IdentifierCard identifier={undefined} />)
     expect(container).toBeEmptyDOMElement()
   })
 
@@ -492,7 +500,14 @@ describe('the identifier card', () => {
     // The comp's copy is "Stored in full, encrypted at rest, hidden until you ask." Nothing here is
     // encrypted — invariant 7 and ADR-0009 keep application-level encryption for the vault — and this
     // is the one paragraph whose whole job is telling the user how their Aadhaar number is handled.
-    render(<IdentifierCard identifier="999988887777" last4="7777" />)
+    const { unmount } = render(<IdentifierCard identifier="999988887777" />)
+    expect(screen.queryByText(/encrypted/i)).toBeNull()
+    expect(screen.getByText(/stored in full/i)).toBeInTheDocument()
+    unmount()
+
+    // Both halves of the preference, because the sentence changes with it and only one of the two
+    // was ever read by a human before shipping.
+    render(withNumbersHidden(<IdentifierCard identifier="999988887777" />))
     expect(screen.queryByText(/encrypted/i)).toBeNull()
     expect(screen.getByText(/stored in full/i)).toBeInTheDocument()
   })

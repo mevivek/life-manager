@@ -2,9 +2,12 @@ import type { Document, Thing } from '@life-manager/shared'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { FEEL_STORAGE_KEYS } from '@/lib/feel'
 import { createQueryClient } from '@/lib/query-client'
+import { FeelProvider } from '@/lib/useFeel'
 import { routeTree } from '@/routeTree.gen'
 import { server } from '@/test/msw'
 
@@ -30,7 +33,6 @@ function document(over: Partial<Document> & { id: string; title: string }): Docu
     holder: null,
     relation: null,
     identifier: null,
-    identifier_last4: null,
     thing_id: null,
     issued_on: null,
     expires_on: null,
@@ -53,7 +55,6 @@ function thing(over: Partial<Thing> & { id: string; name: string }): Thing {
     brand: null,
     model: null,
     serial: null,
-    serial_last4: null,
     purchased_on: null,
     price: null,
     currency: null,
@@ -112,9 +113,18 @@ async function renderYou() {
     history: createMemoryHistory({ initialEntries: ['/you'] }),
   })
   await router.load()
+  /**
+   * `FeelProvider` is part of the shell here for the same reason it is in `App.tsx`: without it
+   * `useFeel` falls back to `DEFAULT_FEEL` **and a no-op `set`**, so this screen's preference chips
+   * would render the right state and quietly do nothing when clicked. That fallback is deliberate
+   * (see `useFeel`) and right for a component test; it is wrong for the screen that owns the
+   * controls, which is exactly where a silently dead setter would ship.
+   */
   return render(
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router as never} />
+      <FeelProvider>
+        <RouterProvider router={router as never} />
+      </FeelProvider>
     </QueryClientProvider>,
   )
 }
@@ -298,5 +308,43 @@ describe('the App rows state what you own', () => {
     await renderYou()
 
     await settledValue('Missing a scan', '1 document')
+  })
+})
+
+describe('the Numbers card owns the mask — ADR-0034', () => {
+  it('states that numbers are kept in full, and never that they are encrypted', async () => {
+    stub({})
+    await renderYou()
+
+    // This card is the only place the app tells its user how their Aadhaar number is actually held,
+    // so the limitation is what makes the rest of it worth believing. Invariant 7, debt D44.
+    expect(await screen.findByText(/kept in full/i)).toBeInTheDocument()
+    expect(screen.getByText(/not encrypted/i)).toBeInTheDocument()
+    expect(screen.queryByText(/encrypted at rest/i)).toBeNull()
+  })
+
+  it('offers Shown and Hidden, starts on Shown, and writes the choice to this device', async () => {
+    stub({})
+    await renderYou()
+
+    const shown = await screen.findByRole('button', { name: 'Shown' })
+    const hidden = screen.getByRole('button', { name: 'Hidden' })
+
+    // The default, asserted through the CONTROL rather than through `DEFAULT_FEEL`: this is the one
+    // place a user learns what the app does with their number, and a chip row that opens on the
+    // wrong option would misreport it while every unit test still passed.
+    expect(shown).toHaveAttribute('aria-pressed', 'true')
+    expect(hidden).toHaveAttribute('aria-pressed', 'false')
+    // Nothing stored until a choice is made — `storeFeel` removes the key on the default, so "never
+    // chose" and "chose the default" stay indistinguishable and a future change of default reaches
+    // both.
+    expect(localStorage.getItem(FEEL_STORAGE_KEYS.numbers)).toBeNull()
+
+    await userEvent.click(hidden)
+    expect(localStorage.getItem(FEEL_STORAGE_KEYS.numbers)).toBe('hidden')
+    expect(screen.getByRole('button', { name: 'Hidden' })).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Shown' }))
+    expect(localStorage.getItem(FEEL_STORAGE_KEYS.numbers)).toBeNull()
   })
 })

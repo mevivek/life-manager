@@ -31,6 +31,7 @@ backlog is a complete picture.
 | **Things domain** (was "Assets") | M4, pulled into M1's window | Things | **built** 2026-07-30, both halves — [ADR-0029](../decisions/0029-the-things-domain.md), [domains/things.md](../domains/things.md). **It skipped this backlog entirely; see the note under § Ready** |
 | Money domain | M4 | Money | roadmap |
 | Secrets vault (E2EE) | M5 | Vault | roadmap |
+| **Numbers shown by default, with one hide-them switch** | — | Documents · Things | **built** 2026-08-01 — [ADR-0034](../decisions/0034-numbers-shown-by-default.md). Entered as a maintainer request to *remove* the reveal step; the scope questions turned it into a preference (`feel.numbers`, off by default) covering both domains, and the maintainer answered each one before anything was written. The derived `identifier_last4` / `serial_last4` columns went with it. **This is what the note under § Ready asks for** — a scope change with the human's yes recorded, not inferred |
 
 ---
 

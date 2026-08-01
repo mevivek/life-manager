@@ -1,16 +1,15 @@
-import {
-  type LinkedDocument,
-  type Reminder,
-  type Thing,
-  type ThingCreate,
-  type ThingDetailResponse,
-  type ThingListQuery,
-  type ThingListResponse,
-  type ThingPhoto,
-  type ThingService,
-  type ThingServiceCreate,
-  type ThingUpdate,
-  truncateSerialToLast4,
+import type {
+  LinkedDocument,
+  Reminder,
+  Thing,
+  ThingCreate,
+  ThingDetailResponse,
+  ThingListQuery,
+  ThingListResponse,
+  ThingPhoto,
+  ThingService,
+  ThingServiceCreate,
+  ThingUpdate,
 } from '@life-manager/shared'
 import type { ActorContext } from '../../auth/actor.js'
 import { db } from '../../db/client.js'
@@ -54,28 +53,21 @@ function writeSpaceOf(actor: ActorContext): string {
 }
 
 /**
- * Both serial columns, from one input value — business rule 7, and **the only place either is
- * written**.
+ * The serial column, from one input value — business rule 7, and **the only place it is written**.
  *
- * `serial_last4` is **derived, never supplied**: a client cannot send a mask that disagrees with the
- * value it masks. Keeping the derivation in one function used by create and update is what stops the
- * two drifting, which is the failure where an edit updates the full value and leaves yesterday's
- * last four on the row for every list to render.
+ * **This used to return two columns**, deriving `serial_last4` beside the value so a client could not
+ * send a mask that disagreed with what it masked. ADR-0034 dropped that column; the mask is cut
+ * client-side from the same value, which cannot disagree with itself.
  *
- * Trimmed first, because the mask comes off the **end** of the string and a serial typed on a phone
- * arrives with a trailing space more often than not — an untrimmed `"…1234 "` masks to `"234 "`,
- * visibly wrong in the one place the mask is shown. A value that trims to nothing becomes `null`
- * rather than `''`: `serialInputSchema` is `min(1)` so the wire rejects an empty string, but `"   "`
- * passes that and is not a serial.
+ * Trimmed, because a tail comes off the **end** of the string and a serial typed on a phone arrives
+ * with a trailing space more often than not — an untrimmed `"…1234 "` would draw as `"234 "`. A value
+ * that trims to nothing becomes `null` rather than `''`: `serialInputSchema` is `min(1)` so the wire
+ * rejects an empty string, but `"   "` passes that and is not a serial.
  */
-function serialColumns(value: string | null | undefined): {
-  serial: string | null
-  serialLast4: string | null
-} {
-  if (value === null || value === undefined) return { serial: null, serialLast4: null }
+function serialColumns(value: string | null | undefined): { serial: string | null } {
+  if (value === null || value === undefined) return { serial: null }
   const trimmed = value.trim()
-  if (trimmed === '') return { serial: null, serialLast4: null }
-  return { serial: trimmed, serialLast4: truncateSerialToLast4(trimmed) }
+  return { serial: trimmed === '' ? null : trimmed }
 }
 
 /**
@@ -185,7 +177,6 @@ function toThing(row: ThingRow): Thing {
      * Things holds every serial in plaintext. Debt **D47**, widened.
      */
     serial: row.serial,
-    serial_last4: row.serialLast4,
     purchased_on: row.purchasedOn,
     price: row.price,
     currency: row.currency,

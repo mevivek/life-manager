@@ -141,7 +141,7 @@ describeDb('documents', () => {
     })
 
     expect(response.statusCode).toBe(201)
-    expect(response.json().identifier_last4).toBe('4567')
+    expect(response.json().identifier).toBe('FAKE1234567')
 
     const detail = await app.inject({
       method: 'GET',
@@ -150,7 +150,8 @@ describeDb('documents', () => {
     })
     expect(detail.statusCode).toBe(200)
     expect(detail.json().identifier).toBe('FAKE1234567')
-    expect(detail.json().identifier_last4).toBe('4567')
+    // ADR-0034: no derived mask travels with it. The whole value, once, on both responses.
+    expect(detail.json()).not.toHaveProperty('identifier_last4')
   })
 
   /**
@@ -162,10 +163,11 @@ describeDb('documents', () => {
    * a cold-starting API is seconds of standing at a counter — so the field moved onto
    * `documentSchema` by explicit decision.
    *
-   * Rewritten rather than deleted, and it still asserts something the old one did not: that the mask
-   * is present **alongside** the full value, so the client always has something to render by default.
+   * Rewritten twice rather than deleted. Its second form asserted that a derived mask travelled
+   * **alongside** the full value; ADR-0034 dropped that column, so what it guards now is that the
+   * list carries the whole number and nothing else claiming to be part of it.
    */
-  it('ADR-0027: returns the full identifier in the list, alongside the mask', async () => {
+  it('ADR-0027: returns the full identifier in the list, and no derived mask', async () => {
     const user = await seedUserWithSpace(app)
 
     await app.inject({
@@ -179,10 +181,10 @@ describeDb('documents', () => {
 
     expect(list.statusCode).toBe(200)
     expect(list.json().data[0].identifier).toBe('FAKE729481038109')
-    // The mask must still be there. It is what rows render until the user reveals, so a response
-    // carrying only the full value would force every client to derive its own — and a client-derived
-    // mask is a second implementation of a rule the server owns.
-    expect(list.json().data[0].identifier_last4).toBe('8109')
+    // And no `identifier_last4` beside it — ADR-0034. A mask derived from a value in the same
+    // response is a copy of that value, and the client cuts it (`apps/web/src/lib/mask.ts`) at the
+    // moment it draws one.
+    expect(list.json().data[0]).not.toHaveProperty('identifier_last4')
   })
 
   // ── Holders: a label, not a permission ───────────────────────────────────
@@ -361,12 +363,12 @@ describeDb('documents', () => {
     expect(filtered.json().data).toEqual([])
   })
 
-  it('never lets a client set the mask directly, in a list or anywhere else', async () => {
+  it('never lets a client store a mask of its own, in a list or anywhere else', async () => {
     const user = await seedUserWithSpace(app)
 
-    // `identifier_last4` is DERIVED. A create that tries to supply one must not be able to make the
-    // mask disagree with the number it masks — that is the drift `identifierColumns` exists to stop,
-    // and it is the one invariant ADR-0027 did NOT relax.
+    // There is no `identifier_last4` column since ADR-0034, and a client must not be able to bring
+    // one back by sending it: a stored mask is a second copy of a fact that already travels whole,
+    // and the two drift the first time an edit touches only one of them.
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/documents',
@@ -375,26 +377,27 @@ describeDb('documents', () => {
     })
 
     // Query schemas are strict, and so is the create body: an unknown field is a 400 rather than a
-    // silent strip (conventions/api.md §7, debt D27). Either way the mask must never be '0000'.
+    // silent strip (conventions/api.md §7, debt D27). Either way '0000' must reach nothing.
     if (created.statusCode === 201) {
-      expect(created.json().identifier_last4).toBe('234F')
+      expect(created.json()).not.toHaveProperty('identifier_last4')
+      expect(created.json().identifier).toBe('FAKEABCDE1234F')
     } else {
       expect(created.statusCode).toBe(400)
     }
   })
 
-  it('rule 6: trims before masking, and treats an emptied field as no identifier', async () => {
+  it('rule 6: trims the stored value, and treats an emptied field as no identifier', async () => {
     const user = await seedUserWithSpace(app)
 
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/documents',
       ...authAs(user),
-      // A trailing space is what a phone keyboard produces. The mask comes off the END of the
-      // string, so an untrimmed value masks to "109 " — wrong in the one place the mask is shown.
+      // A trailing space is what a phone keyboard produces. A tail is cut from the END of the
+      // string, so an untrimmed value would draw as "109 " wherever the client masks one.
       payload: { title: 'PAN card', identifier: '  FAKEABCDE1234F  ' },
     })
-    expect(created.json().identifier_last4).toBe('234F')
+    expect(created.json().identifier).toBe('FAKEABCDE1234F')
 
     // `null`, not `''` — `identifierInputSchema` is `min(1)`, and `DocumentForm` already maps a blank
     // field to null in its own schema so validation and submission cannot disagree.
@@ -405,17 +408,17 @@ describeDb('documents', () => {
       payload: { identifier: null, version: created.json().version },
     })
     expect(emptied.statusCode).toBe(200)
-    expect(emptied.json().identifier_last4).toBeNull()
+    expect(emptied.json().identifier).toBeNull()
 
     const detail = await app.inject({
       method: 'GET',
       url: `/api/v1/documents/${created.json().id}`,
       ...authAs(user),
     })
-    // Both columns clear together. Leaving yesterday's mask on the row is the drift
-    // `identifierColumns` exists to prevent, and it would show in every list.
+    // Cleared for good: the value is gone from the detail response as well as from the PATCH's own
+    // reply, so nothing anywhere is still holding the old number or a piece of it.
     expect(detail.json().identifier).toBeNull()
-    expect(detail.json().identifier_last4).toBeNull()
+    expect(detail.json()).not.toHaveProperty('identifier_last4')
   })
 
   /**

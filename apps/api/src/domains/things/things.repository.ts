@@ -257,9 +257,8 @@ export type ThingInsert = {
   kind: ThingKind
   brand: string | null
   model: string | null
-  /** Full value. Derived together with the mask by `serialColumns` in the service — rule 7. */
+  /** Full value. Normalised by `serialColumns` in the service and stored as-is — rule 7. */
   serial: string | null
-  serialLast4: string | null
   purchasedOn: string | null
   /** A decimal **string**, never a number — conventions/data.md §4. */
   price: string | null

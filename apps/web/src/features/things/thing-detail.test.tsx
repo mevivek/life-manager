@@ -18,6 +18,7 @@ import { HttpResponse, http } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 import { server } from '@/test/msw'
+import { withNumbersHidden } from '@/test/preferences'
 import { ClaimPack, packPieces } from './ClaimPack'
 import { formatMoney } from './money'
 import { awayLabel } from './OwnershipPanel'
@@ -83,7 +84,6 @@ function detail(overrides: Partial<ThingDetailResponse> = {}): ThingDetailRespon
     brand: null,
     model: null,
     serial: null,
-    serial_last4: null,
     purchased_on: null,
     price: null,
     currency: null,
@@ -459,11 +459,19 @@ describe('the service cycle', () => {
 // ── The serial ───────────────────────────────────────────────────────────────
 
 describe('the serial', () => {
-  it('masks by default and reveals on request', async () => {
-    render(<ThingSerial serial="356938035643809" last4="3809" kind="phone" />)
+  it('ADR-0034: shows the serial outright, with nothing to tap first', () => {
+    render(<ThingSerial serial="356938035643809" kind="phone" />)
 
-    // Masked first. The full value is already in the props — the mask is a display state, not a
-    // boundary — but it must not be the thing on screen.
+    expect(screen.getByText('356938035643809')).toBeInTheDocument()
+    expect(screen.queryByText('•••• 3809')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Show IMEI/ })).toBeNull()
+  })
+
+  it('masks and reveals on request when the device asks for hidden numbers', async () => {
+    render(withNumbersHidden(<ThingSerial serial="356938035643809" kind="phone" />))
+
+    // The mask is cut from the full value here — `serial_last4` is gone (ADR-0034) — and it is still
+    // a display state rather than a boundary: the value is in the props either way.
     expect(screen.getByText('•••• 3809')).toBeInTheDocument()
     expect(screen.queryByText('356938035643809')).toBeNull()
 
@@ -472,6 +480,16 @@ describe('the serial', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Hide IMEI' }))
     expect(screen.getByText('•••• 3809')).toBeInTheDocument()
+  })
+
+  it('is governed by the SAME preference as a document’s number', () => {
+    /**
+     * One switch for both domains, which is the half of ADR-0034 easiest to half-implement: a person
+     * who hides their Aadhaar number and finds their IMEI still on screen has a setting that lied.
+     * The key is `feel.numbers`, written once and read by `IdentifierCard` and this component.
+     */
+    render(withNumbersHidden(<ThingSerial serial="C02XL0RTJGH7" kind="laptop" />))
+    expect(screen.getByText('•••• JGH7')).toBeInTheDocument()
   })
 
   it('always shows the label the KIND calls it, never a bare string', () => {
@@ -485,17 +503,18 @@ describe('the serial', () => {
     ] as const
 
     for (const [kind, label] of cases) {
-      const { unmount } = render(<ThingSerial serial="KA01AB1234" last4="1234" kind={kind} />)
+      const { unmount } = render(<ThingSerial serial="KA01AB1234" kind={kind} />)
       expect(screen.getByText(label)).toBeInTheDocument()
       unmount()
     }
   })
 
   it('offers Copy and Show, both named after the field', () => {
-    // A LAPTOP, where this used to use a vehicle. A registration is no longer masked (see below), so
-    // asserting the Show button on one would now be asserting the exception rather than the rule.
-    render(<ThingSerial serial="C02XL0RTJGH7" last4="JGH7" kind="laptop" />)
-    // Two controls, and the names distinguish them from any other masked value on a screen.
+    // A LAPTOP, where this used to use a vehicle. A registration is never masked (see below), so
+    // asserting the Show button on one would be asserting the exception rather than the rule. Under
+    // the masked preference, because that is the only state with two controls to tell apart.
+    render(withNumbersHidden(<ThingSerial serial="C02XL0RTJGH7" kind="laptop" />))
+    // The names distinguish them from any other masked value on a screen.
     expect(screen.getByRole('button', { name: 'Copy Serial number' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show Serial number' })).toBeInTheDocument()
   })
@@ -504,7 +523,7 @@ describe('the serial', () => {
     // `IdentifierCard` groups an all-digit Aadhaar number in fours. A registration and an IMEI must not
     // be reshaped — rule 9's two live plate formats are the reason. No click needed any more: a plate
     // is drawn in full from the start.
-    render(<ThingSerial serial="22BH1234AA" last4="34AA" kind="vehicle" />)
+    render(<ThingSerial serial="22BH1234AA" kind="vehicle" />)
     expect(screen.getByText('22BH1234AA')).toBeInTheDocument()
   })
 
@@ -516,8 +535,10 @@ describe('the serial', () => {
    * aloud, and protects nothing from the threat the mask exists for (shoulders near the screen),
    * because anyone standing there can read the plate off the vehicle.
    */
-  it('shows a vehicle’s registration in full, with no Show control to press', () => {
-    render(<ThingSerial serial="KA01AB1234" last4="1234" kind="vehicle" />)
+  it('shows a vehicle’s registration in full even when numbers are hidden', () => {
+    // Under the MASKED preference deliberately: shown-by-default would prove nothing about the plate
+    // exception, since everything is shown then. This is the one value the setting must not reach.
+    render(withNumbersHidden(<ThingSerial serial="KA01AB1234" kind="vehicle" />))
 
     expect(screen.getByText('KA01AB1234')).toBeInTheDocument()
     // Not merely revealed by default — there is no toggle at all, because a control whose two states
@@ -529,9 +550,9 @@ describe('the serial', () => {
   })
 
   it('still masks every other kind, because those numbers are inside the object', async () => {
-    // The control case. If the plate exception ever widens to all kinds, this fails — an IMEI read off
-    // a stranger's screen is exactly what rule 7's mask is for.
-    render(<ThingSerial serial="356938035643809" last4="3809" kind="phone" />)
+    // The control case for the plate exception. If it ever widens to all kinds, this fails — an IMEI
+    // read off a stranger's screen is exactly what rule 7's mask is for.
+    render(withNumbersHidden(<ThingSerial serial="356938035643809" kind="phone" />))
 
     expect(screen.queryByText('356938035643809')).toBeNull()
     expect(screen.getByText(/•••• 3809/)).toBeInTheDocument()
@@ -542,14 +563,20 @@ describe('the serial', () => {
   it('never claims the value is encrypted, because it is not', () => {
     // Invariant 7 and ADR-0009 keep application-level encryption for the vault; the serial is plaintext
     // by explicit decision (debt D44). The comp's document card said "encrypted at rest".
-    render(<ThingSerial serial="356938035643809" last4="3809" kind="phone" />)
+    const { unmount } = render(<ThingSerial serial="356938035643809" kind="phone" />)
+    expect(screen.queryByText(/encrypt/i)).toBeNull()
+    expect(screen.getByText(/stored in full/i)).toBeInTheDocument()
+    unmount()
+
+    // Both halves of the preference, because the sentence changes with it.
+    render(withNumbersHidden(<ThingSerial serial="356938035643809" kind="phone" />))
     expect(screen.queryByText(/encrypt/i)).toBeNull()
     expect(screen.getByText(/stored in full/i)).toBeInTheDocument()
   })
 
   it('renders nothing at all when the thing has no serial', () => {
     // The sparse case, and an empty bordered box under the facts reads as a field that failed to load.
-    const { container } = render(<ThingSerial serial={null} last4={null} kind="laptop" />)
+    const { container } = render(<ThingSerial serial={null} kind="laptop" />)
     expect(container).toBeEmptyDOMElement()
   })
 
@@ -559,15 +586,8 @@ describe('the serial', () => {
      * Zod**, so the first render after a deploy can be handed an object the schema says cannot exist.
      * The identical shape crashed `IdentifierCard` at the root error boundary on a real phone.
      */
-    const { container, unmount } = render(
-      <ThingSerial serial={undefined} last4={undefined} kind="laptop" />,
-    )
+    const { container } = render(<ThingSerial serial={undefined} kind="laptop" />)
     expect(container).toBeEmptyDOMElement()
-    unmount()
-
-    // And with a value but no mask: falls back to the last four of the value rather than "•••• ".
-    render(<ThingSerial serial="356938035643809" last4={undefined} kind="phone" />)
-    expect(screen.getByText('•••• 3809')).toBeInTheDocument()
   })
 })
 
@@ -678,7 +698,6 @@ describe('the claim pack', () => {
   /** Two pieces in, four missing — the state a real record is actually in. */
   const partial = detail({
     serial: '356938035643809',
-    serial_last4: '3809',
     purchased_on: iso(-400),
     documents: [linked({ id: uuid('21'), title: 'Boiler manual', doc_type: 'other' })],
   })
@@ -1226,7 +1245,6 @@ describe('the whole screen', () => {
         brand: 'Volkswagen',
         model: 'Golf 1.5 TSI',
         serial: 'KA01AB1234',
-        serial_last4: '1234',
         purchased_on: iso(-800),
         price: '1450000',
         currency: 'INR',
