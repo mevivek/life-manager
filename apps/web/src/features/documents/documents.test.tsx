@@ -316,14 +316,13 @@ describe('the number on an archive row', () => {
     expect(screen.queryByText('Me')).toBeNull()
   })
 
-  it('ADR-0034: shows the label and the whole number, with no Show control', async () => {
+  it('ADR-0034: shows the whole number, with no Show control', async () => {
     await renderWithRouter(
       <DocumentRow
         document={numbered}
         number={{ label: 'Aadhaar number', grouped: '9999 8888 7777', onCopy: () => {} }}
       />,
     )
-    expect(screen.getByText('Aadhaar number')).toBeInTheDocument()
     expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
     expect(screen.queryByText('•••• 7777')).toBeNull()
     // Copy stays; Show has nothing to do, and a control whose two states look identical is worse
@@ -332,6 +331,35 @@ describe('the number on an archive row', () => {
     expect(
       screen.getByRole('button', { name: 'Copy Aadhaar number for Aadhaar' }),
     ).toBeInTheDocument()
+  })
+
+  it('does not print the label in front of the number — the title already says it', async () => {
+    /**
+     * The row reads `Aadhaar` and then `Aadhaar number 9999 8888 7777`, which is the same fact twice
+     * and costs the number the width it needs to wrap into. ADR-0027 put the label here when the row
+     * showed only `•••• 7777`; the label went when the value did not.
+     *
+     * The half that must NOT go with it is the accessible naming: `Copy` alone is ambiguous with two
+     * numbered rows on screen, and a screen reader has no visual title-then-value adjacency to infer
+     * from. So this asserts both — the label is absent as text and present as a control name.
+     */
+    await renderWithRouter(
+      <DocumentRow
+        document={numbered}
+        number={{ label: 'Aadhaar number', grouped: '9999 8888 7777', onCopy: () => {} }}
+      />,
+    )
+    expect(screen.queryByText('Aadhaar number')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Copy Aadhaar number for Aadhaar' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the label on the DETAIL card, where the number has no title beside it', () => {
+    // The other half of the same decision, asserted in the same place so the two cannot drift: a
+    // number standing alone still needs naming, which is what ADR-0027's argument actually covers.
+    render(<IdentifierCard identifier="999988887777" label="Aadhaar number" />)
+    expect(screen.getByText('Aadhaar number')).toBeInTheDocument()
   })
 
   it('masks and offers Show when the device asks for hidden numbers', async () => {

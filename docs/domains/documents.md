@@ -350,6 +350,14 @@ the expiry ladder and the navigation rule; this section records what the screens
   own. The pill is `shrink-0` and the title `min-w-0 truncate`, so a long title shortens and the
   **name never does** — a name truncated to "Priy…" loses the only thing distinguishing two otherwise
   identical documents.
+- **A row's number is drawn bare — no label in front of it, and it wraps rather than truncating.**
+  ADR-0027 labelled it because the row showed `•••• 8109` and four characters need telling apart from
+  the four on the row below; once ADR-0034 showed the whole value, the title one line up was already
+  naming the document and the label was saying it twice. The label survives where it is not redundant:
+  as the **detail card's** heading, and as the accessible name of the row's Copy and Show controls
+  ("Copy Aadhaar number for Aadhaar"), which a screen reader has no title-then-value adjacency to
+  infer from. Truncating was the D37 clipping bug in a new place — a number you cannot finish reading
+  is worse than a mask, because a mask at least says it is one.
 - **The people picker** (`DocumentForm`) — *Whose document is it?* as a chip row: **Me**, one chip per
   known holder, and a dashed **Someone else** that opens *Their name* / *How they're related*.
 

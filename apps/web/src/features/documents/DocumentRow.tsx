@@ -224,18 +224,29 @@ export function DocumentRow({
             So it wraps. `min-h-row` is a minimum rather than a height for exactly this reason, and the
             title above it still truncates — the title is recognisable from its first few words and a
             number is not.
+
+            ── The value stands alone: no "Aadhaar number" in front of it on a row ──
+
+            ADR-0027 put the label here because the row showed `•••• 8109` and nothing else, and four
+            characters need telling apart from the four characters on the row below. That stopped being
+            true when ADR-0034 showed the value: **the title one line up already names the document**,
+            so `Aadhaar / Aadhaar number 7294 8103 8109` says it twice — and the second copy takes the
+            width off the line that just started needing it.
+
+            `number.label` is still passed and still used, by the Copy and Show controls' accessible
+            names and by the page's copy toast. Those are not chrome: "Copy" alone is ambiguous the
+            moment two numbered rows are on screen, and a screen reader gets no title-then-value
+            adjacency to infer from. **The detail card keeps its visible label** — there the number is
+            the subject with no title beside it, which is the case ADR-0027's argument actually covers.
           */}
           {hasNumber && number !== undefined && document.identifier !== null && (
-            <span className="mt-1 flex items-baseline gap-[7px]">
-              <span className="shrink-0 text-[0.6875rem] text-ink-3">{number.label}</span>
-              <span
-                className={cn(
-                  'min-w-0 flex-1 break-all font-mono text-meta font-medium text-ink-2',
-                  shown ? 'tracking-number' : 'tracking-label',
-                )}
-              >
-                {shown ? number.grouped : maskedNumber(document.identifier)}
-              </span>
+            <span
+              className={cn(
+                'mt-1 block break-all font-mono text-meta font-medium text-ink-2',
+                shown ? 'tracking-number' : 'tracking-label',
+              )}
+            >
+              {shown ? number.grouped : maskedNumber(document.identifier)}
             </span>
           )}
         </span>
