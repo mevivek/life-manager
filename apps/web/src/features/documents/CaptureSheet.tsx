@@ -16,6 +16,7 @@ import { Chip, Tag } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Eyebrow, Label } from '@/components/ui/label'
 import { Sheet } from '@/components/ui/sheet'
+import { RelationField } from '@/features/people/RelationField'
 import { useCreateThing, useThings } from '@/features/things/useThings'
 import { ApiError } from '@/lib/api'
 import { useFeel } from '@/lib/useFeel'
@@ -631,13 +632,17 @@ export function CaptureWizard({
                   onChange={(event) => setDocument({ ...document, holder: event.target.value })}
                 />
               </div>
+              {/*
+                The suggestion chips, which this step did NOT have: it was a bare text input with a
+                "Wife" placeholder, so the two screens a user actually meets while filing something
+                were the two that offered no answers. `RelationField` is now the only relation field.
+              */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="capture-relation">How they’re related</Label>
-                <Input
+                <RelationField
                   id="capture-relation"
-                  placeholder="Wife"
+                  label="How they’re related"
                   value={document.relation}
-                  onChange={(event) => setDocument({ ...document, relation: event.target.value })}
+                  onChange={(relation) => setDocument({ ...document, relation })}
                 />
                 <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
                   Optional, and only a label — it changes nothing about who can see this.

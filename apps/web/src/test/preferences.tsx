@@ -15,7 +15,7 @@ import { FeelProvider } from '@/lib/useFeel'
  */
 
 /**
- * The app with **numbers hidden** — ADR-0034's opt-in mask.
+ * The app with **numbers hidden** — ADR-0036's opt-in mask.
  *
  * Written to `localStorage` before the provider mounts, because `FeelProvider` seeds its state from
  * `readFeel()` during the first render rather than in an effect: that is what stops a compact user's

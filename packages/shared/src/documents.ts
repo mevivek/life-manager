@@ -81,7 +81,7 @@ export const tagSchema = z
  * a vehicle registration — the number *is* the thing you need at a counter, far more often than the
  * scan is.
  *
- * So the full value is stored, and it is also what is **displayed** — ADR-0034. There was a second
+ * So the full value is stored, and it is also what is **displayed** — ADR-0036. There was a second
  * column, `identifier_last4`, derived on every write and rendered until the user tapped Reveal; it is
  * gone. Two fields travelling together in the same response cannot disagree, which was the only thing
  * server-side derivation bought, and the second was a copy of the last four characters of the first.
@@ -113,7 +113,7 @@ export const relationSchema = z.string().trim().min(1).max(60)
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
  * It used to type a derived top-level column that mirrored the last four characters of `identifier`.
- * [ADR-0034](../../../docs/decisions/0034-numbers-shown-by-default.md) dropped that column: numbers
+ * [ADR-0036](../../../docs/decisions/0036-numbers-shown-by-default.md) dropped that column: numbers
  * are shown in full, and the client derives the mask from the value it already has when the user has
  * asked for one (`apps/web/src/lib/mask.ts`).
  *

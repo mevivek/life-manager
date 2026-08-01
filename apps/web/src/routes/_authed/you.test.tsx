@@ -311,7 +311,7 @@ describe('the App rows state what you own', () => {
   })
 })
 
-describe('the Numbers card owns the mask — ADR-0034', () => {
+describe('the Numbers card owns the mask — ADR-0036', () => {
   it('states that numbers are kept in full, and never that they are encrypted', async () => {
     stub({})
     await renderYou()

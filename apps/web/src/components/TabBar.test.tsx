@@ -7,7 +7,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
@@ -174,6 +174,12 @@ async function renderBarAt(path: string, documents: Document[] = []) {
     // stubs, and both detail routes still light it. All five are declared so the bar is asserted
     // against real matches rather than against the router's not-found fallback.
     createRoute({ getParentRoute: () => rootRoute, path: '/library', component: () => null }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/people', component: () => null }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/people/$personId',
+      component: () => null,
+    }),
     createRoute({ getParentRoute: () => rootRoute, path: '/outbox', component: () => null }),
     createRoute({ getParentRoute: () => rootRoute, path: '/documents', component: () => null }),
     createRoute({
@@ -256,6 +262,17 @@ describe('which tab is lit', () => {
       .filter((link) => link.getAttribute('aria-current') === 'page')
     expect(lit).toHaveLength(1)
     expect(lit[0]?.textContent?.trim()).toBe('You')
+  })
+
+  it('lights You on the People directory and on one person', async () => {
+    // People is reached from a row on You and is a setting, not a collection. Rendering `/people` at
+    // 390px showed NO tab lit — the route had never been added to a match list, and nothing failed.
+    await renderBarAt('/people')
+    expect(currentTabLabel()).toBe('You')
+
+    cleanup()
+    await renderBarAt('/people/33333333-3333-4333-8333-333333333333')
+    expect(currentTabLabel()).toBe('You')
   })
 
   it('does not light Everything from an unrelated route', async () => {

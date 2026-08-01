@@ -55,7 +55,7 @@ The logical document — "my passport" — independent of any particular scan of
 | `title` | `text not null` | Free text. The only field required at capture — see [Q2](../product/open-questions.md) |
 | `doc_type` | `enum not null` | `identity` · `financial` · `legal` · `warranty` · `receipt` · `certificate` · `other` |
 | `issuer` | `text null` | Who issued it. Free text with autocomplete — see §9 |
-| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on **every** document response including the list ([ADR-0027](../decisions/0027-identifier-in-the-list-response.md)), and **shown** in full ([ADR-0034](../decisions/0034-numbers-shown-by-default.md)). In pino's redaction list |
+| `identifier` | `text null` | **The full number**, plaintext — [ADR-0026](../decisions/0026-store-the-full-identifier.md). Returned on **every** document response including the list ([ADR-0027](../decisions/0027-identifier-in-the-list-response.md)), and **shown** in full ([ADR-0036](../decisions/0036-numbers-shown-by-default.md)). In pino's redaction list |
 | `holder` | `text null` | Whose document it is, as a **label**. `null` means the owner's own — §4 rule 13 |
 | `relation` | `text null` | How the holder relates to the owner — "Wife", "Son (12)". Cosmetic, and `null` whenever `holder` is |
 | `issued_on` | `date null` | |
@@ -167,7 +167,7 @@ Each maps to a test ([conventions/testing.md](../conventions/testing.md)).
    reversed that and kept the whole value in `identifier`, with a derived `identifier_last4` as the
    display form; [ADR-0027](../decisions/0027-identifier-in-the-list-response.md) put the full value
    on **every** response including the list, at the cost of the persisted cache holding every number
-   on the device (debt D47); and [ADR-0034](../decisions/0034-numbers-shown-by-default.md) removed
+   on the device (debt D47); and [ADR-0036](../decisions/0036-numbers-shown-by-default.md) removed
    the mask from in front of it.
 
    As it stands: the whole value is stored, returned everywhere, and **rendered in full by default**.
@@ -343,16 +343,29 @@ the expiry ladder and the navigation rule; this section records what the screens
   carrying the reminder chips → *Details* (including *Whose*, which reads **Mine** rather than
   disappearing — it is a `<dl>` of every field, the same way an absent country reads "Not set" — and the
   per-type `custom_attrs`, read-only) → the
-  number block with Copy and its explanation → *Scans* → a quiet text-only delete. Inline preview is
-  M2. The number is drawn in full unless `feel.numbers` is `hidden`, in which case it is `•••• last4`
-  with a Reveal (ADR-0034).
+  number block with Copy and its explanation → *Scans* → a quiet text-only delete → **the page
+  foot: when the record was added, and when it last changed**. Inline preview is M2. The number is
+  drawn in full unless `feel.numbers` is `hidden`, in which case it is `•••• last4` with a Reveal
+  ([ADR-0036](../decisions/0036-numbers-shown-by-default.md)).
+
+  **The foot sits *below* the delete, and it is `RecordMeta` on both detail screens** — the same
+  component the thing screen ends on ([things.md](things.md) §7), because two screens stating one fact in
+  two shapes is the drift `documentRowProps.ts` exists to prevent elsewhere. It draws `Added 12 Jan 2026`,
+  plus `· Updated 3 Feb 2026` **only when the rendered days differ**: a record nobody has edited would
+  otherwise claim an update on the day it was captured. Neither `version` nor the id is drawn: "Version"
+  already names a *scan* on this screen, and the id is in the URL.
+
+  **Both dates here are *instants*, so they are drawn on the reader's clock** — as is a scan row's
+  *Added*, and the Build card's build times. [design.md §11](../conventions/design.md) holds the rule and
+  the two-kinds-of-date table; the short version is that `expires_on` is a calendar date and gets sliced,
+  while `created_at` gets converted.
 - **Rows carry the holder as a hairline pill beside the title**, and nothing at all for the owner's
   own. The pill is `shrink-0` and the title `min-w-0 truncate`, so a long title shortens and the
   **name never does** — a name truncated to "Priy…" loses the only thing distinguishing two otherwise
   identical documents.
 - **A row's number is drawn bare — no label in front of it, and it wraps rather than truncating.**
   ADR-0027 labelled it because the row showed `•••• 8109` and four characters need telling apart from
-  the four on the row below; once ADR-0034 showed the whole value, the title one line up was already
+  the four on the row below; once ADR-0036 showed the whole value, the title one line up was already
   naming the document and the label was saying it twice. The label survives where it is not redundant:
   as the **detail card's** heading, and as the accessible name of the row's Copy and Show controls
   ("Copy Aadhaar number for Aadhaar"), which a screen reader has no title-then-value adjacency to

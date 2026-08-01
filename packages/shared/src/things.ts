@@ -306,7 +306,7 @@ export const thingCreateSchema = z.strictObject({
   kind: thingKindSchema.default('other'),
   brand: z.string().trim().max(120).nullish(),
   model: z.string().trim().max(200).nullish(),
-  /** Stored whole, and shown whole unless the device asks otherwise — rule 7, ADR-0034. */
+  /** Stored whole, and shown whole unless the device asks otherwise — rule 7, ADR-0036. */
   serial: serialInputSchema.nullish(),
   purchased_on: isoDateSchema.nullish(),
   price: decimalStringSchema.nullish(),

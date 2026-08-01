@@ -68,13 +68,22 @@ export type DocumentRowProps = {
    */
   glyphColumn?: 'narrow' | 'wide'
   /**
-   * The number line and its Copy control — ADR-0027, amended by ADR-0034. Absent means no number is
+   * Whether to draw the holder pill beside the title.
+   *
+   * `false` on a **person's own page**, where every row is that person's and the name is already the
+   * heading — three identical pills reading "Priya" under a heading reading "Priya" is noise, and the
+   * comp's person view draws none. Everywhere else it stays on: the pill is what distinguishes two
+   * otherwise identical documents in a mixed list.
+   */
+  showHolder?: boolean
+  /**
+   * The number line and its Copy control — ADR-0027, amended by ADR-0036. Absent means no number is
    * drawn at all, which is what the Now screen's cards want.
    *
    * ── `revealed` and `onToggleReveal` used to be here, and are deliberately gone ──
    *
    * They were props rather than state because the archive header carried a **page-wide** Show that
-   * revealed every row at once, so the revealed set had to live above the rows. ADR-0034 deleted that
+   * revealed every row at once, so the revealed set had to live above the rows. ADR-0036 deleted that
    * control — a device-wide preference on the You screen says the same thing once instead of on every
    * page — so the only reveal left is per row, and a row is the right place to keep it. What remains
    * passed in is `grouped`, for the same reason the expiry is: the parent already has the formatter,
@@ -97,6 +106,7 @@ export function DocumentRow({
   divided = false,
   chevron = false,
   glyphColumn = 'narrow',
+  showHolder = true,
   number,
   className,
 }: DocumentRowProps) {
@@ -180,7 +190,7 @@ export function DocumentRow({
             <span className="min-w-0 truncate text-row font-medium leading-snug">
               {document.title}
             </span>
-            {document.holder != null && document.holder !== '' && (
+            {showHolder && document.holder != null && document.holder !== '' && (
               <span className="shrink-0 rounded-pill border border-rule-2 px-[7px] text-[0.6875rem] font-medium text-ink-2">
                 {document.holder}
               </span>
@@ -210,7 +220,7 @@ export function DocumentRow({
             spaced the bullets so far apart they stopped reading as one field.
 
             The mask is derived here from the full value (`maskedNumber`) rather than read from a
-            server field — ADR-0034 dropped `identifier_last4`, which was a copy of the last four
+            server field — ADR-0036 dropped `identifier_last4`, which was a copy of the last four
             characters of a value sitting in the same response.
 
             ── `break-all`, NOT `truncate`, and this was found by rendering it ──
@@ -218,7 +228,7 @@ export function DocumentRow({
             The line truncated while the mask was the only thing on it, which was harmless: `•••• 8109`
             is nine characters and never reached the edge. Showing the value by default put real
             numbers there, and a 20-character policy number came out as `FAKE-POL-9988776655…` at
-            390px — the D37 clipping bug again, on the one field ADR-0034 exists to make readable. A
+            390px — the D37 clipping bug again, on the one field ADR-0036 exists to make readable. A
             number you cannot finish reading is worse than a mask, because a mask at least says so.
 
             So it wraps. `min-h-row` is a minimum rather than a height for exactly this reason, and the
@@ -229,7 +239,7 @@ export function DocumentRow({
 
             ADR-0027 put the label here because the row showed `•••• 8109` and nothing else, and four
             characters need telling apart from the four characters on the row below. That stopped being
-            true when ADR-0034 showed the value: **the title one line up already names the document**,
+            true when ADR-0036 showed the value: **the title one line up already names the document**,
             so `Aadhaar / Aadhaar number 7294 8103 8109` says it twice — and the second copy takes the
             width off the line that just started needing it.
 

@@ -177,7 +177,7 @@ export async function getDetail(actor: ActorContext, id: string): Promise<Docume
  * The identifier column, from one input value — the only place it is written.
  *
  * **This used to return two columns**, deriving `identifier_last4` beside the value so a client could
- * not send a mask that disagreed with the number it masked. ADR-0034 dropped that column; the mask is
+ * not send a mask that disagreed with the number it masked. ADR-0036 dropped that column; the mask is
  * cut client-side from the same value, which cannot disagree with itself.
  *
  * Trimmed, because a number typed on a phone arrives with a trailing space more often than not, and a

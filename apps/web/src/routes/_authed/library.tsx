@@ -180,7 +180,7 @@ function LibraryPage() {
   /**
    * The copy confirmation, and nothing else.
    *
-   * ── The page-wide Show/Hide that used to live here is gone — ADR-0034 ──
+   * ── The page-wide Show/Hide that used to live here is gone — ADR-0036 ──
    *
    * It came with two pieces of state (`revealAll` for the header, `revealedIds` for the rows), which
    * existed because one set could not answer both questions: turning the header off after opening a
@@ -221,7 +221,7 @@ function LibraryPage() {
   const everyThing = allThings.data?.data ?? []
   const complete = documents.data?.next_cursor === null && things.data?.next_cursor === null
 
-  /** What a row's Copy button reports back, so the page can say it (ADR-0027, amended by ADR-0034). */
+  /** What a row's Copy button reports back, so the page can say it (ADR-0027, amended by ADR-0036). */
   const numbers: NumberDisplay = {
     onCopied: (label) => setCopied(`${label} copied`),
     // Never silent: a clipboard refused by an insecure origin or a denied permission says so, and the
@@ -299,7 +299,7 @@ function LibraryPage() {
 
             <div className="flex shrink-0 items-center gap-0.5">
               {/*
-                ── The page-wide Show/Hide was here, and ADR-0034 removed it ──
+                ── The page-wide Show/Hide was here, and ADR-0036 removed it ──
 
                 It revealed every number on the loaded page at once, which is a per-page answer to a
                 question the user only ever answers once: whether numbers should be visible on this
@@ -307,7 +307,7 @@ function LibraryPage() {
                 decision is how they end up disagreeing — and this one could only ever speak for the
                 rows already fetched.
 
-                Do not re-add it without superseding ADR-0034.
+                Do not re-add it without superseding ADR-0036.
               */}
               <SearchToggle
                 open={false}

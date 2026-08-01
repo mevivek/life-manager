@@ -45,7 +45,7 @@ export const REDACTED_PATHS = [
    * was a mask. It now stores the value in full, which means a request body or a detail response
    * caught in a log line is a whole Aadhaar or passport number.
    *
-   * There is no `identifier_last4` to exempt any more — ADR-0034 dropped the derived column, and the
+   * There is no `identifier_last4` to exempt any more — ADR-0036 dropped the derived column, and the
    * mask is cut client-side. This one path is the whole rule for documents.
    */
   'identifier',
@@ -57,7 +57,7 @@ export const REDACTED_PATHS = [
    * and in plaintext (invariant 7, ADR-0009), so a request body or a detail response caught in a log
    * line is a whole registration number.
    *
-   * As with `identifier`, there is no `serial_last4` to exempt — ADR-0034 dropped it too.
+   * As with `identifier`, there is no `serial_last4` to exempt — ADR-0036 dropped it too.
    */
   'serial',
   '*.serial',

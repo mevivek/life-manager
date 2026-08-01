@@ -26,10 +26,10 @@ import { numberLabelFor } from './presets'
  */
 
 /**
- * What a list has to supply for its rows to draw numbers at all (ADR-0027, amended by ADR-0034).
+ * What a list has to supply for its rows to draw numbers at all (ADR-0027, amended by ADR-0036).
  *
  * It used to carry the revealed set, `revealAll` and a toggle, because the archive header had a
- * page-wide Show. ADR-0034 replaced that with a device preference on the You screen, so reveal is
+ * page-wide Show. ADR-0036 replaced that with a device preference on the You screen, so reveal is
  * per-row state inside `DocumentRow` and nothing about it needs hoisting. What is left is the one
  * thing a row genuinely cannot do for itself: tell the *page* to say something.
  */
@@ -90,10 +90,13 @@ export function documentNumberProps(
 export function libraryDocumentRowProps(
   document: Document,
   numbers: NumberDisplay | undefined,
+  /** Forwarded so a person's own page can suppress the pill naming that person. */
+  options: { showHolder?: boolean } = {},
 ): DocumentRowProps {
   return {
     document,
     glyphColumn: 'wide',
+    showHolder: options.showHolder ?? true,
     number: documentNumberProps(document, numbers),
     // Full-bleed rows with a rule below each, so the list reads as a ledger page rather than a stack
     // of cards. The negative margin undoes the shell's gutter for the rule only.

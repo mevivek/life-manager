@@ -101,7 +101,7 @@ export const things = pgTable(
 
     /*
      * `serial_last4` was here, mirroring `documents.identifier_last4` — a derived copy of the last
-     * four characters of `serial`. Both were dropped by ADR-0034: serials are shown in full by
+     * four characters of `serial`. Both were dropped by ADR-0036: serials are shown in full by
      * default, and the mask a device asks for is cut from the value in the same response. Do not
      * re-add it.
      */

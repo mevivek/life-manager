@@ -21,7 +21,7 @@ afterEach(() => {
   // Undoes any per-test `server.use(...)` override, so tests stay order-independent (§5).
   server.resetHandlers()
   /**
-   * And any preference a test wrote — the theme, the feel keys, `numbers` (ADR-0034).
+   * And any preference a test wrote — the theme, the feel keys, `numbers` (ADR-0036).
    *
    * jsdom keeps one `localStorage` for the whole file, so a test that sets a preference silently
    * changes what every test after it renders. That is the same order-dependence `resetHandlers`

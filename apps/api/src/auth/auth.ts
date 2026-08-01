@@ -10,6 +10,32 @@ import { env, isTest, useSecureCookies } from '../env.js'
 import { logger } from '../lib/logger.js'
 
 /**
+ * The Google provider config, or `undefined` when this deployment has no credentials.
+ *
+ * Written ONCE, here, and read twice below: by `socialProviders` and by `isGoogleConfigured`. The
+ * `=== undefined` pair is also what narrows both values to `string`, so the object below needs no
+ * assertion.
+ */
+const googleProvider =
+  env.GOOGLE_CLIENT_ID === undefined || env.GOOGLE_CLIENT_SECRET === undefined
+    ? undefined
+    : { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+
+/**
+ * Whether Google OAuth is actually available on THIS deployment.
+ *
+ * **One source of truth, and that is the entire reason it is a named export rather than a condition
+ * the endpoint re-derives** (ADR-0035). `GET /api/v1/auth/providers` tells the sign-in screen whether
+ * its one button can work, and the screens delete the password fields on the strength of that answer.
+ * Two copies of the condition could disagree — and the way they would disagree is a screen with a
+ * single dead control and no way back in but a redeploy.
+ *
+ * Derived from the same `googleProvider` value that decides registration, so this cannot claim a
+ * capability the auth instance does not have.
+ */
+export const isGoogleConfigured = googleProvider !== undefined
+
+/**
  * Better Auth, self-hosted, with its tables in our own Postgres (ADR-0007).
  *
  * Every non-obvious option below is load-bearing. Read the comment before changing one.
@@ -68,16 +94,11 @@ export const auth = betterAuth({
    * `https://api.mevivek.dev/api/v1/auth/callback/google`. That exact string must be registered
    * in the Google Cloud console — a mismatch fails at the redirect with Google's own error page,
    * not ours, which is a confusing place to debug.
+   *
+   * `googleProvider` above is the ONE place the credentials are checked; `isGoogleConfigured` — what
+   * `GET /api/v1/auth/providers` answers with — is derived from the same value (ADR-0035).
    */
-  socialProviders:
-    env.GOOGLE_CLIENT_ID === undefined || env.GOOGLE_CLIENT_SECRET === undefined
-      ? {}
-      : {
-          google: {
-            clientId: env.GOOGLE_CLIENT_ID,
-            clientSecret: env.GOOGLE_CLIENT_SECRET,
-          },
-        },
+  socialProviders: googleProvider === undefined ? {} : { google: googleProvider },
 
   /**
    * Account linking, so signing in with Google using an email that already has a password

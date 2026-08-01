@@ -316,7 +316,7 @@ describe('the number on an archive row', () => {
     expect(screen.queryByText('Me')).toBeNull()
   })
 
-  it('ADR-0034: shows the whole number, with no Show control', async () => {
+  it('ADR-0036: shows the whole number, with no Show control', async () => {
     await renderWithRouter(
       <DocumentRow
         document={numbered}
@@ -386,7 +386,7 @@ describe('the number on an archive row', () => {
 
   it('reveals one row at a time, never its neighbour', async () => {
     /**
-     * The state moved INTO the row when ADR-0034 deleted the archive's page-wide Show, so this is
+     * The state moved INTO the row when ADR-0036 deleted the archive's page-wide Show, so this is
      * the assertion that replaces "the header reveals every row": opening one number must not open
      * the next one down. It is the failure a shared `revealedIds` set would produce if someone
      * re-hoisted the state and keyed it wrong.
@@ -466,7 +466,7 @@ describe('the number on an archive row', () => {
 })
 
 describe('the identifier card', () => {
-  it('ADR-0034: shows the number outright, with nothing to tap first', () => {
+  it('ADR-0036: shows the number outright, with nothing to tap first', () => {
     render(<IdentifierCard identifier="999988887777" label="Aadhaar number" />)
 
     expect(screen.getByText('9999 8888 7777')).toBeInTheDocument()
@@ -480,7 +480,7 @@ describe('the identifier card', () => {
   it('masks and reveals on request when the device asks for hidden numbers', async () => {
     render(withNumbersHidden(<IdentifierCard identifier="999988887777" label="Aadhaar number" />))
 
-    // The mask is cut from the full value here, not read from a server field — ADR-0034 dropped
+    // The mask is cut from the full value here, not read from a server field — ADR-0036 dropped
     // `identifier_last4`. It is still a display state and not a boundary: the value is in the props
     // either way, which is exactly why hiding it is a preference.
     expect(screen.getByText('•••• 7777')).toBeInTheDocument()
@@ -1351,5 +1351,91 @@ describe('the detail screen’s version preconditions', () => {
     expect(screen.getByText(/still the last ones the server has/i)).toBeInTheDocument()
     // And it really did queue rather than merely fail.
     expect(outboxStore.size).toBeGreaterThan(0)
+  })
+})
+
+// ── The page foot ────────────────────────────────────────────────────────────
+
+/**
+ * `RecordMeta` is unit-tested in `components/RecordMeta.test.tsx`; what is asserted here is the
+ * **wiring** — that the document screen passes the record's own timestamps and that the line lands
+ * *after* the delete control. A footer rendered above the one destructive button, or fed the wrong
+ * pair of fields, is a bug no unit test of the component can see.
+ *
+ * Its own harness rather than a reach into the describe above, whose `renderDetail` is built around two
+ * versions of one document and a cache that advances mid-test. Nothing here needs either.
+ */
+describe('the detail screen’s page foot', () => {
+  const DOC_ID = '00000002-0000-4000-8000-000000000000'
+
+  /**
+   * Midday UTC, not midnight.
+   *
+   * The rendered day is the **reader's**, so `…T00:00:00.000Z` is 31 December for anyone west of
+   * Greenwich and this assertion would pass or fail depending on where CI is standing. Midday is
+   * unambiguous across every real offset. `formatStamp`'s own tests are where the zone behaviour is
+   * pinned; this one only needs a date it can name.
+   */
+  const stamped: DocumentDetailResponse = {
+    ...detailFixture,
+    id: DOC_ID,
+    created_at: '2026-01-12T12:00:00.000Z',
+    updated_at: '2026-02-03T12:00:00.000Z',
+  }
+
+  async function renderDetail(document: DocumentDetailResponse) {
+    server.use(
+      http.get(`*/api/v1/documents/${DOC_ID}`, () => HttpResponse.json(document)),
+      http.get('*/api/v1/documents/issuers', () => HttpResponse.json({ data: [] })),
+      http.get('*/api/v1/documents/holders', () => HttpResponse.json({ data: [] })),
+    )
+    const rootRoute = createRootRoute({
+      component: () => (
+        <QueryClientProvider client={createQueryClient()}>
+          <DocumentDetailPage documentId={DOC_ID} />
+        </QueryClientProvider>
+      ),
+    })
+    const archive = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/documents',
+      component: () => null,
+    })
+    const thingDetail = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/things/$thingId',
+      component: () => null,
+    })
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([archive, thingDetail]),
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+    })
+    await router.load()
+    const result = render(<RouterProvider router={router as never} />)
+    await screen.findByRole('heading', { level: 1 })
+    return result
+  }
+
+  it('ends with when the document was added and when it last changed', async () => {
+    await renderDetail(stamped)
+
+    expect(screen.getByText('Added 12 Jan 2026 · Updated 3 Feb 2026')).toBeInTheDocument()
+  })
+
+  it('puts that line BELOW the delete control, which stays the last thing you can press', async () => {
+    await renderDetail(stamped)
+
+    const remove = screen.getByRole('button', { name: 'Delete this document' })
+    const foot = screen.getByText(/^Added /)
+    // Document order, not layout: the meta line follows the delete in the DOM, so it reads last to a
+    // screen reader as well as on screen.
+    expect(remove.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('says nothing about an update on a document nobody has edited', async () => {
+    await renderDetail({ ...stamped, updated_at: stamped.created_at })
+
+    expect(screen.getByText('Added 12 Jan 2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Updated/)).toBeNull()
   })
 })

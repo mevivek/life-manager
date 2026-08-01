@@ -38,10 +38,10 @@ describe('readFeel', () => {
     })
   })
 
-  it('shows numbers unless the device has asked otherwise — ADR-0034', () => {
+  it('shows numbers unless the device has asked otherwise — ADR-0036', () => {
     /**
      * The default is the decision, so it is asserted rather than left to the object comparison above.
-     * Masking was unconditional before ADR-0034; `shown` is what makes the archive answer "what is my
+     * Masking was unconditional before ADR-0036; `shown` is what makes the archive answer "what is my
      * Aadhaar number" without a tap, and a session that flips this default back has reversed an ADR
      * rather than changed a constant.
      */

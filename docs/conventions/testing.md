@@ -168,10 +168,16 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-08-01 after ADR-0034: 792 passed / 0 skipped** with a database
-(web 517 · api 222 · shared 53); **593 passed / 199 skipped** without one — every skip is the API's.
-The API's count is unchanged again: ADR-0034 rewrote several API assertions but added and removed no
-API tests, while web gained the preference's two halves and shared lost the two `truncate*` units.
+**Measured 2026-08-01, merging ADR-0036 into People: 861 passed / 0 skipped** with a database
+(web 564 · api 244 · shared 53); **645 passed / 216 skipped** without one — every skip is the API's.
+Each of the four numbers was read off its own filtered run, not divided out of the total.
+
+**This line has now been wrong five times, and twice it was a merge that did it.** The previous entry
+records the fourth: two branches each edited it with a figure that was true of their own tree, and
+neither was true once the trees were joined. This is the fifth in the same shape — ADR-0036 removes
+two shared units and adds web ones, so *both* sides' numbers were stale the moment the merge resolved.
+**Re-measure after a merge, not just after a change**, and re-measure per package rather than
+subtracting: the api count being unchanged at 244 across both is a fact, not an inference.
 **Re-measure rather than citing this**: the figure in this repo has been wrong three separate
 times, once by 17 tests, and once because a session did the arithmetic instead of running the suite.
 Note also that `pnpm --filter @life-manager/api test` on its own hits the D77 timeout flake roughly half

@@ -56,7 +56,7 @@ function writeSpaceOf(actor: ActorContext): string {
  * The serial column, from one input value — business rule 7, and **the only place it is written**.
  *
  * **This used to return two columns**, deriving `serial_last4` beside the value so a client could not
- * send a mask that disagreed with what it masked. ADR-0034 dropped that column; the mask is cut
+ * send a mask that disagreed with what it masked. ADR-0036 dropped that column; the mask is cut
  * client-side from the same value, which cannot disagree with itself.
  *
  * Trimmed, because a tail comes off the **end** of the string and a serial typed on a phone arrives

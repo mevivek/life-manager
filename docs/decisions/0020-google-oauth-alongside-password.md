@@ -2,6 +2,13 @@
 
 - **Status:** accepted
 - **Date:** 2026-07-27
+- **Superseded by:** [ADR-0035](0035-google-only-sign-in.md), **in part** — only the
+  *"email+password stays"* decision, and only on the **client screens**: sign-in and sign-up are
+  Google-only when the server reports Google is configured. `emailAndPassword` remains enabled on the
+  server as the recovery path. Everything else here stands — the pair-or-neither env rule, account
+  linking, and `trustedProviders` as a security control. **Its recovery argument was not refuted, it
+  was knowingly accepted**; 0035 records that and says it must be revisited before the vault ships.
+  The body below is left exactly as accepted (ADR-0015).
 
 ## Context
 

@@ -12,7 +12,7 @@ import { groupForReading } from './numberFormat'
  *  Shown by DEFAULT. The mask is a preference, and it never was a security boundary.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
- * [ADR-0034](../../../../docs/decisions/0034-numbers-shown-by-default.md). This card used to mask
+ * [ADR-0036](../../../../docs/decisions/0036-numbers-shown-by-default.md). This card used to mask
  * unconditionally and hand back the value on a tap. ADR-0026 stores the identifier in full and
  * ADR-0027 returns it on every response, so the whole value is already in this component's props by
  * the time it renders — the server does not gate it, and a caller who can read the document is by

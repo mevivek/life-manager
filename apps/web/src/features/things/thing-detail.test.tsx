@@ -459,7 +459,7 @@ describe('the service cycle', () => {
 // ── The serial ───────────────────────────────────────────────────────────────
 
 describe('the serial', () => {
-  it('ADR-0034: shows the serial outright, with nothing to tap first', () => {
+  it('ADR-0036: shows the serial outright, with nothing to tap first', () => {
     render(<ThingSerial serial="356938035643809" kind="phone" />)
 
     expect(screen.getByText('356938035643809')).toBeInTheDocument()
@@ -470,7 +470,7 @@ describe('the serial', () => {
   it('masks and reveals on request when the device asks for hidden numbers', async () => {
     render(withNumbersHidden(<ThingSerial serial="356938035643809" kind="phone" />))
 
-    // The mask is cut from the full value here — `serial_last4` is gone (ADR-0034) — and it is still
+    // The mask is cut from the full value here — `serial_last4` is gone (ADR-0036) — and it is still
     // a display state rather than a boundary: the value is in the props either way.
     expect(screen.getByText('•••• 3809')).toBeInTheDocument()
     expect(screen.queryByText('356938035643809')).toBeNull()
@@ -484,7 +484,7 @@ describe('the serial', () => {
 
   it('is governed by the SAME preference as a document’s number', () => {
     /**
-     * One switch for both domains, which is the half of ADR-0034 easiest to half-implement: a person
+     * One switch for both domains, which is the half of ADR-0036 easiest to half-implement: a person
      * who hides their Aadhaar number and finds their IMEI still on screen has a setting that lied.
      * The key is `feel.numbers`, written once and read by `IdentifierCard` and this component.
      */
@@ -1216,6 +1216,35 @@ describe('the whole screen', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Claim pack — 0 of 6 pieces' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete this thing' })).toBeInTheDocument()
+  })
+
+  /**
+   * The page foot. `RecordMeta` is unit-tested in `components/RecordMeta.test.tsx`; what these two
+   * assert is the **wiring** — the right pair of fields, and the line landing *after* the delete.
+   *
+   * Midday UTC in the fixture, not the default midnight: the rendered day is the **reader's**, so
+   * `…T00:00:00.000Z` is 31 December for anyone west of Greenwich and the assertion would depend on
+   * where CI is standing.
+   */
+  it('ends with when the thing was added and when it last changed', async () => {
+    await renderDetail(
+      detail({ created_at: '2026-01-12T12:00:00.000Z', updated_at: '2026-02-03T12:00:00.000Z' }),
+    )
+
+    expect(screen.getByText('Added 12 Jan 2026 · Updated 3 Feb 2026')).toBeInTheDocument()
+
+    const remove = screen.getByRole('button', { name: 'Delete this thing' })
+    const foot = screen.getByText(/^Added /)
+    // Document order, not layout: it reads last to a screen reader as well as on screen.
+    expect(remove.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('says nothing about an update on a thing nobody has edited', async () => {
+    const stamp = '2026-01-12T12:00:00.000Z'
+    await renderDetail(detail({ created_at: stamp, updated_at: stamp }))
+
+    expect(screen.getByText('Added 12 Jan 2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Updated/)).toBeNull()
   })
 
   it('draws the holder as a pill, with the relation beside it', async () => {

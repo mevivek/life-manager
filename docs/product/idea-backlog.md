@@ -31,7 +31,7 @@ backlog is a complete picture.
 | **Things domain** (was "Assets") | M4, pulled into M1's window | Things | **built** 2026-07-30, both halves — [ADR-0029](../decisions/0029-the-things-domain.md), [domains/things.md](../domains/things.md). **It skipped this backlog entirely; see the note under § Ready** |
 | Money domain | M4 | Money | roadmap |
 | Secrets vault (E2EE) | M5 | Vault | roadmap |
-| **Numbers shown by default, with one hide-them switch** | — | Documents · Things | **built** 2026-08-01 — [ADR-0034](../decisions/0034-numbers-shown-by-default.md). Entered as a maintainer request to *remove* the reveal step; the scope questions turned it into a preference (`feel.numbers`, off by default) covering both domains, and the maintainer answered each one before anything was written. The derived `identifier_last4` / `serial_last4` columns went with it. **This is what the note under § Ready asks for** — a scope change with the human's yes recorded, not inferred |
+| **Numbers shown by default, with one hide-them switch** | — | Documents · Things | **built** 2026-08-01 — [ADR-0036](../decisions/0036-numbers-shown-by-default.md). Entered as a maintainer request to *remove* the reveal step; the scope questions turned it into a preference (`feel.numbers`, off by default) covering both domains, and the maintainer answered each one before anything was written. The derived `identifier_last4` / `serial_last4` columns went with it. **This is what the note under § Ready asks for** — a scope change with the human's yes recorded, not inferred |
 
 ---
 
@@ -138,6 +138,10 @@ them accumulate.
 
 **Assets / Money / People / Notes**
 
+- ~~A people directory: file a record under someone by name~~ — **Ready → built 2026-07-31.** Human
+  yes given after design handoff 5 drew it and it was deferred once as debt D84.
+  [ADR-0034](../decisions/0034-people-is-a-directory.md), [domains/people.md](../domains/people.md).
+  Deliberately *not* a personal CRM — see that doc §2 for what is out of scope and why
 - Physical inventory with location ("which box is the drill in")
 - Asset depreciation and replacement-due estimates
 - Net-worth snapshot from assets minus liabilities — *not* budgeting (anti-goal)

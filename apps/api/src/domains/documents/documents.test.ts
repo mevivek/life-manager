@@ -150,7 +150,7 @@ describeDb('documents', () => {
     })
     expect(detail.statusCode).toBe(200)
     expect(detail.json().identifier).toBe('FAKE1234567')
-    // ADR-0034: no derived mask travels with it. The whole value, once, on both responses.
+    // ADR-0036: no derived mask travels with it. The whole value, once, on both responses.
     expect(detail.json()).not.toHaveProperty('identifier_last4')
   })
 
@@ -164,7 +164,7 @@ describeDb('documents', () => {
    * `documentSchema` by explicit decision.
    *
    * Rewritten twice rather than deleted. Its second form asserted that a derived mask travelled
-   * **alongside** the full value; ADR-0034 dropped that column, so what it guards now is that the
+   * **alongside** the full value; ADR-0036 dropped that column, so what it guards now is that the
    * list carries the whole number and nothing else claiming to be part of it.
    */
   it('ADR-0027: returns the full identifier in the list, and no derived mask', async () => {
@@ -181,7 +181,7 @@ describeDb('documents', () => {
 
     expect(list.statusCode).toBe(200)
     expect(list.json().data[0].identifier).toBe('FAKE729481038109')
-    // And no `identifier_last4` beside it — ADR-0034. A mask derived from a value in the same
+    // And no `identifier_last4` beside it — ADR-0036. A mask derived from a value in the same
     // response is a copy of that value, and the client cuts it (`apps/web/src/lib/mask.ts`) at the
     // moment it draws one.
     expect(list.json().data[0]).not.toHaveProperty('identifier_last4')
@@ -366,7 +366,7 @@ describeDb('documents', () => {
   it('never lets a client store a mask of its own, in a list or anywhere else', async () => {
     const user = await seedUserWithSpace(app)
 
-    // There is no `identifier_last4` column since ADR-0034, and a client must not be able to bring
+    // There is no `identifier_last4` column since ADR-0036, and a client must not be able to bring
     // one back by sending it: a stored mask is a second copy of a fact that already travels whole,
     // and the two drift the first time an edit touches only one of them.
     const created = await app.inject({

@@ -140,7 +140,7 @@ describeDb('things', () => {
 
     expect(created.statusCode).toBe(201)
     expect(created.json().serial).toBe('FAKE1234567')
-    // ADR-0034: whole, and only once. No derived tail rides along with it.
+    // ADR-0036: whole, and only once. No derived tail rides along with it.
     expect(created.json()).not.toHaveProperty('serial_last4')
   })
 
@@ -158,7 +158,7 @@ describeDb('things', () => {
     // document's identifier. A list mapper that forgot the field would return `undefined`, and every
     // test asserting `null` on a thing with no serial would still pass (debt D33's shape).
     expect(list.json().data[0].serial).toBe('FAKE 22 BH 1234 AA')
-    // And nothing beside it — ADR-0034 dropped `serial_last4`. A mask cut from a value in the same
+    // And nothing beside it — ADR-0036 dropped `serial_last4`. A mask cut from a value in the same
     // response is a copy of that value; the device that draws one cuts it itself.
     expect(list.json().data[0]).not.toHaveProperty('serial_last4')
 
@@ -174,7 +174,7 @@ describeDb('things', () => {
   it('rule 7: never lets a client store a mask of its own', async () => {
     const user = await seedUserWithSpace(app)
 
-    // There is no `serial_last4` column since ADR-0034, and a client must not be able to bring one
+    // There is no `serial_last4` column since ADR-0036, and a client must not be able to bring one
     // back by sending it: a stored mask is a second copy of a fact that already travels whole.
     const created = await app.inject({
       method: 'POST',

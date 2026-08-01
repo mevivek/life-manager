@@ -158,6 +158,45 @@ export async function createThing(
 }
 
 /**
+ * Adds someone to the People directory through the **real endpoint**, for the same reason
+ * `createThing` does.
+ *
+ * `name` is the only required field, and it is also the **join key** to every record filed under
+ * them (ADR-0034): `documents.holder` and `things.holder` hold a copy of this string, so a test that
+ * seeds a person and a document with the same `holder` is seeding a relationship, not a coincidence.
+ */
+export async function createPerson(
+  app: FastifyInstance,
+  user: UserFixture,
+  overrides: Record<string, unknown> = {},
+): Promise<{ id: string; version: number; body: Record<string, unknown> }> {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/people',
+    ...authAs(user),
+    payload: { name: 'Priya', ...overrides },
+  })
+
+  if (response.statusCode !== 201) {
+    throw new Error(`createPerson: expected 201, got ${response.statusCode}: ${response.body}`)
+  }
+
+  const body = response.json<Record<string, unknown>>()
+  const id = body.id
+  if (typeof id !== 'string') throw new Error(`createPerson: no id in ${response.body}`)
+
+  // Asserted to be a real starting version rather than merely present — the same reasoning as
+  // `createDocument`'s. A `?? 1` here would let the response schema stop returning `version` while
+  // the whole suite carried on passing against a hard-coded guess (debt D33).
+  const version = body.version
+  if (typeof version !== 'number' || version < 1) {
+    throw new Error(`createPerson: expected a version >= 1, got ${JSON.stringify(version)}`)
+  }
+
+  return { id, version, body }
+}
+
+/**
  * Two users in two separate spaces — the fixture every cross-space test needs.
  *
  * conventions/testing.md §2: "a test with a single user cannot catch a missing space filter." This

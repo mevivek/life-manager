@@ -37,7 +37,7 @@ export type DocumentListProps = {
    * Now screen's cards want.
    *
    * This used to carry the revealed set as well, because the archive header had a page-wide Show that
-   * per-row state could not be reached by. ADR-0034 replaced that control with a device preference,
+   * per-row state could not be reached by. ADR-0036 replaced that control with a device preference,
    * so what is threaded through here is only the page's two copy outcomes.
    */
   numbers?: NumberDisplay

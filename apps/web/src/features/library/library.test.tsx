@@ -362,7 +362,7 @@ describe('a row does not change shape when the scope changes', () => {
     const inAll = screen
       .getAllByRole('button', { name: /Aadhaar/ })
       .map((b) => b.getAttribute('aria-label'))
-    // Copy, and only Copy: ADR-0034 shows the number outright, so there is no Show beside it. The
+    // Copy, and only Copy: ADR-0036 shows the number outright, so there is no Show beside it. The
     // assertion that matters is not which controls there are but that the two scopes agree.
     expect(inAll).toContain('Copy Aadhaar number for Aadhaar')
     expect(inAll).not.toContain('Show Aadhaar number for Aadhaar')
@@ -376,7 +376,7 @@ describe('a row does not change shape when the scope changes', () => {
     expect(inDocuments).toEqual(inAll)
   })
 
-  it('ADR-0034: draws the number in full, and offers no page-wide Show', async () => {
+  it('ADR-0036: draws the number in full, and offers no page-wide Show', async () => {
     stubApi({ documents: [WITH_NUMBER], things: [SWIFT] })
     await renderAt('/library')
 

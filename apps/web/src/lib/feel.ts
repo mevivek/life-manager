@@ -1,7 +1,7 @@
 /**
  * **Feel** — the four device preferences: density, heading face, voice, and whether numbers are
  * hidden. The first three came from the third design handoff; `numbers` is
- * [ADR-0034](../../../../docs/decisions/0034-numbers-shown-by-default.md).
+ * [ADR-0036](../../../../docs/decisions/0036-numbers-shown-by-default.md).
  *
  * They are one module because they share every property that matters: device-scoped, read before
  * first paint, and stored the same way as the theme. `theme.ts` is the sibling to read first; this
@@ -43,7 +43,7 @@ export type Face = 'serif' | 'grotesk'
 export type Voice = 'warm' | 'plain'
 
 /**
- * Whether an identifier or a serial is drawn in full or behind `•••• 8109` — ADR-0034.
+ * Whether an identifier or a serial is drawn in full or behind `•••• 8109` — ADR-0036.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *  `hidden` is a display state and NOT an authorization boundary. It never has been.
@@ -68,7 +68,7 @@ export type Feel = {
  * The defaults are the design's defaults, and for density, face and voice they are also what the app
  * looked like before they existed — so a user who never opens the Feel card sees no change at all.
  *
- * **`numbers` is the exception, deliberately**: masking used to be unconditional, and ADR-0034 makes
+ * **`numbers` is the exception, deliberately**: masking used to be unconditional, and ADR-0036 makes
  * `shown` the default because the archive is where you go when you need a number and a reveal tap
  * bought nothing that the payload had not already given away.
  */

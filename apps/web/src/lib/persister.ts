@@ -118,12 +118,20 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
  * persisted as part of `['documents', 'detail', id]` and the entry bought nothing. What it would have
  * done is the opposite of what an allowlist is for: the next session to write a `['reminders', …]`
  * hook would have found its data silently on disk without anyone deciding that it should be. The
- * inventory of query roots the app actually has is documents · things · me · outbox · health · push,
- * and `offline.test.ts` fails if a root here is not one of them.
+ * inventory of query roots the app actually has is documents · things · me · people · outbox ·
+ * health · push, and `offline.test.ts` fails if a root here is not one of them.
+ *
+ * **`people` is on the list and `auth` is deliberately not**, which is the clearest pair of examples
+ * of what this allowlist decides. The People directory is a handful of names the Whose sheet needs to
+ * offer a choice at all, so caching it makes that sheet work on a train — and a name is Tier 0, the
+ * same class as everything else here. `['auth', 'providers']` is the opposite: it is a fact about
+ * **server configuration**, and a stale `google: true` rehydrated from disk would draw a sign-in
+ * screen whose only button cannot work (ADR-0035). Cache what the user owns, never what the
+ * deployment happens to be.
  *
  * Exported for that test.
  */
-export const PERSISTED_KEY_ROOTS = new Set(['documents', 'things', 'me'])
+export const PERSISTED_KEY_ROOTS = new Set(['documents', 'things', 'me', 'people'])
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════════════

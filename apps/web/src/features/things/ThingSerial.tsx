@@ -12,7 +12,7 @@ import { useFeel } from '@/lib/useFeel'
  * second switch for their IMEI.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════
- *  Shown by DEFAULT (ADR-0034). The mask is a preference, and never was a boundary.
+ *  Shown by DEFAULT (ADR-0036). The mask is a preference, and never was a boundary.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
  * things.md §4 rule 7 stores the serial in **full, plaintext**, exactly as ADR-0026 does a document's
@@ -84,7 +84,7 @@ export function ThingSerial({
    * mechanic, an insurer, a parking attendant — and protects nothing, because the threat the mask
    * addresses is shoulders near the screen and the plate is already public to them.
    *
-   * Every other kind is maskable — and, since ADR-0034, only actually masked when `feel.numbers` is
+   * Every other kind is maskable — and, since ADR-0036, only actually masked when `feel.numbers` is
    * `hidden`. An IMEI, a laptop serial and a hallmark are all *inside* the object, which is the case
    * rule 7's mask is for; a plate is not, so it stays exempt at both settings rather than becoming a
    * value the preference could hide. Nothing to toggle means no toggle drawn.
@@ -113,7 +113,7 @@ export function ThingSerial({
           shown, so a long value fits.
 
           The mask is derived here from the full value (`maskedNumber`) rather than read from a server
-          field — ADR-0034 dropped `serial_last4`, which was a copy of the last four characters of a
+          field — ADR-0036 dropped `serial_last4`, which was a copy of the last four characters of a
           value sitting in the same response.
         */}
         <span

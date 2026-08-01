@@ -7,21 +7,28 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { signIn } from '@/lib/auth-client'
-import { GoogleButton } from './GoogleButton'
+import { AuthFormSkeleton, GoogleOnly, GoogleUnavailableNote } from './GoogleOnly'
+import { useAuthScreen } from './useAuthProviders'
 
 /**
- * Sign in. ADR-0025 draws this screen, and two things about its ORDER are deliberate.
+ * Sign in — **three screens, chosen by the server** (ADR-0035).
  *
- * **Email and password come first, Google second.** The comp puts the ink primary immediately under
- * the fields and "Continue with Google" beneath it as a secondary. The previous version had Google at
- * the top followed by an "or" divider, which reads as *the* way in — and for a private single-user app
- * where the password is the account's own credential, promoting the third party above it is the wrong
- * emphasis.
+ * 1. Google registered → handoff 5's screen: one button, one reassurance line, no fields.
+ * 2. Google *not* registered → the password form below, with a line saying so. Not a degraded mode:
+ *    it is the screen this app had until handoff 5, and it works.
+ * 3. Capability not known yet → a skeleton. Never a guess — see `AuthFormSkeleton`.
  *
- * **There is no "or" divider.** Two buttons in different weights already say "either of these"; a rule
- * between them implies two *sections*, which is a stronger separation than exists.
+ * The password form is deliberately still here, whole. ADR-0035 removes email+password from the
+ * *screens*, not from the server: `emailAndPassword.enabled` stays `true` and this is what draws it
+ * again the moment a deployment turns out to have no Google. Deleting this branch would turn a
+ * missing environment variable back into an outage, which is the failure the whole ADR is about.
+ *
+ * The previous note here explained why the fields came first and Google second, under ADR-0025. That
+ * ordering no longer exists to have a reason: in the Google case there are no fields, and in the
+ * password case there is no Google button — showing one that cannot work would be worse than none.
  */
 export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
+  const screen = useAuthScreen()
   const [serverError, setServerError] = useState<string | null>(null)
   const {
     register,
@@ -41,8 +48,14 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
     onSuccess()
   })
 
+  // After every hook, never before one. The three returns below are the three screens; the hooks
+  // above run identically in all of them.
+  if (screen.kind === 'loading') return <AuthFormSkeleton />
+  if (screen.kind === 'google') return <GoogleOnly />
+
   return (
     <form onSubmit={submit} className="flex flex-col gap-2.5" noValidate>
+      {screen.googleUnconfigured && <GoogleUnavailableNote />}
       {serverError !== null && <Alert>{serverError}</Alert>}
 
       <div className="flex flex-col gap-1.5">
@@ -72,8 +85,6 @@ export function SignInForm({ onSuccess }: { onSuccess: () => void }) {
       <Button type="submit" size="lg" className="mt-1.5 w-full" disabled={isSubmitting}>
         {isSubmitting ? 'Signing in…' : 'Sign in'}
       </Button>
-
-      <GoogleButton />
     </form>
   )
 }

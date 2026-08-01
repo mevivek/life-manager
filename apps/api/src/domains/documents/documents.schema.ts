@@ -112,7 +112,7 @@ export const documents = pgTable(
     /*
      * `identifier_last4` was here — a derived copy of the last four characters of `identifier`,
      * written on every save so a client could not send a mask that disagreed with its own number.
-     * Dropped by ADR-0034: numbers are shown in full by default, and the mask a device asks for is
+     * Dropped by ADR-0036: numbers are shown in full by default, and the mask a device asks for is
      * cut from the value in the same response. Two fields that always travelled together could never
      * disagree, so the derivation was protecting nothing. Do not re-add it — the mask belongs to
      * whoever is rendering it (`apps/web/src/lib/mask.ts`).
