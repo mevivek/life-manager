@@ -46,9 +46,22 @@ cannot read this project's logs at all (`CLOUD_LOGGING_ONLY`, so there is no log
 of D25, and the practical lesson is the verification: read the substitutions and the step list back, and
 treat a non-empty `steps[].id` on the next build as the proof that the config was accepted.
 
-**What is left is not code.** Turn reminders on from the You screen, call the endpoint again, and see the
-notification. Until one has actually been *seen*, M1's "done when" is unmet. Then lens 4 of the review
-wants a week of real use. See §4.6–7 below.
+**People and Google-only sign-in are deployed too, as of 2026-08-01** (PR #35 — [ADR-0034](decisions/0034-people-is-a-directory.md),
+[ADR-0035](decisions/0035-google-only-sign-in.md); debt D84 and D85 closed). Verified against production
+rather than assumed: `GET /api/v1/health` reported the merge SHA, `GET /api/v1/people` answered **401 and
+not 404** — so the route is registered — and the API applies migrations on boot, so a serving container
+means the `people` table exists. `GET /api/v1/auth/providers` returns `{"google":true,"password":true}`,
+which means the sign-in screen **is Google-only in production now** and **D86 is live rather than
+theoretical**: `emailAndPassword` stays enabled server-side as the recovery path, but nothing in the UI
+reaches it.
+
+That deploy also demonstrated **D87** on a real device: the web shipped ahead of the API, so the People
+directory failed for a few minutes while the rest of the screen worked. It degraded exactly as designed
+— which is the first time that fallback has been *observed* rather than only tested.
+
+**What is left for M1 is not code.** Turn reminders on from the You screen, call the endpoint again, and
+see the notification. Until one has actually been *seen*, M1's "done when" is unmet. Then lens 4 of the
+review wants a week of real use. See §4.6–7 below.
 
 Everything in M0 is built and green, and on **2026-07-27** it was verified end to end over a
 Cloudflare Tunnel serving `app.mevivek.dev` and `api.mevivek.dev` — 21/21 public checks, including
