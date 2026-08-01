@@ -110,3 +110,27 @@ describe('DocumentFiles and the photo viewer', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
+
+describe('a scan row’s “Added” date', () => {
+  /**
+   * The wiring, not the zone. `lib/datetime.test.ts` pins the conversion against two real zones; what
+   * this asserts is that the row reads `uploaded_at` — the moment the bytes landed — and renders it as
+   * a day rather than as a raw timestamp.
+   *
+   * Midday UTC in the fixture so the rendered day is the same in every real offset. A midnight fixture
+   * would make this test pass or fail on where CI is standing, which is the failure mode the whole
+   * change exists to remove.
+   */
+  it('shows the day the bytes landed, not the day the presign was minted', () => {
+    renderFiles([
+      file({
+        id: 'f1',
+        created_at: '2026-06-28T12:00:00.000Z',
+        uploaded_at: '2026-07-01T12:00:00.000Z',
+      }),
+    ])
+
+    expect(screen.getByText(/Added 1 Jul 2026/)).toBeInTheDocument()
+    expect(screen.queryByText(/Added 28 Jun 2026/)).toBeNull()
+  })
+})

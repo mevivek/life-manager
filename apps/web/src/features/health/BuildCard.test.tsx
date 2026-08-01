@@ -152,16 +152,27 @@ describe('BuildCard', () => {
     expect(screen.queryAllByText(/^Built /)).toHaveLength(1)
   })
 
-  it('renders a real build time with its time of day, in UTC, for both halves', async () => {
-    health({ version: API_SHA, built_at: '2026-07-29T17:04:00.000Z' })
+  it('renders a real build time with its time of day, on the reader’s clock, for both halves', async () => {
+    const apiBuiltAt = '2026-07-29T17:04:00.000Z'
+    health({ version: API_SHA, built_at: apiBuiltAt })
 
     renderCard()
 
-    // The date alone would be wrong rather than merely lossy: two deploys in one afternoon are the
-    // normal case, and a row that cannot tell them apart cannot answer "did my fix ship?".
-    expect(await screen.findByText('Built 29 Jul 2026, 17:04 UTC')).toBeInTheDocument()
-    // The web half, from `__BUILT_AT__` in vitest.config.ts.
-    expect(screen.getByText('Built 30 Jul 2026, 08:15 UTC')).toBeInTheDocument()
+    /**
+     * The expectations come from `builtLabel` rather than being written out, and that is deliberate
+     * rather than lazy: the card renders on **this runner's** zone, so a literal string would pass in
+     * CI (UTC) and fail on any developer machine east or west of it. What this test is for is the
+     * *wiring* — that each row reads its own half's timestamp — and `lib/datetime.test.ts` pins the
+     * formatting itself against two real zones, where a literal is both possible and meaningful.
+     *
+     * The date alone would be wrong rather than merely lossy: two deploys in one afternoon are the
+     * normal case, and a row that cannot tell them apart cannot answer "did my fix ship?".
+     */
+    expect(await screen.findByText(builtLabel(apiBuiltAt))).toBeInTheDocument()
+    expect(builtLabel(apiBuiltAt)).toMatch(/^Built 29 Jul 2026|^Built 30 Jul 2026/)
+    // The web half, from `__BUILT_AT__` in vitest.config.ts — a different timestamp, so a card wired
+    // to one value twice fails here.
+    expect(screen.getByText(builtLabel('2026-07-30T08:15:00.000Z'))).toBeInTheDocument()
   })
 
   it('labels uptime as awake-for, with a real non-zero reading, and never as a deploy time', async () => {
@@ -191,8 +202,22 @@ describe('build card helpers', () => {
     expect(isCommit(null)).toBe(false)
   })
 
-  it('formats a build time in UTC and refuses to invent one', () => {
-    expect(builtLabel('2026-07-29T17:04:00.000Z')).toBe('Built 29 Jul 2026, 17:04 UTC')
+  it('formats a build time on the reader’s clock, and refuses to invent one', () => {
+    // Zone pinned, or this asserts nothing but where CI happens to be standing. Kolkata is +5:30, so
+    // 17:04Z is 22:34 the same evening; `en-IN` is the locale that has India's abbreviation.
+    expect(
+      builtLabel('2026-07-29T17:04:00.000Z', { timeZone: 'Asia/Kolkata', locale: 'en-IN' }),
+    ).toBe('Built 29 Jul 2026, 22:34 IST')
+    // And the case that used to be invisible: west of Greenwich the same instant is still the 29th
+    // locally, where a UTC rendering of a late-evening deploy would have said the 30th.
+    expect(
+      builtLabel('2026-07-30T02:30:00.000Z', {
+        timeZone: 'America/Los_Angeles',
+        locale: 'en-US',
+      }),
+    ).toBe('Built 29 Jul 2026, 19:30 PDT')
+
+    // A missing or unreadable value is never a guessed one.
     expect(builtLabel(null)).toBe('Build time unknown')
     expect(builtLabel('not a date')).toBe('Build time unknown')
   })

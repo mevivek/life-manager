@@ -6,8 +6,8 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ApiError, api } from '@/lib/api'
+import { localDay } from '@/lib/datetime'
 import { cn } from '@/lib/utils'
-import { formatDateShort } from './ExpiryStatus'
 import { useDeleteFile, useDownloadFile, useMakeFilePrimary, useUploadFile } from './useDocuments'
 
 /**
@@ -255,7 +255,16 @@ export function DocumentFiles({
               // developer string on a screen about a passport, and the extension tile beside it
               // already says PDF. `uploaded_at` is the moment the bytes actually landed; `created_at`
               // is when the presign was minted, so the former is the honest "added" date.
-              sub={`${formatBytes(file.size_bytes)} · Added ${formatDateShort((file.uploaded_at ?? file.created_at).slice(0, 10))}`}
+              //
+              // `localDay`, not `.slice(0, 10)`: both are **instants**, so slicing takes the UTC day
+              // and a scan uploaded at 18:00 on the 30th west of Greenwich read back as the 31st
+              // (design.md §11).
+              //
+              // The `??` arms are both unreachable rather than defensive-by-choice, and are kept
+              // because the types are honest: `uploaded_at` is nullable on the schema, but a row with
+              // no upload time never reaches here — `confirmed` above filters it out — and `localDay`
+              // only returns `null` for a value the server cannot have sent.
+              sub={`${formatBytes(file.size_bytes)} · Added ${localDay(file.uploaded_at ?? file.created_at) ?? 'recently'}`}
               primary={file.is_primary}
               action={
                 /**

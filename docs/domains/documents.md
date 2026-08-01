@@ -339,7 +339,20 @@ the expiry ladder and the navigation rule; this section records what the screens
   carrying the reminder chips → *Details* (including *Whose*, which reads **Mine** rather than
   disappearing — it is a `<dl>` of every field, the same way an absent country reads "Not set" — and the
   per-type `custom_attrs`, read-only) → the
-  `•••• last4` block and its explanation → *Scans* → a quiet text-only delete. Inline preview is M2.
+  `•••• last4` block and its explanation → *Scans* → a quiet text-only delete → **the page foot: when the
+  record was added, and when it last changed**. Inline preview is M2.
+
+  **The foot sits *below* the delete, and it is `RecordMeta` on both detail screens** — the same
+  component the thing screen ends on ([things.md](things.md) §7), because two screens stating one fact in
+  two shapes is the drift `documentRowProps.ts` exists to prevent elsewhere. It draws `Added 12 Jan 2026`,
+  plus `· Updated 3 Feb 2026` **only when the rendered days differ**: a record nobody has edited would
+  otherwise claim an update on the day it was captured. Neither `version` nor the id is drawn: "Version"
+  already names a *scan* on this screen, and the id is in the URL.
+
+  **Both dates here are *instants*, so they are drawn on the reader's clock** — as is a scan row's
+  *Added*, and the Build card's build times. [design.md §11](../conventions/design.md) holds the rule and
+  the two-kinds-of-date table; the short version is that `expires_on` is a calendar date and gets sliced,
+  while `created_at` gets converted.
 - **Rows carry the holder as a hairline pill beside the title**, and nothing at all for the owner's
   own. The pill is `shrink-0` and the title `min-w-0 truncate`, so a long title shortens and the
   **name never does** — a name truncated to "Priy…" loses the only thing distinguishing two otherwise

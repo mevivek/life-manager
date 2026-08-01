@@ -1,5 +1,6 @@
 import { KIND_LABELS } from '@life-manager/shared'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { RecordMeta } from '@/components/RecordMeta'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiError } from '@/lib/api'
@@ -29,6 +30,7 @@ import { useThing } from './useThings'
  *  4. **The facts, then the serial** — bought, paid, kept, and the number on the label.
  *  5. **Where are its papers?** — the vehicle 2×2, then everything filed against it.
  *  6. **The pack, the handover, the delete** — three quiet things at the foot, in rising finality.
+ *  7. **When it was added** — the page foot proper, under the delete. Provenance, in a grey line.
  *
  * Every section is its own component, so the running order above is legible in one screen and no
  * section's internals compete with it. The two things this file genuinely owns are the **header** (name,
@@ -45,10 +47,11 @@ import { useThing } from './useThings'
  * ── No `flex-1` and no `mt-auto`, on purpose ──
  *
  * design.md §7's rule applies to a page with a **foot** — prose pinned under content that can run short.
- * This screen has no footer: it ends with the delete control, which is where it should end, and
- * stretching it would push "Delete this thing" to the bottom of every viewport. Even the sparsest real
- * record (a name and nothing else, business rule 1) still draws a cover card, four fact rows, the claim
- * pack, the handover control and the delete — so there is no void here to relocate.
+ * The `RecordMeta` line at the end is not that: it is content that ends where the content ends, and
+ * pinning it to the viewport would drag "Delete this thing" down with it on every phone. Even the
+ * sparsest real record (a name and nothing else, business rule 1) still draws a cover card, four fact
+ * rows, the claim pack, the handover control, the delete and that line — so there is no void here to
+ * relocate, which is the same section's other rule.
  *
  * ── The error state is no longer the default view ──
  *
@@ -212,6 +215,12 @@ export function ThingDetail({
         thing={detail}
         onDeleted={() => void navigate({ to: '/library', search: { scope: 'things' } })}
       />
+
+      {/* ── 7. When it was added, and when it last changed ──
+          Word for word the same footer `documents.$documentId.tsx` ends on, from the same component —
+          two detail screens stating the same fact in two shapes is the drift `RecordMeta` exists to
+          prevent. Below the delete: it is the quietest thing on the screen, not a seventh section. */}
+      <RecordMeta createdAt={detail.created_at} updatedAt={detail.updated_at} />
     </div>
   )
 }
