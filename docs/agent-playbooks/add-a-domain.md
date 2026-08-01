@@ -83,9 +83,12 @@ domain is the vault. Anything else needs an ADR
       not an error
 - [ ] Indexes: `(space_id) where deleted_at is null`, plus the dominant sort
 - [ ] Generated `tsvector` if the domain is searchable
-- [ ] **Add the new tables to `truncateAll()` in `src/test/db.ts`.** Forgetting this shows up as one
-      suite polluting the next, which looks like flakiness rather than a missing line
-- [ ] Migration generated; seed script extended
+- [x] ~~Add the new tables to `truncateAll()` in `src/test/db.ts`~~ — **no longer a step.** That
+      function used to name its fourteen tables in a literal and is now **reflected from
+      `db/schema/index.js`** (`src/test/db.ts:110`), so a table is truncated the moment it is
+      re-exported from the barrel above. It throws if reflection yields nothing, rather than silently
+      cleaning up no tables. This line stayed on the checklist after the change and cost a session a
+      confused look; the barrel item above is the one that matters.
 
 > ### If another domain already has a column pointing at your new table
 >

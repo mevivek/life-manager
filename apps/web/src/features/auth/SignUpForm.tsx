@@ -7,14 +7,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { signUp } from '@/lib/auth-client'
-import { GoogleButton } from './GoogleButton'
+import { AuthFormSkeleton, GoogleOnly, GoogleUnavailableNote } from './GoogleOnly'
+import { useAuthScreen } from './useAuthProviders'
 
 /**
+ * Create an account — the same three server-chosen screens as `SignInForm`, for the same reasons
+ * (ADR-0035). Read that file's note first.
+ *
+ * In the Google case this renders **exactly what `/login` renders**, which is not a bug: the OAuth
+ * flow is identical for both and Google itself decides whether the account is new. `routes/signup.tsx`
+ * carries the only difference — its headline — and drops the copy about choosing a password, which is
+ * about a field that is not on screen.
+ *
  * React Hook Form + the Zod resolver over the schema from `packages/shared`
  * (conventions/code.md §9). The validation here is UX only — the server re-validates
  * everything and is authoritative (CLAUDE.md invariant 5).
  */
 export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
+  const screen = useAuthScreen()
   const [serverError, setServerError] = useState<string | null>(null)
   const {
     register,
@@ -34,8 +44,13 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
     onSuccess()
   })
 
+  // After every hook. See the same three lines in `SignInForm`.
+  if (screen.kind === 'loading') return <AuthFormSkeleton />
+  if (screen.kind === 'google') return <GoogleOnly />
+
   return (
     <form onSubmit={submit} className="flex flex-col gap-2.5" noValidate>
+      {screen.googleUnconfigured && <GoogleUnavailableNote />}
       {serverError !== null && <Alert>{serverError}</Alert>}
 
       <div className="flex flex-col gap-1.5">
@@ -76,10 +91,6 @@ export function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
       <Button type="submit" size="lg" className="mt-1.5 w-full" disabled={isSubmitting}>
         {isSubmitting ? 'Creating account…' : 'Create account'}
       </Button>
-
-      {/* Below the primary, matching `SignInForm` — see the note there for why, and for why there is
-          no "or" divider between them. */}
-      <GoogleButton />
     </form>
   )
 }

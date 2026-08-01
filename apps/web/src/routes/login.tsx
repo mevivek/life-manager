@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { AuthMark } from '@/features/auth/AuthMark'
 import { SignInForm } from '@/features/auth/SignInForm'
+import { useAuthScreen } from '@/features/auth/useAuthProviders'
 import { beginSession } from '@/lib/session'
 import { useFeel } from '@/lib/useFeel'
 
@@ -26,6 +27,8 @@ function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { copy } = useFeel()
+  // The same query `SignInForm` reads — one cached answer, not a second request.
+  const screen = useAuthScreen()
 
   return (
     // `flex-1` rather than its own `min-h-dvh`: the shell in `__root.tsx` already owns the viewport
@@ -59,12 +62,31 @@ function LoginPage() {
             await navigate({ to: '/home' })
           }}
         />
-        <p className="flex justify-center gap-1.5 pt-1 text-body text-ink-3">
-          <span>New here?</span>
-          <Link to="/signup" className="text-focus underline-offset-2 hover:underline">
-            Create an account
-          </Link>
-        </p>
+        {/*
+          ── "New here? Create an account" is shown only on the password screen ──
+
+          ADR-0035 makes both screens one Google button, and Google — not this app — decides whether
+          the account is new. So in that state the link leads to a page that is byte-for-byte the same
+          control, under a different headline. That is not navigation, it is a corridor: a user who
+          suspects they need to "sign up first" follows it, finds the identical button, and learns
+          nothing. The comp draws no such link, for the same reason.
+
+          It stays on the password screen, where sign-in and sign-up ARE different acts with different
+          fields and the link is the only way to reach the other one. Hidden while `loading` too:
+          drawing it and retracting it a beat later is the flicker the skeleton exists to avoid.
+
+          Note this makes `/signup` unreachable from the UI on a Google deployment. Deliberate, and
+          harmless — the route still resolves, and the only thing it offers is the button already on
+          screen.
+        */}
+        {screen.kind === 'password' && (
+          <p className="flex justify-center gap-1.5 pt-1 text-body text-ink-3">
+            <span>New here?</span>
+            <Link to="/signup" className="text-focus underline-offset-2 hover:underline">
+              Create an account
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )
