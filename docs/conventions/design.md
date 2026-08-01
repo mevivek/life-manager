@@ -350,6 +350,24 @@ A permanent field is 48px of chrome above the first result on every visit, inclu
 browsing rather than looking something up. What it must never do is hide the reason a list is short —
 hence the lit button and the summary line.
 
+**There are no filter chips.** Type / Tag / Expiring-before / Whose / Has-scan and the Things kind row
+are all gone ([ADR-0033](../decisions/0033-handoff-5-the-rest.md)); the header is the title, the count,
+the search toggle and the scope pills. **The query parameters still work** — `?scan=no` is how the Now
+screen's nudge links in — so a `Clear` beside the count is drawn whenever something is narrowing. That
+control is required, not decorative: with no chip to show *why* a list is short, it is the only thing
+that escapes a filter arriving from a URL.
+
+**One builder decides what a row looks like.** `features/documents/documentRowProps.ts` is the only
+place a document becomes row props, and both the merged list and the paged one call it — so a row
+cannot change shape when a scope pill changes. It did: the same document rendered with a 52px glyph
+column and no number controls in `All`, and a 14px column with Copy and Show under Documents. Do not
+construct `DocumentRow` props anywhere else in the library.
+
+**A vehicle's registration is drawn in full, as a plate** — hairline border, 4px radius, mono, wide
+tracking — on the row and on the detail screen. Every other serial stays masked. The number is painted
+on the outside of the object, so hiding it protects nothing and costs a tap on the one value an owner
+reads aloud (ADR-0033).
+
 ### How many tabs the bar holds is a measurement, not a promise
 
 The bar has been three, then four, then three again. Do not read the current number as settled, and
@@ -498,6 +516,8 @@ apps/web/src/features/documents/
   DocumentRow.tsx                            the row every document list is made of
   CaptureSheet.tsx                           the stepped wizard, both tracks (ADR-0030)
   AddPicker.tsx                              "What are you adding?" — the fork before the wizard (§8)
+  documentRowProps.ts                        THE one place a document becomes row props (§8)
+  usePush.ts                                 turning reminders on and off, shared by Now and You
 apps/web/src/features/library/
   scope.ts                                   the three scopes, and why the pills are buttons (§8)
   mergeRows.ts                               All, ordered by the date that bites first (§8)

@@ -315,15 +315,17 @@ the expiry ladder and the navigation rule; this section records what the screens
 - **Documents** (`/library?scope=documents`) — the archive, now a **scope of the library** rather than
   a screen of its own ([ADR-0032](../decisions/0032-one-library-tab.md)). `/documents` still resolves:
   it is a redirect that carries its search params across. A sticky header carrying the scope pills and
-  a folding search, then five filter chips (**type · tag · whose · expires before · scan**), then the
-  full list sorted soonest-first, then `Load 20 more`. Every chip maps to a real query parameter and
-  filters **server-side**; filter state lives in the **URL**, so the Now screen's nudge can link into a
-  filtered view and a back-navigation returns to the list the user was reading.
+  a folding search, then the full list sorted soonest-first, then `Load 20 more`. Filter state lives in
+  the **URL** and filters **server-side**, so the Now screen's nudge can link into a filtered view and
+  a back-navigation returns to the list the user was reading.
 
-  **The chips survive a comp that deletes them.** Handoff 5 draws the library header with the scope
-  pills and nothing else. Keeping them is a recorded deviation, not an oversight — ADR-0032
-  § *Deviation* — because the Now screen deep-links into `?scan=no` and rule 13 below specifies the
-  Whose filter. Retiring them needs a human yes (invariant 12), not a navigation change.
+  **The chips are gone as controls, and the parameters are not.**
+  [ADR-0033](../decisions/0033-handoff-5-the-rest.md) removed the row to match handoff 5, on the
+  maintainer's confirmation that search alone is enough — which was ADR-0032's own stated reopening
+  condition. `?scan=no`, `?type=`, `?who=` and the rest still filter server-side and still round-trip
+  through the URL, so the Now screen's nudge and any saved link keep working; what replaces the chips
+  is a `Clear` beside the count, drawn whenever something is narrowing. Rule 13's Whose *filter* is
+  retired; the `holder` parameter, `GET /documents/holders` and capture's Whose step are untouched.
 
   **Whose is a panel, not a cycle**, and it is **not drawn until a second person exists** — the same
   "draw it the day the thing exists" rule that keeps the sum-insured card off the Things list until a

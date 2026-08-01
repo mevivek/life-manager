@@ -131,6 +131,26 @@ export function ThingRow({ thing, today, divided = false, className }: ThingRowP
         )}
 
         {/*
+          ── The plate, drawn as a plate ──
+
+          A vehicle's registration is the one serial that is **public by design**: it is painted on
+          the outside of the object, so masking it on a row protects nothing and hides the value an
+          owner actually reads aloud. Handoff 5 draws it here, and `ThingSerial` stops masking it on
+          the detail screen for the same reason. Every other kind's serial stays off the row entirely
+          — an IMEI is inside the phone, and a list is the worst place to leak one.
+
+          Styled as a physical plate rather than as text: a hairline `--ink-2` border, 4px radius,
+          mono with wide tracking. That is what makes it scannable in a list without a label beside
+          it — nothing else in this app looks like this, so it reads as "a number plate" rather than
+          as another meta field.
+        */}
+        {thing.kind === 'vehicle' && thing.serial != null && thing.serial !== '' && (
+          <span className="mt-[5px] inline-flex h-6 w-fit items-center rounded-1 border border-ink-2 bg-raised px-2 font-mono text-meta font-medium tracking-[0.07em] text-ink">
+            {thing.serial}
+          </span>
+        )}
+
+        {/*
           The fourth line, only when the thing is not here — things.md §4 rule 4.
 
           `lent` is `--status-soon` because it is an *open loop* you may want to close; `gone` is

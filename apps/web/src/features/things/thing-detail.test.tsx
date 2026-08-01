@@ -492,18 +492,51 @@ describe('the serial', () => {
   })
 
   it('offers Copy and Show, both named after the field', () => {
-    render(<ThingSerial serial="KA01AB1234" last4="1234" kind="vehicle" />)
+    // A LAPTOP, where this used to use a vehicle. A registration is no longer masked (see below), so
+    // asserting the Show button on one would now be asserting the exception rather than the rule.
+    render(<ThingSerial serial="C02XL0RTJGH7" last4="JGH7" kind="laptop" />)
     // Two controls, and the names distinguish them from any other masked value on a screen.
-    expect(screen.getByRole('button', { name: 'Copy Registration' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Show Registration' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy Serial number' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show Serial number' })).toBeInTheDocument()
   })
 
-  it('does not group the value, because a registration’s spacing is part of it', async () => {
+  it('does not group the value, because a registration’s spacing is part of it', () => {
     // `IdentifierCard` groups an all-digit Aadhaar number in fours. A registration and an IMEI must not
-    // be reshaped — rule 9's two live plate formats are the reason.
+    // be reshaped — rule 9's two live plate formats are the reason. No click needed any more: a plate
+    // is drawn in full from the start.
     render(<ThingSerial serial="22BH1234AA" last4="34AA" kind="vehicle" />)
-    await userEvent.click(screen.getByRole('button', { name: 'Show Registration' }))
     expect(screen.getByText('22BH1234AA')).toBeInTheDocument()
+  })
+
+  /**
+   * ── A registration is public by design, so it is not masked ──
+   *
+   * Handoff 5's change, and the reasoning is physical rather than aesthetic: the number is painted on
+   * the outside of the car. Masking it costs the owner a tap on the one value they actually read
+   * aloud, and protects nothing from the threat the mask exists for (shoulders near the screen),
+   * because anyone standing there can read the plate off the vehicle.
+   */
+  it('shows a vehicle’s registration in full, with no Show control to press', () => {
+    render(<ThingSerial serial="KA01AB1234" last4="1234" kind="vehicle" />)
+
+    expect(screen.getByText('KA01AB1234')).toBeInTheDocument()
+    // Not merely revealed by default — there is no toggle at all, because a control whose two states
+    // look identical is worse than no control.
+    expect(screen.queryByRole('button', { name: /Show Registration/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Hide Registration/ })).toBeNull()
+    // Copy survives: it is the reason an owner opens this card.
+    expect(screen.getByRole('button', { name: 'Copy Registration' })).toBeInTheDocument()
+  })
+
+  it('still masks every other kind, because those numbers are inside the object', async () => {
+    // The control case. If the plate exception ever widens to all kinds, this fails — an IMEI read off
+    // a stranger's screen is exactly what rule 7's mask is for.
+    render(<ThingSerial serial="356938035643809" last4="3809" kind="phone" />)
+
+    expect(screen.queryByText('356938035643809')).toBeNull()
+    expect(screen.getByText(/•••• 3809/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show IMEI' }))
+    expect(screen.getByText('356938035643809')).toBeInTheDocument()
   })
 
   it('never claims the value is encrypted, because it is not', () => {

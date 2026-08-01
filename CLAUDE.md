@@ -54,12 +54,12 @@ itself here means the routing has failed; fix the routing.
 | **A route with a `:verb` action** | [`conventions/api.md`](docs/conventions/api.md) §2 — `::` is **registration-only**; a client's URL has ONE colon. Backwards 404'd every photo upload in production |
 | **Adding an endpoint / domain / schema change** | the matching [playbook](docs/agent-playbooks/). A mutable column needs `versioned()` (`apps/api/src/db/columns.ts`) |
 | **The daily scan, reminders firing, or the `maintenance` endpoint** | [ADR-0028](docs/decisions/0028-external-trigger-for-the-daily-scan.md) |
-| **The tab bar, or where a domain lives** | **Three tabs: Now · Everything · You** — [ADR-0032](docs/decisions/0032-one-library-tab.md), superseding ADR-0031's fourth tab. `/library` holds both collections; `All` interleaves them by soonest date. The scope pills are buttons, not navigation. Before a fourth tab, **measure** ([design.md §8](docs/conventions/design.md)) |
+| **The tab bar, or where a domain lives** | **Three tabs: Now · Everything · You** — [ADR-0032](docs/decisions/0032-one-library-tab.md), superseding ADR-0031's fourth tab. `/library` holds both collections; `All` interleaves them by soonest date. Scope pills are buttons, not navigation; **no filter chips** ([ADR-0033](docs/decisions/0033-handoff-5-the-rest.md)). Before a fourth tab, **measure** ([design.md §8](docs/conventions/design.md)) |
 | **Capture / the Add sheet** | [ADR-0030](docs/decisions/0030-capture-as-a-stepped-wizard.md) — six steps, two tracks, **exactly one required field per track** |
 | **Deciding what to build, or a technical call** | [`product/brain.md`](docs/product/brain.md). Scope needs a human yes — invariant 12 |
 | **Reviewing a milestone** | [`product/review-method.md`](docs/product/review-method.md); the register is [`review.md`](docs/product/review.md) |
-| **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 32 ADRs. Don't read them front to back |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D84**, each with a trigger. Check before "fixing" an apparent gap. **D84 first if a screen the comp draws is missing** — handoff 5's People half is deliberately unbuilt |
+| **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 33 ADRs. Don't read them front to back |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D85**, each with a trigger. Check before "fixing" an apparent gap. **D84/D85 first if a screen the comp draws is missing** — handoff 5's People half and its Google-only sign-in are deliberately unbuilt |
 | **Running it locally** | [`README.md`](README.md) § Getting started |
 | **Anything else** | [`docs/README.md`](docs/README.md) — the fuller index this file delegates to |
 

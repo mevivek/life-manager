@@ -306,8 +306,17 @@ Two, plus changes to three that already existed.
 **Things (list).** A **scope of the library** at `/library?scope=things`
 ([ADR-0032](../decisions/0032-one-library-tab.md)) — the bar is **Now · Everything · You** and this
 domain shares the middle tab with Documents. `/things` still resolves; it is a redirect carrying its
-search params across. The screen is the scope pills and a folding search, then a **sum insured** card,
-kind filter chips, and the rows — all unchanged from when it was its own route.
+search params across. The screen is the scope pills and a folding search, then a **sum insured** card
+and the rows. The **kind filter chips are gone** — [ADR-0033](../decisions/0033-handoff-5-the-rest.md),
+matching handoff 5, which draws the library header as the scope pills and nothing else. `?kind=` still
+filters server-side; only the row of chips that drew it was removed.
+
+**A vehicle's registration is not masked** (ADR-0033). Rule 7 stores every serial in plaintext and
+rule 8 labels it per kind; what changes is that `ThingSerial` draws a `vehicle`'s in full with **no
+Show control**, and `ThingRow` draws it as a **plate** — the only serial that appears on a row at all.
+The reasoning is physical: a registration is painted on the outside of the object, so masking it
+protects nothing from shoulders near the screen and costs a tap on the one number an owner reads
+aloud. Every other kind — IMEI, laptop serial, hallmark — is *inside* the object and stays masked.
 
 > **The scope pills are not the domain switcher coming back**, and the difference is the whole reason
 > ADR-0032 is a different decision from ADR-0031 rather than a reversal of it.
