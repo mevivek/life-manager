@@ -33,3 +33,32 @@ export const signInSchema = z.object({
   password: z.string().min(1, 'Required'),
 })
 export type SignInInput = z.infer<typeof signInSchema>
+
+// ── What this deployment can actually do ─────────────────────────────────────
+
+/**
+ * `GET /api/v1/auth/providers` — **unauthenticated by necessity**, because it is read before anyone
+ * has a session. [ADR-0035](../../../docs/decisions/0035-google-only-sign-in.md).
+ *
+ * The sign-in screen is Google-only (handoff 5). Whether that screen can *work* depends on two
+ * environment variables the client cannot see: `auth.ts` registers `socialProviders` as an **empty
+ * object** when either is missing, so a build that deleted the password form unconditionally would
+ * ship a screen whose only control is dead, with no way back in but a redeploy.
+ *
+ * So the server says. Both booleans are derived from the same `env` check that decides whether the
+ * provider is registered at all — **one source of truth**, so this cannot claim a capability the auth
+ * instance does not have.
+ *
+ * No secrets and no new information: whether a site offers Google sign-in is visible by looking at its
+ * sign-in page.
+ */
+export const authProvidersResponseSchema = z.object({
+  /** Google OAuth is configured and registered. When false, the screens fall back to the form. */
+  google: z.boolean(),
+  /**
+   * Email + password is accepted. Stays `true` — ADR-0035 removes it from the *screens*, not from the
+   * server, because it is the recovery path if a Google account is ever lost.
+   */
+  password: z.boolean(),
+})
+export type AuthProvidersResponse = z.infer<typeof authProvidersResponseSchema>

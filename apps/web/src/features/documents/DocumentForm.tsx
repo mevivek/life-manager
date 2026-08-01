@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RelationField } from '@/features/people/RelationField'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -626,9 +627,18 @@ export function DocumentForm({
                 onFocus={() => setAskedForAName(true)}
               />
             </div>
+            {/*
+              Chips plus free text, where this was a bare input. `setValue` with `shouldDirty` rather
+              than `register`, because a chip is not a keystroke — without it the form would not know
+              it had changed and the save button would stay disabled on a relation chosen by tapping.
+            */}
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="relation">How they’re related</Label>
-              <Input id="relation" placeholder="Wife" {...register('relation')} />
+              <RelationField
+                id="relation"
+                label="How they’re related"
+                value={watch('relation') ?? ''}
+                onChange={(relation) => setValue('relation', relation, { shouldDirty: true })}
+              />
               <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
                 Optional, and only a label — it changes nothing about who can see this.
               </p>

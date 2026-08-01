@@ -16,10 +16,12 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AuthedHomeRouteImport } from './routes/_authed/home'
 import { Route as AuthedLibraryRouteImport } from './routes/_authed/library'
 import { Route as AuthedOutboxRouteImport } from './routes/_authed/outbox'
+import { Route as AuthedPeopleRouteImport } from './routes/_authed/people'
 import { Route as AuthedYouRouteImport } from './routes/_authed/you'
 import { Route as AuthedDocumentsIndexRouteImport } from './routes/_authed/documents.index'
 import { Route as AuthedDocumentsDocumentIdRouteImport } from './routes/_authed/documents.$documentId'
 import { Route as AuthedDocumentsNewRouteImport } from './routes/_authed/documents.new'
+import { Route as AuthedPeoplePersonIdRouteImport } from './routes/_authed/people.$personId'
 import { Route as AuthedThingsIndexRouteImport } from './routes/_authed/things.index'
 import { Route as AuthedThingsThingIdRouteImport } from './routes/_authed/things.$thingId'
 
@@ -57,6 +59,11 @@ const AuthedOutboxRoute = AuthedOutboxRouteImport.update({
   path: '/outbox',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedPeopleRoute = AuthedPeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedYouRoute = AuthedYouRouteImport.update({
   id: '/you',
   path: '/you',
@@ -78,6 +85,11 @@ const AuthedDocumentsNewRoute = AuthedDocumentsNewRouteImport.update({
   path: '/documents/new',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedPeoplePersonIdRoute = AuthedPeoplePersonIdRouteImport.update({
+  id: '/$personId',
+  path: '/$personId',
+  getParentRoute: () => AuthedPeopleRoute,
+} as any)
 const AuthedThingsIndexRoute = AuthedThingsIndexRouteImport.update({
   id: '/things/',
   path: '/things/',
@@ -96,9 +108,11 @@ export interface FileRoutesByFullPath {
   '/home': typeof AuthedHomeRoute
   '/library': typeof AuthedLibraryRoute
   '/outbox': typeof AuthedOutboxRoute
+  '/people': typeof AuthedPeopleRouteWithChildren
   '/you': typeof AuthedYouRoute
   '/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
   '/documents/new': typeof AuthedDocumentsNewRoute
+  '/people/$personId': typeof AuthedPeoplePersonIdRoute
   '/things/$thingId': typeof AuthedThingsThingIdRoute
   '/documents/': typeof AuthedDocumentsIndexRoute
   '/things/': typeof AuthedThingsIndexRoute
@@ -110,9 +124,11 @@ export interface FileRoutesByTo {
   '/home': typeof AuthedHomeRoute
   '/library': typeof AuthedLibraryRoute
   '/outbox': typeof AuthedOutboxRoute
+  '/people': typeof AuthedPeopleRouteWithChildren
   '/you': typeof AuthedYouRoute
   '/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
   '/documents/new': typeof AuthedDocumentsNewRoute
+  '/people/$personId': typeof AuthedPeoplePersonIdRoute
   '/things/$thingId': typeof AuthedThingsThingIdRoute
   '/documents': typeof AuthedDocumentsIndexRoute
   '/things': typeof AuthedThingsIndexRoute
@@ -126,9 +142,11 @@ export interface FileRoutesById {
   '/_authed/home': typeof AuthedHomeRoute
   '/_authed/library': typeof AuthedLibraryRoute
   '/_authed/outbox': typeof AuthedOutboxRoute
+  '/_authed/people': typeof AuthedPeopleRouteWithChildren
   '/_authed/you': typeof AuthedYouRoute
   '/_authed/documents/$documentId': typeof AuthedDocumentsDocumentIdRoute
   '/_authed/documents/new': typeof AuthedDocumentsNewRoute
+  '/_authed/people/$personId': typeof AuthedPeoplePersonIdRoute
   '/_authed/things/$thingId': typeof AuthedThingsThingIdRoute
   '/_authed/documents/': typeof AuthedDocumentsIndexRoute
   '/_authed/things/': typeof AuthedThingsIndexRoute
@@ -142,9 +160,11 @@ export interface FileRouteTypes {
     | '/home'
     | '/library'
     | '/outbox'
+    | '/people'
     | '/you'
     | '/documents/$documentId'
     | '/documents/new'
+    | '/people/$personId'
     | '/things/$thingId'
     | '/documents/'
     | '/things/'
@@ -156,9 +176,11 @@ export interface FileRouteTypes {
     | '/home'
     | '/library'
     | '/outbox'
+    | '/people'
     | '/you'
     | '/documents/$documentId'
     | '/documents/new'
+    | '/people/$personId'
     | '/things/$thingId'
     | '/documents'
     | '/things'
@@ -171,9 +193,11 @@ export interface FileRouteTypes {
     | '/_authed/home'
     | '/_authed/library'
     | '/_authed/outbox'
+    | '/_authed/people'
     | '/_authed/you'
     | '/_authed/documents/$documentId'
     | '/_authed/documents/new'
+    | '/_authed/people/$personId'
     | '/_authed/things/$thingId'
     | '/_authed/documents/'
     | '/_authed/things/'
@@ -237,6 +261,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOutboxRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/people': {
+      id: '/_authed/people'
+      path: '/people'
+      fullPath: '/people'
+      preLoaderRoute: typeof AuthedPeopleRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/you': {
       id: '/_authed/you'
       path: '/you'
@@ -265,6 +296,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedDocumentsNewRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/people/$personId': {
+      id: '/_authed/people/$personId'
+      path: '/$personId'
+      fullPath: '/people/$personId'
+      preLoaderRoute: typeof AuthedPeoplePersonIdRouteImport
+      parentRoute: typeof AuthedPeopleRoute
+    }
     '/_authed/things/': {
       id: '/_authed/things/'
       path: '/things'
@@ -282,10 +320,23 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthedPeopleRouteChildren {
+  AuthedPeoplePersonIdRoute: typeof AuthedPeoplePersonIdRoute
+}
+
+const AuthedPeopleRouteChildren: AuthedPeopleRouteChildren = {
+  AuthedPeoplePersonIdRoute: AuthedPeoplePersonIdRoute,
+}
+
+const AuthedPeopleRouteWithChildren = AuthedPeopleRoute._addFileChildren(
+  AuthedPeopleRouteChildren,
+)
+
 interface AuthedRouteChildren {
   AuthedHomeRoute: typeof AuthedHomeRoute
   AuthedLibraryRoute: typeof AuthedLibraryRoute
   AuthedOutboxRoute: typeof AuthedOutboxRoute
+  AuthedPeopleRoute: typeof AuthedPeopleRouteWithChildren
   AuthedYouRoute: typeof AuthedYouRoute
   AuthedDocumentsDocumentIdRoute: typeof AuthedDocumentsDocumentIdRoute
   AuthedDocumentsNewRoute: typeof AuthedDocumentsNewRoute
@@ -298,6 +349,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHomeRoute: AuthedHomeRoute,
   AuthedLibraryRoute: AuthedLibraryRoute,
   AuthedOutboxRoute: AuthedOutboxRoute,
+  AuthedPeopleRoute: AuthedPeopleRouteWithChildren,
   AuthedYouRoute: AuthedYouRoute,
   AuthedDocumentsDocumentIdRoute: AuthedDocumentsDocumentIdRoute,
   AuthedDocumentsNewRoute: AuthedDocumentsNewRoute,

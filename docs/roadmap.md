@@ -231,6 +231,27 @@ first. What it did change is that the handoff also **rewrote capture** for both 
 (ADR-0030), so the Documents flow the maintainer is about to use a week of is the new stepped one
 rather than the single page. Worth knowing before reading §4.7's "leave it a week".
 
+### 4d. People landed early, and the sign-in screen changed — 2026-07-31
+
+Design handoff 5 merged the two collections into one **Everything** tab
+([ADR-0032](decisions/0032-one-library-tab.md), [ADR-0033](decisions/0033-handoff-5-the-rest.md)) and
+also drew two things that were deferred at the time as debt D84 and D85. The maintainer decided both
+on the same day, which is the human yes invariant 12 requires:
+
+- **People**, pulled forward from *Beyond*. Much smaller than that listing implies, because it is a
+  **directory of names** rather than a relationship model — one table nothing points at, and
+  `documents.holder` stays a string. [ADR-0034](decisions/0034-people-is-a-directory.md),
+  [domains/people.md](domains/people.md). It is **not** the personal CRM the Beyond section imagines;
+  that is still unscheduled.
+- **Google-only sign-in**, superseding [ADR-0020](decisions/0020-google-oauth-alongside-password.md)
+  in part. Gated on the server reporting the provider is configured
+  ([ADR-0035](decisions/0035-google-only-sign-in.md)), because `GOOGLE_CLIENT_*` are optional and
+  nothing in the deploy config sets them.
+
+**Neither makes M1 done, and neither changes the priority** — steps 2–7 above still come first. The
+one thing to carry forward is **D86**: a lost Google account is now a lost archive, accepted for an
+archive and *not* acceptable for the vault. That has to be solved before M5.
+
 ### 5. Then M2
 
 Only after step 7. M2's remaining scope is OCR and previews — the offline read cache is done, see
@@ -422,7 +443,10 @@ unrecoverable vault behind a password-only login is a liability, not a feature.
 
 ## Beyond
 
-People, Notes, and cross-domain linking — the actual thesis of the project
+**People landed early** (2026-07-31, §4d) — but only as a *directory of names to file under*, which
+is the small half. The personal CRM this section imagines is still unscheduled.
+
+Notes and cross-domain linking — the actual thesis of the project
 ([prior-art.md](prior-art.md), final section): *what does this warranty cover, what did it
 cost, who sold it to me, and when does it expire?* No single-domain tool answers that.
 

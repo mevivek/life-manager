@@ -82,10 +82,13 @@ export function documentNumberProps(
 export function libraryDocumentRowProps(
   document: Document,
   numbers: NumberDisplay | undefined,
+  /** Forwarded so a person's own page can suppress the pill naming that person. */
+  options: { showHolder?: boolean } = {},
 ): DocumentRowProps {
   return {
     document,
     glyphColumn: 'wide',
+    showHolder: options.showHolder ?? true,
     number: documentNumberProps(document, numbers),
     // Full-bleed rows with a rule below each, so the list reads as a ledger page rather than a stack
     // of cards. The negative margin undoes the shell's gutter for the rule only.

@@ -26,6 +26,7 @@ import {
   useDocument,
   useUpdateDocument,
 } from '@/features/documents/useDocuments'
+import { WhoseSheet } from '@/features/people/WhoseSheet'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authed/documents/$documentId')({
@@ -80,6 +81,16 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
   const [toast, setToast] = useState<string | null>(null)
   /** Set when an edit went to the outbox instead of the server (ADR-0024). Cleared by the next edit. */
   const [queuedEdit, setQueuedEdit] = useState(false)
+  /**
+   * The version this screen was showing when the **Whose** sheet was opened, or `null` when it is
+   * closed — the same snapshot the delete confirmation keeps, and for the same reason (ADR-0024,
+   * debt D41).
+   *
+   * `useDocument` refetches on window focus, so reading `detail.version` at the moment a name is
+   * tapped would hand the patch a precondition it had just been given: an edit made on another device
+   * while this sheet sat open would be overwritten instead of coming back as a 409.
+   */
+  const [whoseVersion, setWhoseVersion] = useState<number | null>(null)
 
   const document = useDocument(documentId)
   const update = useUpdateDocument(documentId)
@@ -220,7 +231,7 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
         ) : (
           <>
             <dl className="list-none">
-              {fieldsOf(detail).map((field) => (
+              {fieldsOf(detail, () => setWhoseVersion(detail.version)).map((field) => (
                 <div
                   key={field.label}
                   className="flex min-h-12 items-baseline gap-3.5 border-b border-rule py-3"
@@ -238,7 +249,34 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
                       field.selectable === true && 'selectable',
                     )}
                   >
-                    {field.value ?? 'Not set'}
+                    {field.onEdit === undefined ? (
+                      (field.value ?? 'Not set')
+                    ) : (
+                      /*
+                        ── The one editable row, and the VALUE is the control ──
+
+                        The comp makes the whole field row tappable (`f.edit`, comp 602) and gives only
+                        Whose an `edit`. A `<div onClick>` spanning a `<dt>`/`<dd>` pair cannot be that
+                        control here: it is neither a valid child of `<dl>` nor announced as anything
+                        activatable. So the value itself becomes a real `<button>` — same words, same
+                        place, and a 44px hit area (design.md §6) that a screen reader announces with
+                        both the current answer and what pressing it does.
+
+                        `-my-2` claws back the row's own vertical padding so the taller target does not
+                        make this row stand a step off the ones above and below it.
+                      */
+                      <button
+                        type="button"
+                        onClick={field.onEdit}
+                        aria-label={`${field.label}: ${field.value ?? 'Not set'}. Change it.`}
+                        className="-my-2 inline-flex min-h-tap items-center gap-2.5 text-left"
+                      >
+                        <span>{field.value ?? 'Not set'}</span>
+                        <span aria-hidden="true" className="text-meta font-medium text-ink-3">
+                          Change
+                        </span>
+                      </button>
+                    )}
                   </dd>
                 </div>
               ))}
@@ -348,6 +386,54 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
           screen and the only one nobody opens the app to ask. See `RecordMeta.tsx`. */}
       <RecordMeta createdAt={detail.created_at} updatedAt={detail.updated_at} />
 
+      {/*
+        ── "Whose document is this?" — ADR-0034 ──
+
+        The sheet offers Mine, everybody in the People directory, everybody derived from the records
+        themselves, and a door to add somebody new. Picking one is a `PATCH` of this document's
+        `holder`, carrying `whoseVersion` — the version the screen was showing when the sheet was
+        **opened**, never `detail.version` read at the tap. See the note on that state.
+
+        A holder is a **label** and this changes nothing about who can read the record: `space_id` is
+        still the only thing that decides that (invariant 2, documents.md §4 rule 13).
+
+        **Mounted only while it is open**, rather than rendered closed. `Sheet` returns `null` when
+        shut, but the hooks above it do not — so a permanently mounted sheet would fetch the directory
+        and the derived holders on every visit to every document, for a panel most visits never open.
+      */}
+      {whoseVersion !== null && (
+        <WhoseSheet
+          open
+          onClose={() => setWhoseVersion(null)}
+          holder={detail.holder}
+          onPick={async (holder, relation) => {
+            const version = whoseVersion
+            setWhoseVersion(null)
+            if (version === null) return
+
+            try {
+              const result = await update.mutateAsync({ holder, relation, version })
+              /*
+              Offline the mutation resolves `{ queued: true }` and nothing has been saved yet
+              (ADR-0024). Saying "Filed under Priya" then would be the app claiming a write it has
+              only written down — the same distinction the edit form's `queuedEdit` draws.
+            */
+              setToast(
+                'queued' in result
+                  ? 'Saved on this device — it will be sent when you’re back online'
+                  : holder === null
+                    ? 'Filed under you'
+                    : `Filed under ${holder}`,
+              )
+            } catch (error) {
+              // Never swallowed: a 409 here means somebody else moved the document, and a sheet that
+              // closed silently would leave the old name on screen looking like a save.
+              setToast(error instanceof Error ? error.message : 'That could not be saved.')
+            }
+          }}
+        />
+      )}
+
       {/* No `action` on the toast: there is nothing an Undo button could call. See ui/toast.tsx. */}
       {toast !== null && <Toast message={toast} onDismiss={() => setToast(null)} />}
     </div>
@@ -382,6 +468,12 @@ type Field = {
   value: string | null
   mono?: boolean
   selectable?: boolean
+  /**
+   * Makes this row's value a button. Exactly one field has one — **Whose** — because it is the only
+   * fact on this screen with a picker behind it (ADR-0034). Everything else is edited through the
+   * form above, which is where a field that needs a keyboard belongs.
+   */
+  onEdit?: () => void
 }
 
 /**
@@ -399,7 +491,7 @@ type Field = {
  * Values are read defensively — `custom_attrs` is `Record<string, unknown>` on the wire, so anything
  * put there by an older client is rendered only if it is a string or a number.
  */
-function fieldsOf(detail: DocumentDetailResponse): Field[] {
+function fieldsOf(detail: DocumentDetailResponse, onEditWhose: () => void): Field[] {
   const fields: Field[] = [
     {
       label: 'Type',
@@ -411,6 +503,9 @@ function fieldsOf(detail: DocumentDetailResponse): Field[] {
      * Not hidden for the owner's own documents the way the row badge is. A row is scanned in a list
      * where nine "Me" pills would be noise; a detail screen is one document being read deliberately,
      * and "Mine" is a fact worth stating next to Issuer and Type rather than an absence to infer.
+     *
+     * **The only field here that opens something.** `onEdit` raises the Whose sheet — see the note on
+     * `<WhoseSheet>` above for why the version is snapshotted rather than read at the tap.
      */
     {
       label: 'Whose',
@@ -420,6 +515,7 @@ function fieldsOf(detail: DocumentDetailResponse): Field[] {
           : detail.relation == null || detail.relation === ''
             ? detail.holder
             : `${detail.holder} · ${detail.relation}`,
+      onEdit: onEditWhose,
     },
     { label: 'Issuer', value: emptyToNull(detail.issuer) },
     { label: 'Issued', value: detail.issued_on === null ? null : formatDate(detail.issued_on) },

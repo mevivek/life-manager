@@ -1,7 +1,9 @@
+import { authProvidersResponseSchema, problemSchema } from '@life-manager/shared'
 import { fromNodeHeaders } from 'better-auth/node'
 import type { FastifyInstance } from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { env, isTest } from '../env.js'
-import { auth } from './auth.js'
+import { auth, isGoogleConfigured } from './auth.js'
 
 /**
  * Mounts Better Auth at `/api/v1/auth/*`.
@@ -30,6 +32,55 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
     done(null, body)
   })
+
+  /**
+   * `GET /api/v1/auth/providers` — what this deployment can sign you in with (ADR-0035).
+   *
+   * **Declared BEFORE the `/api/v1/auth/*` catch-all below, and it wins regardless of order**:
+   * find-my-way ranks a static segment above a wildcard, so `providers` never reaches Better Auth.
+   * Declared first anyway, so reading this file top to bottom does not suggest otherwise.
+   *
+   * **Public by necessity, not by preference.** It is read *before* anyone has a session — that is the
+   * whole point of it. What it discloses is two booleans about configuration, which is already visible
+   * to anyone who looks at the sign-in page.
+   *
+   * Unlike the catch-all it is NOT `schema: { hide: true }`: this is a route we own with a contract in
+   * `packages/shared`, so it belongs in `/api/v1/openapi.json` (debt D13 is about Better Auth's own
+   * library-shaped paths, which this is not).
+   */
+  app.withTypeProvider<ZodTypeProvider>().get(
+    '/api/v1/auth/providers',
+    {
+      config: {
+        public: true,
+        // The same tight auth bucket as the routes below: this sits in front of the sign-in screen
+        // and an unauthenticated endpoint with a loose limit is a free amplifier.
+        rateLimit: { max: isTest ? 1_000 : 20, timeWindow: '1 minute' },
+      },
+      schema: {
+        operationId: 'getAuthProviders',
+        summary: 'Which sign-in methods this deployment offers',
+        tags: ['system'],
+        security: [],
+        response: {
+          200: authProvidersResponseSchema,
+          429: problemSchema,
+        },
+      },
+    },
+    async () => ({
+      // NOT a second copy of the env check — `isGoogleConfigured` is the same value `auth.ts` builds
+      // `socialProviders` from. See the comment on it there.
+      google: isGoogleConfigured,
+      /**
+       * Constant `true`, and deliberately not a config read. ADR-0035 removes email+password from the
+       * *screens*, never from the server: it is the recovery path if a Google account is lost, and
+       * `emailAndPassword.enabled` in `auth.ts` is hard-coded `true` for that reason. The field exists
+       * so the client never has to assume.
+       */
+      password: true,
+    }),
+  )
 
   app.route({
     method: ['GET', 'POST'],

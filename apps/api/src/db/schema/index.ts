@@ -9,6 +9,7 @@
  * One folder per domain beats schema files living away from the code that queries them.
  */
 export * from '../../domains/documents/documents.schema.js'
+export * from '../../domains/people/people.schema.js'
 export * from '../../domains/things/things.schema.js'
 export * from './auth.js'
 export * from './idempotency.js'

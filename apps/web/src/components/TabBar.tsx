@@ -149,7 +149,17 @@ export const TABS: Tab[] = [
   {
     to: '/you',
     label: 'You',
-    match: ['/you'],
+    /*
+      `/people` lights You, and that is not a stretch — it is reached from a row on You, it is a
+      setting-shaped list rather than a collection, and the comp lights the same tab for both People
+      screens (`tabYou: screen==="you"||screen==="people"||screen==="person"`).
+
+      Found by rendering `/people` at 390px and seeing **no tab lit at all** — the "bar goes blank one
+      level down" failure this file warns about two comments up, arriving from a route that had simply
+      never been added to a match list. No test caught it because `currentTabLabel()` returning null is
+      only wrong if a test thinks to ask.
+    */
+    match: ['/you', '/people'],
     /*
       A head and shoulders, drawn from two blocks inside a ring — the one glyph here that depicts
       something, because "you" has no geometry. Kept to the same 16px box and 2px stroke as the

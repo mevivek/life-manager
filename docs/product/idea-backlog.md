@@ -137,6 +137,10 @@ them accumulate.
 
 **Assets / Money / People / Notes**
 
+- ~~A people directory: file a record under someone by name~~ — **Ready → built 2026-07-31.** Human
+  yes given after design handoff 5 drew it and it was deferred once as debt D84.
+  [ADR-0034](../decisions/0034-people-is-a-directory.md), [domains/people.md](../domains/people.md).
+  Deliberately *not* a personal CRM — see that doc §2 for what is out of scope and why
 - Physical inventory with location ("which box is the drill in")
 - Asset depreciation and replacement-due estimates
 - Net-worth snapshot from assets minus liabilities — *not* budgeting (anti-goal)

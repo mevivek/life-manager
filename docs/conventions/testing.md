@@ -168,9 +168,12 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-08-01 after the page foot and the local-clock change: 804 passed / 0 skipped** with a
-database (web 526 · api 222 · shared 56); **605 passed / 199 skipped** without one — every skip is the API's,
-and the API's count has not moved across the last three changes, because each was client-only.
+**Measured 2026-08-01, merging People and `RelationField` with the page foot: 855 passed / 0 skipped**
+with a database (web 555 · api 244 · shared 56); **639 passed / 216 skipped** without one — every skip
+is the API's. Both sides of that merge had edited this line with their own measured figure, and
+**neither number was true of the merged tree** — which is the fourth time the count here has been
+wrong, and the first time it was wrong by arithmetic nobody did. Re-measure after a merge, not just
+after a change.
 **Re-measure rather than citing this**: the figure in this repo has been wrong three separate
 times, once by 17 tests, and once because a session did the arithmetic instead of running the suite.
 Note also that `pnpm --filter @life-manager/api test` on its own hits the D77 timeout flake roughly half
