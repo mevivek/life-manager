@@ -1,6 +1,7 @@
 import type { DocumentDetailResponse } from '@life-manager/shared'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
+import { RecordMeta } from '@/components/RecordMeta'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -57,7 +58,9 @@ function DocumentDetailRoute() {
  *  2. **Details** — the metadata, with unset fields shown as italic "Not set" rather than hidden.
  *  3. **Scans** — the versions. Tapping an image opens the full-screen viewer.
  *  4. **Belongs to** — the thing this paperwork proves, or an invitation to link one (ADR-0029).
- *  5. **Delete** — quiet, at the bottom, text-only.
+ *  5. **Delete** — quiet, text-only, the last *control* on the screen.
+ *  6. **When it was added** — the page foot, under the delete rather than above it. Provenance is the
+ *     quietest fact here and the only one nobody arrives wanting; `RecordMeta` argues the placement.
  *
  * That order is why the previous four-equal-`Card` stack is gone: it gave "Delete" the same visual
  * weight as the expiry date.
@@ -377,6 +380,11 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
           </Button>
         )}
       </section>
+
+      {/* ── 6. When it was added, and when it last changed ──
+          The page foot, under the one control rather than above it: it is the quietest fact on the
+          screen and the only one nobody opens the app to ask. See `RecordMeta.tsx`. */}
+      <RecordMeta createdAt={detail.created_at} updatedAt={detail.updated_at} />
 
       {/*
         ── "Whose document is this?" — ADR-0034 ──

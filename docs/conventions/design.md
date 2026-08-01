@@ -462,6 +462,45 @@ Assert non-zero counts. `file_count` was 0 for the whole of M1 because every tes
 
 ---
 
+## 11. Dates and times: two kinds, two rules
+
+**A calendar date has no timezone. An instant does.** Every date bug this codebase has shipped came
+from treating one as the other, in both directions, so the rule is mechanical:
+
+| Kind | Examples | Rendered by | Never |
+|---|---|---|---|
+| **Calendar date** (`YYYY-MM-DD`) | `expires_on` `issued_on` `purchased_on` `serviced_on` `due_on` `ownership_since` | `formatDate` / `formatDateShort` — **string slicing**, in `ExpiryStatus.tsx` | Put through a `Date`. `new Date('2026-07-30')` is UTC midnight, which renders as the **29th** west of Greenwich |
+| **Instant** (ISO with an offset) | `created_at` `updated_at` `uploaded_at` `built_at` | `localDay` / `localStamp` — **converted to the reader's zone**, in `lib/datetime.ts` | `.slice(0, 10)` or `.toISOString()`. Both take the **UTC** day, so 18:00 on the 30th at UTC-07:00 reads back as the 31st |
+
+`conventions/api.md` §2 is the contract half — *timestamps are always UTC, clients localize* — and
+`lib/datetime.ts` is the only place the client does the localizing. Three details in it are
+load-bearing:
+
+- **`Intl`, not `getFullYear()`.** The zone must be an *argument*, or the behaviour is untestable
+  anywhere but the machine it runs on — and CI runs in UTC, where every one of these bugs is invisible.
+  Tests pin two real zones, one each side of Greenwich. The same seam as the injectable `today`.
+- **The month words still come from the app's one table.** `Intl` resolves the instant into calendar
+  parts *in a zone*; `formatDateShort` decides how they read. A second month table is how "12 Jan 2026"
+  and "12 January 2026" end up on one screen.
+- **`hourCycle: 'h23'`, not `hour12: false`.** The latter resolves to `h24` in several locales and
+  prints midnight as **24:10**.
+
+**A displayed time names its zone** — `13:45 IST`, falling back to `GMT+5:30` where the platform has no
+abbreviation for the reader's locale. An unlabelled local time is indistinguishable from an unlabelled
+UTC one, which is the one thing the old UTC-everywhere rendering genuinely bought.
+
+> **The Build card used to render UTC and argued for it**: the two halves are stamped by different
+> machines, so converting was said to break comparison. It does not — the *same* conversion applied to
+> both preserves their order and their distance — and that reasoning is deleted rather than left
+> standing beside this.
+
+**The server's clock is not this rule.** `apps/api/src/jobs/reminders.ts` derives the daily scan's
+"today" in UTC, and that is a business rule about *when notifications fire*
+([ADR-0028](../decisions/0028-external-trigger-for-the-daily-scan.md)), not a display. Changing it
+changes behaviour; leave it to the domain doc.
+
+---
+
 ## 12. Feel preferences
 
 Three device-scoped preferences set on the **You** screen — **Density**, **Headings**, **Voice**.
@@ -506,11 +545,13 @@ Rules that will bite a session that skips this section:
 apps/web/src/styles.css                      tokens, both themes, the app-shell rules, keyframes
 apps/web/src/lib/utils.ts                    cn() — the tailwind-merge class groups (see §1)
 apps/web/src/lib/theme.ts                    light/dark resolution; index.html mirrors it pre-paint
+apps/web/src/lib/datetime.ts                 an INSTANT on the reader's clock (§11) — the only place
 apps/web/src/lib/feel.ts + useFeel.tsx       density / face / voice preferences (§12)
 apps/web/src/lib/voice.ts                    the two copy registers (§12)
 apps/web/src/components/ui/                  primitives: button chip input label card alert sheet toast skeleton stat
 apps/web/src/components/TabBar.tsx           three tabs — Now · Everything · You (§8)
 apps/web/src/components/PhotoViewer.tsx      the full-screen image viewer for scans and photos
+apps/web/src/components/RecordMeta.tsx       the page foot both detail screens end on — added / updated
 apps/web/src/features/documents/
   ExpiryStatus.tsx                           the expiry ladder — five states (§2)
   DocumentRow.tsx                            the row every document list is made of
@@ -529,6 +570,8 @@ apps/web/src/features/things/
 apps/web/src/features/health/
   BuildCard.tsx                              what is deployed, both halves, and whether they agree
 ```
+
+The Build card's own build times follow §11 — the reader's clock, with the zone named.
 
 **One rule from the Build card generalises.** It renders `uptime_seconds` as *"Awake for 5 minutes"*,
 never as a deploy time, because the API scales to zero and that number is the last cold start. **A

@@ -1,6 +1,6 @@
 import { Eyebrow } from '@/components/ui/label'
 import { Stat } from '@/components/ui/stat'
-import { formatDateShort } from '@/features/documents/ExpiryStatus'
+import { localStamp, type ZoneOptions } from '@/lib/datetime'
 import { useHealth } from './useHealth'
 
 /**
@@ -210,24 +210,24 @@ function serverBuild(health: ReturnType<typeof useHealth>): {
 /**
  * A build time, or an honest absence of one.
  *
- * `formatDateShort` is reused for the calendar half — it slices `YYYY-MM-DD` off the front, so a full
- * ISO instant works and there is one month table in the app rather than two. What it cannot do is the
- * **time**, and dropping that would be wrong here rather than merely lossy: two deploys on one
+ * The time of day is kept rather than dropped, and that is not decoration: two deploys on one
  * afternoon are the normal case, and "30 Jul 2026" for both is a row that cannot tell them apart.
  *
- * Rendered in **UTC**, and labelled. The two halves are stamped by two different machines, so a value
- * silently converted to the reader's zone stops being comparable with the one beside it — and an
- * unlabelled local time is indistinguishable from an unlabelled UTC one.
+ * ── This used to render UTC, and now renders the reader's own clock ──
+ *
+ * The old reasoning was that the two halves are stamped by two different machines, so converting would
+ * stop them being comparable. That is false: **both** halves get the same conversion, so their order
+ * and their distance apart survive it exactly. What the old version really bought was the label — an
+ * unlabelled local time is indistinguishable from an unlabelled UTC one — and `localStamp` keeps that
+ * by naming the zone (`13:45 IST`, or a `GMT+5:30` offset where the platform has no abbreviation).
+ *
+ * `conventions/api.md` §2 has said the whole time that timestamps travel as UTC and *clients localize*;
+ * this row was the one place in the app that did not. See `lib/datetime.ts` and design.md §11.
  */
-export function builtLabel(iso: string | null): string {
-  if (iso === null) return 'Build time unknown'
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return 'Build time unknown'
-  // BOTH halves come from the same normalised string, not from the input. `formatDateShort` slices
-  // characters, so feeding it the raw value would print the offset's calendar date beside a UTC time
-  // for anything not stamped `Z` — a row that is wrong by a day for half of every evening.
-  const utc = at.toISOString()
-  return `Built ${formatDateShort(utc)}, ${utc.slice(11, 16)} UTC`
+export function builtLabel(iso: string | null, options: ZoneOptions = {}): string {
+  const stamp = localStamp(iso, options)
+  // `null` covers both a missing value and an unparseable one — the row must never invent a time.
+  return stamp === null ? 'Build time unknown' : `Built ${stamp}`
 }
 
 /**
