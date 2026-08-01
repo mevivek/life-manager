@@ -1,5 +1,8 @@
 import {
+  type AuthProvidersResponse,
+  authProvidersResponseSchema,
   type ConfirmUploadRequest,
+  type CreatePerson,
   type Document,
   type DocumentCreate,
   type DocumentDetailResponse,
@@ -17,6 +20,8 @@ import {
   holdersResponseSchema,
   type MeResponse,
   meResponseSchema,
+  type Person,
+  type PersonListResponse,
   type PresignDownloadResponse,
   type PresignPhotoDownloadResponse,
   type PresignPhotoUploadRequest,
@@ -25,6 +30,8 @@ import {
   type PresignUploadResponse,
   type Problem,
   type PushSubscription as PushSubscriptionPayload,
+  personListResponseSchema,
+  personSchema,
   presignDownloadResponseSchema,
   presignPhotoDownloadResponseSchema,
   presignPhotoUploadResponseSchema,
@@ -34,8 +41,10 @@ import {
   pushSubscribeResponseSchema,
   type Reminder,
   type ReminderCreate,
+  type RenamedResponse,
   reminderListResponseSchema,
   reminderSchema,
+  renamedResponseSchema,
   type Thing,
   type ThingCreate,
   type ThingDetailResponse,
@@ -52,6 +61,7 @@ import {
   thingPhotoSchema,
   thingSchema,
   thingServiceSchema,
+  type UpdatePerson,
 } from '@life-manager/shared'
 import { z } from 'zod'
 import { API_ORIGIN } from './api-origin'
@@ -504,6 +514,40 @@ export const api = {
 
     dismiss: (id: string): Promise<Reminder> =>
       request(`/api/v1/reminders/${id}/dismiss`, reminderSchema, { method: 'POST' }),
+  },
+
+  /**
+   * The People directory — [ADR-0034](../../../../docs/decisions/0034-people-is-a-directory.md).
+   *
+   * `rename` is `update` under another name, and it is separate because it returns more: a name change
+   * bulk-updates `holder` on every document and thing that matched, and the response says how many.
+   * The app reports that, so the call site needs it.
+   */
+  people: {
+    list: (): Promise<PersonListResponse> => request('/api/v1/people', personListResponseSchema),
+
+    create: (input: CreatePerson, idempotencyKey?: string): Promise<Person> =>
+      request('/api/v1/people', personSchema, { method: 'POST', body: input, idempotencyKey }),
+
+    update: (id: string, patch: UpdatePerson, idempotencyKey?: string): Promise<RenamedResponse> =>
+      request(`/api/v1/people/${id}`, renamedResponseSchema, {
+        method: 'PATCH',
+        body: patch,
+        idempotencyKey,
+      }),
+
+    /** `version` in the query string, per D41 — a stale delete must 409, not clobber an edit. */
+    remove: (id: string, version: number): Promise<null> =>
+      request(`/api/v1/people/${id}?version=${version}`, noContentSchema, { method: 'DELETE' }),
+  },
+
+  auth: {
+    /**
+     * What this deployment can sign you in with — ADR-0035. Read **before** any session exists, so the
+     * sign-in screen knows whether its one button can work.
+     */
+    providers: (): Promise<AuthProvidersResponse> =>
+      request('/api/v1/auth/providers', authProvidersResponseSchema),
   },
 
   push: {

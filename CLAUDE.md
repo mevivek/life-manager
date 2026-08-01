@@ -45,9 +45,10 @@ itself here means the routing has failed; fix the routing.
 
 | Task | Read |
 |---|---|
-| **Auth, ownership, or crypto — anything** | [`security-model.md`](docs/security-model.md) **in full**, first |
+| **Auth, ownership, or crypto — anything** | [`security-model.md`](docs/security-model.md) **in full**, first. Sign-in is **Google-only when the server has Google**, password form otherwise ([ADR-0035](docs/decisions/0035-google-only-sign-in.md)) |
 | **Documents domain** | [`domains/documents.md`](docs/domains/documents.md) |
 | **The Things domain** — a warranty, serial, service date, owned object | [`domains/things.md`](docs/domains/things.md), then [ADR-0029](docs/decisions/0029-the-things-domain.md) |
+| **People, or whose a record is filed under** | [`domains/people.md`](docs/domains/people.md) — a **directory of names**; `holder` stays a string and a rename is a bulk update ([ADR-0034](docs/decisions/0034-people-is-a-directory.md)). Don't propose `person_id` before reading it |
 | **Anything visual** — screen, component, colour, size, headline, copy | [`conventions/design.md`](docs/conventions/design.md); [ADR-0025](docs/decisions/0025-ledger-design-system.md) for *why*. **Render it at 390px in both themes before calling it done** (D64) |
 | **Caching, offline, the outbox, a new `useQuery` key** | [ADR-0024](docs/decisions/0024-offline-writes-outbox.md), then `lib/persister.ts` — the allowlist is **opt-in** |
 | **Adding/changing a field on a cached response** | debt **D46/D54** — the cache rehydrates **without re-running Zod**, and web and API deploy on **separate triggers** |
@@ -58,8 +59,8 @@ itself here means the routing has failed; fix the routing.
 | **Capture / the Add sheet** | [ADR-0030](docs/decisions/0030-capture-as-a-stepped-wizard.md) — six steps, two tracks, **exactly one required field per track** |
 | **Deciding what to build, or a technical call** | [`product/brain.md`](docs/product/brain.md). Scope needs a human yes — invariant 12 |
 | **Reviewing a milestone** | [`product/review-method.md`](docs/product/review-method.md); the register is [`review.md`](docs/product/review.md) |
-| **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 33 ADRs. Don't read them front to back |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D85**, each with a trigger. Check before "fixing" an apparent gap. **D84/D85 first if a screen the comp draws is missing** — handoff 5's People half and its Google-only sign-in are deliberately unbuilt |
+| **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 35 ADRs. Don't read them front to back |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D86**, each with a trigger. Check before "fixing" an apparent gap |
 | **Running it locally** | [`README.md`](README.md) § Getting started |
 | **Anything else** | [`docs/README.md`](docs/README.md) — the fuller index this file delegates to |
 

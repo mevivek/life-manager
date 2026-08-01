@@ -31,6 +31,7 @@ that must be read exhaustively are no better than no docs
 | **Just arrived, no specific task** | [`CLAUDE.md`](../CLAUDE.md) → this file → [architecture.md](architecture.md) |
 | **Working on the Documents domain** | [domains/documents.md](domains/documents.md) → [conventions/api.md](conventions/api.md) → the relevant playbook |
 | **Working on the Things domain** | [domains/things.md](domains/things.md) → [ADR-0029](decisions/0029-the-things-domain.md). **Both halves are built** (M4 step 1) — §10 lists every file and what is still open, of which the useful one to know is that **nothing creates a thing reminder** because §9(2) is unanswered |
+| **Working on People — whose a record is filed under** | [domains/people.md](domains/people.md) → [ADR-0034](decisions/0034-people-is-a-directory.md). Built. A **directory of names**, not a foreign key: `documents.holder` and `things.holder` stay strings, and a rename bulk-updates them in one transaction. The comp's *"removing them leaves the documents alone"* is what rules a FK out — read the ADR before proposing `person_id` |
 | **Adding an endpoint** | [agent-playbooks/add-an-endpoint.md](agent-playbooks/add-an-endpoint.md) → the domain doc |
 | **Adding a whole new domain** | [agent-playbooks/add-a-domain.md](agent-playbooks/add-a-domain.md) → [domains/_template.md](domains/_template.md) |
 | **Changing the database schema** | [agent-playbooks/change-the-schema.md](agent-playbooks/change-the-schema.md) → [conventions/data.md](conventions/data.md) |
