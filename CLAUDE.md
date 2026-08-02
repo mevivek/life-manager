@@ -59,8 +59,8 @@ itself here means the routing has failed; fix the routing.
 | **Capture / the Add sheet** | [ADR-0030](docs/decisions/0030-capture-as-a-stepped-wizard.md) — six steps, two tracks, **exactly one required field per track** |
 | **Deciding what to build, or a technical call** | [`product/brain.md`](docs/product/brain.md). Scope needs a human yes — invariant 12 |
 | **Reviewing a milestone** | [`product/review-method.md`](docs/product/review-method.md); the register is [`review.md`](docs/product/review.md) |
-| **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 35 ADRs. Don't read them front to back |
-| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D87**, each with a trigger. Check before "fixing" an apparent gap |
+| **"Why is it like this?"** | [`decisions/index.md`](docs/decisions/index.md) — 36 ADRs. Don't read them front to back |
+| **"Is this missing, or deferred?"** | [debt register](docs/product/review.md#3-debt-register) — **D1–D88**, each with a trigger. Check before "fixing" an apparent gap |
 | **Running it locally** | [`README.md`](README.md) § Getting started |
 | **Anything else** | [`docs/README.md`](docs/README.md) — the fuller index this file delegates to |
 

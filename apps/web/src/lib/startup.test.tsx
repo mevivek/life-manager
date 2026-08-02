@@ -110,7 +110,6 @@ const CACHED_DOCUMENT = {
   holder: null,
   relation: null,
   identifier: null,
-  identifier_last4: null,
   issued_on: null,
   // Dated, and comfortably beyond the 45-day boundary, so it lands in the Now screen's `horizon`.
   // An UNDATED document is counted on that screen but never shows its title, so seeding one would

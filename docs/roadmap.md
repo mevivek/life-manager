@@ -55,7 +55,7 @@ which means the sign-in screen **is Google-only in production now** and **D86 is
 theoretical**: `emailAndPassword` stays enabled server-side as the recovery path, but nothing in the UI
 reaches it.
 
-That deploy also demonstrated **D87** on a real device: the web shipped ahead of the API, so the People
+That deploy also demonstrated **D88** on a real device: the web shipped ahead of the API, so the People
 directory failed for a few minutes while the rest of the screen worked. It degraded exactly as designed
 — which is the first time that fallback has been *observed* rather than only tested.
 

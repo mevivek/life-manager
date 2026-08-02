@@ -168,13 +168,22 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-08-01 after Sibling and Cousin: 858 passed / 0 skipped** with a database
-(web 555 · api 244 · shared 59); **642 passed / 216 skipped** without one — every skip is the API's.
-**Re-measure rather than citing this.** The figure here has been wrong **four** times: once by 17
-tests, once because a session did the arithmetic instead of running the suite, and — most
-instructively — once at a *merge*, where both branches had edited this line with their own correct
-figure and **neither was true of the merged tree**. So re-measure after a merge too, not only after a
-change; two right numbers make a wrong one.
+**Measured 2026-08-01, merging Sibling/Cousin into ADR-0036: 864 passed / 0 skipped** with a database
+(web 564 · api 244 · shared 56); **648 passed / 216 skipped** without one — every skip is the API's.
+Each figure was read off its own filtered run. The two sides of this merge said 858 and 861; the
+answer was 864.
+
+**This line has now been wrong six times, and three of those were a merge.** The first three were
+ordinary staleness — once by 17 tests, once because a session did the arithmetic instead of running
+the suite. The last three share one shape: **two branches each edited this line with a figure that
+was true of its own tree, and neither was true once the trees were joined.** It happened on the
+People/page-foot merge, again when ADR-0036 met People, and again here — three times in two days,
+which is no longer bad luck. Any branch that touches tests will conflict here, and resolving the
+conflict by *choosing a side* is how you write a number that was never true of anything.
+
+**Re-measure after a merge, not just after a change**, and re-measure **per package** rather than
+subtracting: `api` sitting unchanged at 244 across all of them is a fact worth having as a fact, not
+an inference from a total.
 Note also that `pnpm --filter @life-manager/api test` on its own hits the D77 timeout flake roughly half
 the time on a 4-core container, where the full three-package run rarely does — the suite you run changes
 what you see.

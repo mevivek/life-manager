@@ -154,7 +154,7 @@ Four rules, each with a failure mode:
 |---|---|---|
 | **Newsreader** (serif) | What a human wrote — titles, headlines, a document's name on the horizon | `text-display` `text-title` `text-serif-row` |
 | **IBM Plex Sans** | What the interface says — rows, body, buttons, status | `text-head` `text-row` `text-body` `text-meta` |
-| **IBM Plex Mono** | What the machine names — eyebrow labels, the mask, a revealed identifier, serials, counts | `text-label` `text-mask` `text-number` |
+| **IBM Plex Mono** | What the machine names — eyebrow labels, identifiers, serials, counts, and the mask when one is asked for | `text-label` `text-mask` `text-number` |
 
 **Every heading uses `font-heading` / `font-face-h`, never `font-serif` directly.** The
 [Feel preference](#12-feel-preferences) *Headings* swaps the heading face between the serif and the
@@ -364,9 +364,13 @@ column and no number controls in `All`, and a 14px column with Copy and Show und
 construct `DocumentRow` props anywhere else in the library.
 
 **A vehicle's registration is drawn in full, as a plate** — hairline border, 4px radius, mono, wide
-tracking — on the row and on the detail screen. Every other serial stays masked. The number is painted
-on the outside of the object, so hiding it protects nothing and costs a tap on the one value an owner
-reads aloud (ADR-0033).
+tracking — on the row and on the detail screen. The number is painted on the outside of the object, so
+hiding it protects nothing and costs a tap on the one value an owner reads aloud (ADR-0033).
+
+**Every other number is drawn in full too, unless the device asks otherwise**
+([ADR-0036](../decisions/0036-numbers-shown-by-default.md)). Identifiers and serials used to be masked
+always; masking is now the `feel.numbers` preference, off by default, and `text-mask` / `tracking-mask`
+are what it renders when it is on. A plate is the one value the preference cannot reach.
 
 ### How many tabs the bar holds is a measurement, not a promise
 
@@ -503,13 +507,15 @@ changes behaviour; leave it to the domain doc.
 
 ## 12. Feel preferences
 
-Three device-scoped preferences set on the **You** screen — **Density**, **Headings**, **Voice**.
-They default to what the app looked like before they existed (generous · serif · warm), so a user who
-never opens the Feel card sees no change. Stored in `localStorage`, not the account, for the same
-reason as the theme: someone may well want compact on a phone and generous on a laptop, and syncing
-would drag them through the `persister.ts` allowlist for nothing. `lib/feel.ts` holds the
-storage-and-DOM half; `lib/useFeel.tsx` the React half; `index.html` resolves density and face before
-first paint, exactly like the theme.
+Four device-scoped preferences set on the **You** screen — **Density**, **Headings**, **Voice** under
+*Feel*, and **Numbers** in its own card. The first three default to what the app looked like before
+they existed (generous · serif · warm), so a user who never opens the Feel card sees no change;
+**Numbers is the exception and defaults to `shown`**, which is a deliberate change of behaviour rather
+than a preserved one ([ADR-0036](../decisions/0036-numbers-shown-by-default.md)). Stored in
+`localStorage`, not the account, for the same reason as the theme: someone may well want compact on a
+phone and generous on a laptop, and syncing would drag them through the `persister.ts` allowlist for
+nothing. `lib/feel.ts` holds the storage-and-DOM half; `lib/useFeel.tsx` the React half; `index.html`
+resolves density and face before first paint, exactly like the theme.
 
 Each is a **different kind of thing**, and that is the load-bearing distinction:
 
@@ -518,6 +524,7 @@ Each is a **different kind of thing**, and that is the load-bearing distinction:
 | **Density** generous · compact | `--gutter` `--row-min` `--t-display` `--row-pad` `--card-pad` `--stack` | Pure token swap on `[data-density]`. The first three read straight through existing utilities; the last three exist *only* so density has something to change (they were `py-3.5`, `p-4`, `gap-5`). |
 | **Headings** serif · grotesk | `--face-h` `--h-weight` `--h-track` | Token swap on `[data-face]`. Reaches every headline via `font-heading` / `font-face-h` / `tracking-heading` — a headline hardcoded to `font-serif` opts out. |
 | **Voice** warm · plain | ~9 sentences | **Not** a token — CSS cannot rewrite a sentence. Threaded through `lib/voice.ts` and read by the components that speak prose. |
+| **Numbers** shown · hidden | Every identifier and serial | **Not** a token either — CSS cannot choose between a value and a mask of it. Read through `useFeel` by `IdentifierCard`, `DocumentRow` and `ThingSerial`; the mask itself is `lib/mask.ts`. One switch for both domains. A vehicle's registration is exempt at both settings (ADR-0033). |
 
 Rules that will bite a session that skips this section:
 
@@ -526,15 +533,21 @@ Rules that will bite a session that skips this section:
    app's responsiveness, including in the *default* density. The `[data-density="compact"]` and
    `[data-face="grotesk"]` blocks come **after** the 430px query in `styles.css`, because equal
    specificity makes source order the tiebreak — that is what keeps compact holding at every width.
-2. **Voice lives in one module so the *set* can be tested.** A ternary per call site would only ever
+2. **Numbers is not drawn on `<html>` either**, for the same reason as voice, and its card sits apart
+   from *Feel* on purpose: it is the one paragraph in the app that says how an Aadhaar number is
+   handled, so the explanation and the control belong together. That copy may never say "encrypted"
+   (invariant 7, debt **D44**).
+3. **Voice lives in one module so the *set* can be tested.** A ternary per call site would only ever
    exercise the plain register on whatever screen someone happened to open; `voice.test.ts` walks
    every sentence in both registers. **Plain must differ from warm, and never say less** — it may drop
    a reassurance, never a fact. Where warm says "Everything else is in order", plain gives the count.
-3. **Voice is device state read as a value, so it is a React *context*, not a bare hook.** The setter
+4. **Voice is device state read as a value, so it is a React *context*, not a bare hook.** The setter
    is on You and the sentences are on Now; two `useState`s seeded from storage would agree only until
    one is set, and whether that showed up would depend on whether the router kept both mounted.
-   `useFeel` falls back to the warm defaults outside a provider so bare component tests need no wrapper.
-4. **The all-clear threshold is passed to `voice.clearTitle`, not hardcoded** — so the sentence
+   `useFeel` falls back to the defaults outside a provider so bare component tests need no wrapper —
+   which also means **a screen that owns a setter must be mounted inside the provider**, or its chips
+   render the right state and quietly do nothing (`you.test.tsx` wraps for exactly that reason).
+5. **The all-clear threshold is passed to `voice.clearTitle`, not hardcoded** — so the sentence
    follows `NEEDS_YOU_DAYS` and cannot drift from the glyph it sits beside.
 
 ---

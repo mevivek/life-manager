@@ -1,5 +1,8 @@
 import type { Document } from '@life-manager/shared'
 import { Link } from '@tanstack/react-router'
+import { useState } from 'react'
+import { maskedNumber } from '@/lib/mask'
+import { useFeel } from '@/lib/useFeel'
 import { cn } from '@/lib/utils'
 import {
   type Expiry,
@@ -74,19 +77,23 @@ export type DocumentRowProps = {
    */
   showHolder?: boolean
   /**
-   * The number line and its Copy / Show controls — ADR-0027. Absent means no number is drawn at all.
+   * The number line and its Copy control — ADR-0027, amended by ADR-0036. Absent means no number is
+   * drawn at all, which is what the Now screen's cards want.
    *
-   * Passed in rather than owned here, because the archive's header toggle reveals **every** row at
-   * once: the revealed set has to live above the rows. `grouped` is passed in for the same reason the
-   * expiry is — the parent already has the formatter, and a hundred rows should not each re-derive it.
+   * ── `revealed` and `onToggleReveal` used to be here, and are deliberately gone ──
+   *
+   * They were props rather than state because the archive header carried a **page-wide** Show that
+   * revealed every row at once, so the revealed set had to live above the rows. ADR-0036 deleted that
+   * control — a device-wide preference on the You screen says the same thing once instead of on every
+   * page — so the only reveal left is per row, and a row is the right place to keep it. What remains
+   * passed in is `grouped`, for the same reason the expiry is: the parent already has the formatter,
+   * and a hundred rows should not each re-derive it.
    */
   number?: {
     /** What the document itself calls its number, e.g. "Aadhaar number". */
     label: string
-    revealed: boolean
-    /** The full value, already grouped for reading. Only shown when `revealed`. */
+    /** The full value, already grouped for reading. */
     grouped: string
-    onToggleReveal: () => void
     onCopy: () => void
   }
   className?: string
@@ -104,6 +111,9 @@ export function DocumentRow({
   className,
 }: DocumentRowProps) {
   const expiry = precomputed ?? expiryOf(document.expires_on, today)
+  const { feel } = useFeel()
+  /** Per row, and only reachable while the mask is on — see the note on the `number` prop. */
+  const [revealed, setRevealed] = useState(false)
 
   /**
    * `Financial · Aviva`, or `Title only`.
@@ -119,6 +129,8 @@ export function DocumentRow({
       .join(' · ') || 'Title only'
 
   const hasNumber = number !== undefined && document.identifier !== null
+  const masking = feel.numbers === 'hidden'
+  const shown = !masking || revealed
 
   return (
     /**
@@ -203,30 +215,59 @@ export function DocumentRow({
             digit by digit.
 
             Tracking is wider while masked, so `•••• 8109` reads as a deliberate format, and tighter
-            when revealed, so twelve digits fit. `tracking-label` (0.09em) rather than `tracking-mask`
+            when shown, so twelve digits fit. `tracking-label` (0.09em) rather than `tracking-mask`
             (0.14em): the mask token is sized for the 19px value on the detail screen, and at 13px it
             spaced the bullets so far apart they stopped reading as one field.
+
+            The mask is derived here from the full value (`maskedNumber`) rather than read from a
+            server field — ADR-0036 dropped `identifier_last4`, which was a copy of the last four
+            characters of a value sitting in the same response.
+
+            ── `break-all`, NOT `truncate`, and this was found by rendering it ──
+
+            The line truncated while the mask was the only thing on it, which was harmless: `•••• 8109`
+            is nine characters and never reached the edge. Showing the value by default put real
+            numbers there, and a 20-character policy number came out as `FAKE-POL-9988776655…` at
+            390px — the D37 clipping bug again, on the one field ADR-0036 exists to make readable. A
+            number you cannot finish reading is worse than a mask, because a mask at least says so.
+
+            So it wraps. `min-h-row` is a minimum rather than a height for exactly this reason, and the
+            title above it still truncates — the title is recognisable from its first few words and a
+            number is not.
+
+            ── The value stands alone: no "Aadhaar number" in front of it on a row ──
+
+            ADR-0027 put the label here because the row showed `•••• 8109` and nothing else, and four
+            characters need telling apart from the four characters on the row below. That stopped being
+            true when ADR-0036 showed the value: **the title one line up already names the document**,
+            so `Aadhaar / Aadhaar number 7294 8103 8109` says it twice — and the second copy takes the
+            width off the line that just started needing it.
+
+            `number.label` is still passed and still used, by the Copy and Show controls' accessible
+            names and by the page's copy toast. Those are not chrome: "Copy" alone is ambiguous the
+            moment two numbered rows are on screen, and a screen reader gets no title-then-value
+            adjacency to infer from. **The detail card keeps its visible label** — there the number is
+            the subject with no title beside it, which is the case ADR-0027's argument actually covers.
           */}
-          {hasNumber && number !== undefined && (
-            <span className="mt-1 flex items-baseline gap-[7px]">
-              <span className="shrink-0 text-[0.6875rem] text-ink-3">{number.label}</span>
-              <span
-                className={cn(
-                  'min-w-0 flex-1 truncate font-mono text-meta font-medium text-ink-2',
-                  number.revealed ? 'tracking-number' : 'tracking-label',
-                )}
-              >
-                {number.revealed ? number.grouped : `•••• ${document.identifier_last4 ?? ''}`}
-              </span>
+          {hasNumber && number !== undefined && document.identifier !== null && (
+            <span
+              className={cn(
+                'mt-1 block break-all font-mono text-meta font-medium text-ink-2',
+                shown ? 'tracking-number' : 'tracking-label',
+              )}
+            >
+              {shown ? number.grouped : maskedNumber(document.identifier)}
             </span>
           )}
         </span>
       </Link>
 
       {/*
-        Copy and Reveal, outside the link. Both are 44px (`--tap-min`) even though they draw a 13px
-        glyph — design.md §6: everything tappable clears the floor, including icon-only controls, and
-        two of them side by side on a row is exactly where a miss lands on the wrong one.
+        Copy, and Show only while the mask is on — outside the link. Both are 44px (`--tap-min`) even
+        though they draw a 13px glyph: design.md §6, everything tappable clears the floor, including
+        icon-only controls, and two of them side by side on a row is exactly where a miss lands on
+        the wrong one. With numbers shown — the default — there is one control here, not two, which
+        is also what gives a long number the width it needs.
       */}
       {hasNumber && number !== undefined && (
         <span className="flex shrink-0 items-center">
@@ -243,17 +284,19 @@ export function DocumentRow({
               <span className="absolute right-0 bottom-0 h-[11px] w-[9px] rounded-[2px] border-[1.5px] border-current bg-raised" />
             </span>
           </button>
-          <button
-            type="button"
-            onClick={number.onToggleReveal}
-            aria-label={`${number.revealed ? 'Hide' : 'Show'} ${number.label} for ${document.title}`}
-            className={cn(
-              'flex min-h-tap min-w-11 items-center justify-center rounded-2 font-mono text-[0.6875rem] tracking-label uppercase active:bg-rule/40',
-              number.revealed ? 'text-ink' : 'text-ink-3',
-            )}
-          >
-            {number.revealed ? 'Hide' : 'Show'}
-          </button>
+          {masking && (
+            <button
+              type="button"
+              onClick={() => setRevealed((previous) => !previous)}
+              aria-label={`${revealed ? 'Hide' : 'Show'} ${number.label} for ${document.title}`}
+              className={cn(
+                'flex min-h-tap min-w-11 items-center justify-center rounded-2 font-mono text-[0.6875rem] tracking-label uppercase active:bg-rule/40',
+                revealed ? 'text-ink' : 'text-ink-3',
+              )}
+            >
+              {revealed ? 'Hide' : 'Show'}
+            </button>
+          )}
         </span>
       )}
 

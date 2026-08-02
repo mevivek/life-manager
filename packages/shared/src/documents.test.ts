@@ -5,7 +5,6 @@ import {
   documentSchema,
   documentUpdateSchema,
   presignUploadRequestSchema,
-  truncateToLast4,
   validateCustomAttrs,
 } from './documents.js'
 
@@ -113,16 +112,6 @@ describe('documentListQuerySchema', () => {
   })
 })
 
-describe('truncateToLast4 — business rule 6', () => {
-  it('keeps only the last four characters', () => {
-    expect(truncateToLast4('X1234567')).toBe('4567')
-  })
-
-  it('leaves a value already short enough alone', () => {
-    expect(truncateToLast4('12')).toBe('12')
-  })
-})
-
 describe('validateCustomAttrs', () => {
   it('accepts the keys its doc_type declares', () => {
     const result = validateCustomAttrs('warranty', { vendor: 'Acme', coverage_months: 24 })
@@ -193,7 +182,6 @@ describe('documentSchema tolerates an older server', () => {
     holder: null,
     relation: null,
     identifier: 'FAKE12345',
-    identifier_last4: '2345',
     // `thing_id` deliberately ABSENT — this is the whole point of the fixture.
     issued_on: '2016-09-12',
     expires_on: '2026-09-12',

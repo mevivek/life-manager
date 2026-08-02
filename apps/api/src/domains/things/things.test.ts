@@ -69,7 +69,6 @@ describeDb('things', () => {
       brand: null,
       model: null,
       serial: null,
-      serial_last4: null,
       purchased_on: null,
       price: null,
       currency: null,
@@ -134,14 +133,15 @@ describeDb('things', () => {
       method: 'POST',
       url: '/api/v1/things',
       ...authAs(user),
-      // An obvious fake (conventions/testing.md §5). 11 characters, so a mask taken off the wrong
-      // end of the string is visible rather than coincidentally right.
+      // An obvious fake (conventions/testing.md §5). 11 characters, so a value truncated at either
+      // end is visible rather than coincidentally right.
       payload: { name: 'Phone', kind: 'phone', serial: 'FAKE1234567' },
     })
 
     expect(created.statusCode).toBe(201)
     expect(created.json().serial).toBe('FAKE1234567')
-    expect(created.json().serial_last4).toBe('4567')
+    // ADR-0036: whole, and only once. No derived tail rides along with it.
+    expect(created.json()).not.toHaveProperty('serial_last4')
   })
 
   it('rule 7: returns the full serial on the LIST as well as on detail', async () => {
@@ -158,9 +158,9 @@ describeDb('things', () => {
     // document's identifier. A list mapper that forgot the field would return `undefined`, and every
     // test asserting `null` on a thing with no serial would still pass (debt D33's shape).
     expect(list.json().data[0].serial).toBe('FAKE 22 BH 1234 AA')
-    // The mask must be there ALONGSIDE it: it is what rows render until the user reveals, and a
-    // client-derived mask would be a second implementation of a rule the server owns.
-    expect(list.json().data[0].serial_last4).toBe('4 AA')
+    // And nothing beside it — ADR-0036 dropped `serial_last4`. A mask cut from a value in the same
+    // response is a copy of that value; the device that draws one cuts it itself.
+    expect(list.json().data[0]).not.toHaveProperty('serial_last4')
 
     const detail = await app.inject({
       method: 'GET',
@@ -168,14 +168,14 @@ describeDb('things', () => {
       ...authAs(user),
     })
     expect(detail.json().serial).toBe('FAKE 22 BH 1234 AA')
-    expect(detail.json().serial_last4).toBe('4 AA')
+    expect(detail.json()).not.toHaveProperty('serial_last4')
   })
 
-  it('rule 7: never lets a client set the mask directly', async () => {
+  it('rule 7: never lets a client store a mask of its own', async () => {
     const user = await seedUserWithSpace(app)
 
-    // `serial_last4` is DERIVED. A create that tries to supply one must not be able to make the mask
-    // disagree with the value it masks — that is the drift `serialColumns` exists to stop.
+    // There is no `serial_last4` column since ADR-0036, and a client must not be able to bring one
+    // back by sending it: a stored mask is a second copy of a fact that already travels whole.
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/things',
@@ -189,19 +189,18 @@ describeDb('things', () => {
     expect(created.statusCode).toBe(400)
   })
 
-  it('rule 7: trims before masking, and treats an emptied field as no serial', async () => {
+  it('rule 7: trims the stored value, and treats an emptied field as no serial', async () => {
     const user = await seedUserWithSpace(app)
 
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/things',
       ...authAs(user),
-      // A trailing space is what a phone keyboard produces. The mask comes off the END of the
-      // string, so an untrimmed value masks to "234 " — wrong in the one place the mask is shown.
+      // A trailing space is what a phone keyboard produces. A tail is cut from the END of the
+      // string, so an untrimmed value would draw as "234 " wherever the client masks one.
       payload: { name: 'Laptop', serial: '  FAKEABCDE1234F  ' },
     })
     expect(created.json().serial).toBe('FAKEABCDE1234F')
-    expect(created.json().serial_last4).toBe('234F')
 
     const emptied = await app.inject({
       method: 'PATCH',
@@ -210,10 +209,9 @@ describeDb('things', () => {
       payload: { version: created.json().version, serial: null },
     })
     expect(emptied.statusCode).toBe(200)
-    // Both columns clear together. Leaving yesterday's mask on the row is the drift `serialColumns`
-    // exists to prevent, and it would show in every list.
+    // Cleared for good, with nothing left behind holding a piece of the old value.
     expect(emptied.json().serial).toBeNull()
-    expect(emptied.json().serial_last4).toBeNull()
+    expect(emptied.json()).not.toHaveProperty('serial_last4')
   })
 
   // ── Rule 6: the holder is a label, never a permission ────────────────────

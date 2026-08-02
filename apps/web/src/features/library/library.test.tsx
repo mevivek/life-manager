@@ -35,7 +35,6 @@ function document(over: Partial<Document> & { id: string; title: string }): Docu
     holder: null,
     relation: null,
     identifier: null,
-    identifier_last4: null,
     thing_id: null,
     issued_on: null,
     expires_on: null,
@@ -58,7 +57,6 @@ function thing(over: Partial<Thing> & { id: string; name: string }): Thing {
     brand: null,
     model: null,
     serial: null,
-    serial_last4: null,
     purchased_on: null,
     price: null,
     currency: null,
@@ -353,7 +351,6 @@ describe('a row does not change shape when the scope changes', () => {
     id: 'aaaaaaa9-0000-4000-8000-000000000000',
     title: 'Aadhaar',
     identifier: '729481038109',
-    identifier_last4: '8109',
   })
 
   it('offers the same number controls under All as under Documents', async () => {
@@ -365,8 +362,10 @@ describe('a row does not change shape when the scope changes', () => {
     const inAll = screen
       .getAllByRole('button', { name: /Aadhaar/ })
       .map((b) => b.getAttribute('aria-label'))
+    // Copy, and only Copy: ADR-0036 shows the number outright, so there is no Show beside it. The
+    // assertion that matters is not which controls there are but that the two scopes agree.
     expect(inAll).toContain('Copy Aadhaar number for Aadhaar')
-    expect(inAll).toContain('Show Aadhaar number for Aadhaar')
+    expect(inAll).not.toContain('Show Aadhaar number for Aadhaar')
 
     await user.click(scopePills().getByRole('button', { name: 'Documents' }))
     await waitFor(() => expect(screen.queryByText('Maruti Swift')).not.toBeInTheDocument())
@@ -375,6 +374,27 @@ describe('a row does not change shape when the scope changes', () => {
       .getAllByRole('button', { name: /Aadhaar/ })
       .map((b) => b.getAttribute('aria-label'))
     expect(inDocuments).toEqual(inAll)
+  })
+
+  it('ADR-0036: draws the number in full, and offers no page-wide Show', async () => {
+    stubApi({ documents: [WITH_NUMBER], things: [SWIFT] })
+    await renderAt('/library')
+
+    await screen.findByText('Aadhaar')
+    // Grouped for reading, because it is all digits — `groupForReading`.
+    expect(screen.getByText('7294 8103 8109')).toBeInTheDocument()
+
+    /**
+     * The header's reveal-everything control is gone. It answered per page a question the You
+     * screen's preference answers once, and it could only ever speak for the rows already fetched.
+     *
+     * Matched on the accessible name, which was exactly `Show` / `Hide`: the `1234` glyph beside the
+     * word is `aria-hidden`, so it never formed part of the name. Nothing else in this header is
+     * called either word — the scope pills are All / Documents / Things.
+     */
+    expect(screen.queryByRole('button', { name: 'Show' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hide' })).toBeNull()
+    expect(screen.queryByText('•••• 8109')).toBeNull()
   })
 
   it('indents the title identically in both scopes', async () => {

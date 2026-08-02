@@ -283,9 +283,10 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
             </dl>
 
             {/*
-              ADR-0026 replaced the old "we only ever keep the last four" card. The number is stored
-              in full now, so the card reveals rather than explains a truncation — see
-              `IdentifierCard` for why the mask is a display state and not a boundary.
+              ADR-0026 replaced the old "we only ever keep the last four" card, and ADR-0036 removed
+              the reveal step in front of it: the number is stored in full and returned in full, so
+              the card simply shows it unless the You screen's preference says otherwise. See
+              `IdentifierCard` for why the mask never was a boundary.
 
               The label names the real document, via the same preset table the capture form uses:
               "Aadhaar number" rather than "Number". Falls back to "Number" for a document whose
@@ -293,7 +294,6 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
             */}
             <IdentifierCard
               identifier={detail.identifier}
-              last4={detail.identifier_last4}
               label={numberLabelFor(detail.title, detail.doc_type)}
             />
           </>

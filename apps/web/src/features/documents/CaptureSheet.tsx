@@ -751,8 +751,8 @@ export function CaptureWizard({
             there is one claim in the app rather than three.
           */}
           <p className="text-meta leading-snug text-ink-3 [text-wrap:pretty]">
-            Stored in full, shown as the last four until you tap Reveal. Leave it blank if you don’t
-            have it to hand.
+            Stored in full, and shown in full — You lets you hide it behind the last four. Leave it
+            blank if you don’t have it to hand.
           </p>
         </div>
       )}

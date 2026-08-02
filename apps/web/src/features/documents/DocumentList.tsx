@@ -36,9 +36,9 @@ export type DocumentListProps = {
    * The row-level number display — ADR-0027. Absent means no numbers are drawn, which is what the
    * Now screen's cards want.
    *
-   * The revealed set is owned **above** this component because the archive header has a toggle that
-   * reveals every row at once. Local state per row could not be reached by it, and a boolean threaded
-   * down from the page is simpler than a context for two consumers.
+   * This used to carry the revealed set as well, because the archive header had a page-wide Show that
+   * per-row state could not be reached by. ADR-0036 replaced that control with a device preference,
+   * so what is threaded through here is only the page's two copy outcomes.
    */
   numbers?: NumberDisplay
 }

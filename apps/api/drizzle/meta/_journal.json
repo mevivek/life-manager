@@ -64,6 +64,13 @@
       "when": 1785554469000,
       "tag": "0008_cultured_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785563049568,
+      "tag": "0009_known_pandemic",
+      "breakpoints": true
     }
   ]
 }

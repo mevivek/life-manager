@@ -154,21 +154,6 @@ export const MAX_NAME_LENGTH = 200
  */
 export const serialInputSchema = z.string().min(1).max(64)
 
-/** The masked display form, DERIVED from `serial` server-side: at most 4 characters. */
-export const serialLast4Schema = z.string().max(4)
-
-/**
- * The mask, as the one function that produces it.
- *
- * Deliberately identical to `truncateToLast4` in `documents.ts` and deliberately **not** imported
- * from it: these mask two different columns on two different tables, and a shared helper would make a
- * change to one silently a change to the other. The duplication is four characters of logic; the
- * coupling would be a cross-domain dependency for nothing.
- */
-export function truncateSerialToLast4(value: string): string {
-  return value.slice(-4)
-}
-
 // ── Cover ────────────────────────────────────────────────────────────────────
 
 /**
@@ -278,8 +263,6 @@ export const thingSchema = z.object({
    * covers both domains.
    */
   serial: z.string().nullable(),
-  /** The masked display form, DERIVED from `serial` server-side. Never sent by a client. */
-  serial_last4: serialLast4Schema.nullable(),
   purchased_on: isoDateSchema.nullable(),
   price: decimalStringSchema.nullable(),
   currency: currencySchema.nullable(),
@@ -323,7 +306,7 @@ export const thingCreateSchema = z.strictObject({
   kind: thingKindSchema.default('other'),
   brand: z.string().trim().max(120).nullish(),
   model: z.string().trim().max(200).nullish(),
-  /** Truncated into `serial_last4` server-side — business rule 7. */
+  /** Stored whole, and shown whole unless the device asks otherwise — rule 7, ADR-0036. */
   serial: serialInputSchema.nullish(),
   purchased_on: isoDateSchema.nullish(),
   price: decimalStringSchema.nullish(),
