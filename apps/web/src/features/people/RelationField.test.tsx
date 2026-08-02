@@ -33,8 +33,10 @@ describe('the relation field offers the premade relations', () => {
   it('draws every suggestion as a visible control, not behind a menu', async () => {
     render(<Harness />)
 
-    // All eight, on screen, without opening anything. design.md §6's no-dropdowns rule turns on
-    // exactly this: the options fit, so hiding them behind a tap would cost a tap and hide them.
+    // Every one of them, on screen, without opening anything — the list is walked rather than
+    // counted, so adding a relation cannot make this test stale. design.md §6's no-dropdowns rule
+    // turns on exactly this: the options fit, so hiding them behind a tap would cost a tap and hide
+    // them.
     for (const suggestion of RELATION_SUGGESTIONS) {
       expect(screen.getByRole('button', { name: suggestion })).toBeInTheDocument()
     }
