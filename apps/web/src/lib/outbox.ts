@@ -1,4 +1,10 @@
-import type { DocumentCreate, DocumentUpdate } from '@life-manager/shared'
+import type {
+  DocumentCreate,
+  DocumentUpdate,
+  ThingCreate,
+  ThingServiceCreate,
+  ThingUpdate,
+} from '@life-manager/shared'
 import { del, get, set } from 'idb-keyval'
 import { ApiError, api, OfflineError } from './api'
 
@@ -29,6 +35,18 @@ import { ApiError, api, OfflineError } from './api'
  * sits in a queue for hours and then comes back as a conflict is a confusing thing to explain, and
  * unlike an edit there is nothing to re-apply afterwards. A delete attempted offline fails
  * immediately and plainly. That is now a product choice, and reversing it is a small change.
+ *
+ * **Rearranging a thing's photos** — promoting a hero, removing one. Same reasoning as a delete, plus
+ * one of its own: both are decisions *about* a set the user is looking at, and replaying them hours
+ * later against a set that has since changed is how you promote the wrong photo.
+ *
+ * ── Two domains now, and the entry shapes are deliberately NOT unified ──
+ *
+ * A document entry keys its parent as `documentId`, a thing entry as `thingId`. Merging them into one
+ * `subjectId` would read better and is the wrong trade: **this queue is persisted in IndexedDB**, so a
+ * rename orphans every entry queued by an already-installed bundle — the write is silently addressed
+ * to `undefined` and lost. That is D87's failure mode with the halves swapped again, and the cost of
+ * avoiding it is one extra branch in `remapTempId`. Add fields; do not rename them.
  */
 
 const OUTBOX_KEY = 'life-manager-outbox'
@@ -65,8 +83,61 @@ type FileUploadEntry = {
   sizeBytes: number
 }
 
+/** A queued thing. The sibling of `CreateEntry`, and `tempId` does the same job. */
+type ThingCreateEntry = {
+  kind: 'thing.create'
+  tempId: string
+  input: ThingCreate
+}
+
+/** A queued edit to a thing. `patch.version` IS the precondition — rule 1, exactly as for a document. */
+type ThingUpdateEntry = {
+  kind: 'thing.update'
+  thingId: string
+  patch: ThingUpdate
+}
+
+/**
+ * A queued service record — "serviced today" written down at the garage, where the signal is.
+ *
+ * This is the one queued write with no document equivalent, and it earns its place: a service is
+ * logged at the moment it happens, in exactly the sort of place that has no connection, and the date
+ * it carries is `serviced_on` rather than "now" — so a replay hours later still records the right day.
+ *
+ * `thingId` may be a `ThingCreateEntry`'s `tempId`, same as a photo's.
+ */
+type ThingServiceEntry = {
+  kind: 'thing.service'
+  thingId: string
+  input: ThingServiceCreate
+}
+
+/**
+ * A queued thing photo. `FileUploadEntry`'s sibling, and the bytes are held here for the same reason:
+ * a presigned URL minted at capture time would have expired by the time the network returned.
+ *
+ * `makeHero` is carried rather than defaulted, because the server's default is `true` and confirming a
+ * `make_hero` row demotes its siblings. A photo added from the strip an hour ago must not steal the
+ * main slot when it finally uploads — see `useUploadThingPhoto`.
+ */
+type ThingPhotoEntry = {
+  kind: 'thing.photo'
+  thingId: string
+  blob: Blob
+  mime: string
+  sizeBytes: number
+  makeHero: boolean
+}
+
 /** What a caller hands to `enqueue`; the queue adds the bookkeeping fields below. */
-export type NewOutboxEntry = CreateEntry | UpdateEntry | FileUploadEntry
+export type NewOutboxEntry =
+  | CreateEntry
+  | UpdateEntry
+  | FileUploadEntry
+  | ThingCreateEntry
+  | ThingUpdateEntry
+  | ThingServiceEntry
+  | ThingPhotoEntry
 
 export type OutboxEntry = NewOutboxEntry & {
   id: string
@@ -163,6 +234,36 @@ export async function enqueue(entry: NewOutboxEntry): Promise<OutboxEntry> {
   return queued
 }
 
+/**
+ * Runs a write, and queues it in the outbox if there is no connectivity (ADR-0024).
+ *
+ * The attempt comes FIRST, and the queue is the fallback — not the other way round. Checking
+ * `navigator.onLine` up front and queueing on `false` would be wrong in both directions: it reports
+ * `true` behind a captive portal (so the write would be attempted and lost anyway) and it can report
+ * `false` on a working connection. An `OfflineError` is proof the request did not reach the server;
+ * a status code is proof that it did.
+ *
+ * Anything else — a 409, a 422 — is rethrown untouched. A request the server has *judged* must not be
+ * queued for a retry that would get the same answer.
+ *
+ * Lives here rather than in `features/documents`, where it was written, because Things needs it too
+ * and a feature folder importing another feature's private helper is how the two copies start.
+ */
+export async function writeOrQueue<T>(
+  attempt: () => Promise<T>,
+  queued: () => NewOutboxEntry,
+): Promise<T | { queued: true }> {
+  try {
+    return await attempt()
+  } catch (error) {
+    if (error instanceof OfflineError) {
+      await enqueue(queued())
+      return { queued: true }
+    }
+    throw error
+  }
+}
+
 export async function list(): Promise<OutboxEntry[]> {
   return read()
 }
@@ -201,14 +302,28 @@ export async function retryWithVersion(id: string, version: number): Promise<voi
   const entries = await read()
   await write(
     entries.map((entry) => {
-      if (entry.id !== id || entry.kind !== 'document.update') return entry
-      return {
-        ...entry,
-        patch: { ...entry.patch, version },
-        idempotencyKey: newId(),
-        status: 'pending' as const,
-        error: undefined,
+      if (entry.id !== id) return entry
+      // Branched per kind rather than spread over the union: `patch` has a different type in each,
+      // and a single spread would widen it to `DocumentUpdate | ThingUpdate` on both branches.
+      if (entry.kind === 'document.update') {
+        return {
+          ...entry,
+          patch: { ...entry.patch, version },
+          idempotencyKey: newId(),
+          status: 'pending' as const,
+          error: undefined,
+        }
       }
+      if (entry.kind === 'thing.update') {
+        return {
+          ...entry,
+          patch: { ...entry.patch, version },
+          idempotencyKey: newId(),
+          status: 'pending' as const,
+          error: undefined,
+        }
+      }
+      return entry
     }),
   )
 }
@@ -235,51 +350,124 @@ async function markConflict(id: string, message: string): Promise<void> {
  * reopened for — could not work: the upload would be addressed to a `tempId` the server has never
  * heard of and would 404 on presign, surfacing as a conflict the user cannot possibly resolve.
  */
-async function remapTempId(tempId: string, realId: string): Promise<void> {
+async function remapTempId(
+  subject: 'document' | 'thing',
+  tempId: string,
+  realId: string,
+): Promise<void> {
   const entries = await read()
-  if (!entries.some((entry) => entry.kind !== 'document.create' && entry.documentId === tempId)) {
-    return
-  }
+
+  const matches = (entry: OutboxEntry): boolean =>
+    subject === 'document'
+      ? hangsOffADocument(entry) && entry.documentId === tempId
+      : hangsOffAThing(entry) && entry.thingId === tempId
+
+  if (!entries.some(matches)) return
+
   await write(
-    entries.map((entry) =>
-      entry.kind !== 'document.create' && entry.documentId === tempId
-        ? { ...entry, documentId: realId }
-        : entry,
-    ),
+    entries.map((entry) => {
+      if (!matches(entry)) return entry
+      if (hangsOffADocument(entry)) return { ...entry, documentId: realId }
+      if (hangsOffAThing(entry)) return { ...entry, thingId: realId }
+      return entry
+    }),
   )
 }
 
-/** Sends one entry. Split out so `replay` reads as the policy and this as the mechanism. */
+/**
+ * The entries that name a parent record, split by which domain that parent is in.
+ *
+ * Written as predicates rather than as `kind !== '…create'` — which is what this was when there was
+ * one domain — because "not a create" stopped implying "has a `documentId`" the moment a second
+ * domain's entries joined the union.
+ */
+function hangsOffADocument(entry: OutboxEntry): entry is OutboxEntry & { documentId: string } {
+  return entry.kind === 'document.update' || entry.kind === 'file.upload'
+}
+
+function hangsOffAThing(entry: OutboxEntry): entry is OutboxEntry & { thingId: string } {
+  return (
+    entry.kind === 'thing.update' || entry.kind === 'thing.service' || entry.kind === 'thing.photo'
+  )
+}
+
+/**
+ * Sends one entry. Split out so `replay` reads as the policy and this as the mechanism.
+ *
+ * An exhaustive `switch` with a `never` default rather than a chain of `if`s ending in a bare
+ * `documents.update` — which is what this was for three kinds. With seven, the implicit final branch
+ * is a trap: a new kind would fall into it and be sent as a document edit against a `documentId` it
+ * does not have. Now it is a compile error (conventions/code.md §5).
+ */
 async function send(entry: OutboxEntry): Promise<void> {
-  if (entry.kind === 'document.create') {
-    const created = await api.documents.create(entry.input, entry.idempotencyKey)
-    // Anything queued against the placeholder id now points at the real document.
-    await remapTempId(entry.tempId, created.id)
-    return
-  }
+  switch (entry.kind) {
+    case 'document.create': {
+      const created = await api.documents.create(entry.input, entry.idempotencyKey)
+      // Anything queued against the placeholder id now points at the real document.
+      await remapTempId('document', entry.tempId, created.id)
+      return
+    }
 
-  if (entry.kind === 'file.upload') {
-    /**
-     * The full ADR-0008 dance, at replay time: presign → PUT the bytes → confirm.
-     *
-     * `File` rather than the raw `Blob`, because `api.files.upload` sends `file.type` as the
-     * `content-type` header and the presigned URL signs that header — a mismatch is rejected by
-     * storage. A `Blob` read back out of IndexedDB has a `type` but no name, so it is rewrapped.
-     */
-    const presigned = await api.files.presignUpload(entry.documentId, {
-      mime: entry.mime as Parameters<typeof api.files.presignUpload>[1]['mime'],
-      size_bytes: entry.sizeBytes,
-      make_primary: true,
-    })
-    await api.files.upload(
-      presigned.upload_url,
-      new File([entry.blob], 'capture', { type: entry.mime }),
-    )
-    await api.files.confirm(entry.documentId, { file_id: presigned.file_id })
-    return
-  }
+    case 'document.update':
+      await api.documents.update(entry.documentId, entry.patch, entry.idempotencyKey)
+      return
 
-  await api.documents.update(entry.documentId, entry.patch, entry.idempotencyKey)
+    case 'file.upload': {
+      /**
+       * The full ADR-0008 dance, at replay time: presign → PUT the bytes → confirm.
+       *
+       * `File` rather than the raw `Blob`, because `api.files.upload` sends `file.type` as the
+       * `content-type` header and the presigned URL signs that header — a mismatch is rejected by
+       * storage. A `Blob` read back out of IndexedDB has a `type` but no name, so it is rewrapped.
+       */
+      const presigned = await api.files.presignUpload(entry.documentId, {
+        mime: entry.mime as Parameters<typeof api.files.presignUpload>[1]['mime'],
+        size_bytes: entry.sizeBytes,
+        make_primary: true,
+      })
+      await api.files.upload(
+        presigned.upload_url,
+        new File([entry.blob], 'capture', { type: entry.mime }),
+      )
+      await api.files.confirm(entry.documentId, { file_id: presigned.file_id })
+      return
+    }
+
+    case 'thing.create': {
+      const created = await api.things.create(entry.input, entry.idempotencyKey)
+      // A photo or a service logged against the placeholder now points at the real thing.
+      await remapTempId('thing', entry.tempId, created.id)
+      return
+    }
+
+    case 'thing.update':
+      await api.things.update(entry.thingId, entry.patch, entry.idempotencyKey)
+      return
+
+    case 'thing.service':
+      await api.things.logService(entry.thingId, entry.input, entry.idempotencyKey)
+      return
+
+    case 'thing.photo': {
+      // things.md §5's three steps, and the same rewrap for the same signed-header reason as above.
+      const presigned = await api.things.photos.presignUpload(entry.thingId, {
+        mime: entry.mime as Parameters<typeof api.things.photos.presignUpload>[1]['mime'],
+        size_bytes: entry.sizeBytes,
+        make_hero: entry.makeHero,
+      })
+      await api.files.upload(
+        presigned.upload_url,
+        new File([entry.blob], 'capture', { type: entry.mime }),
+      )
+      await api.things.photos.confirm(entry.thingId, presigned.photo_id)
+      return
+    }
+
+    default: {
+      const exhaustive: never = entry
+      throw new Error(`unhandled outbox entry: ${JSON.stringify(exhaustive)}`)
+    }
+  }
 }
 
 export type ReplayResult = {

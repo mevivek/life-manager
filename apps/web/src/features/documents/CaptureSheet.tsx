@@ -253,16 +253,15 @@ export function CaptureWizard({
       try {
         const created = await createThing.mutateAsync(parsed.data)
         /**
-         * No queued branch, and that is a fact about `useCreateThing` rather than an oversight: it
-         * calls `api.things.create` directly, where `useCreateDocument` goes through `writeOrQueue`.
-         * Things capture is **not** in the offline outbox yet (ADR-0024 built it for documents), so a
-         * create without a connection fails rather than queueing.
+         * `id: null` when the create was queued, exactly as the document track below.
          *
-         * `created.id` is therefore unconditional. If a later session wires the outbox in, its return
-         * type gains `{ queued: true }` and this line stops compiling — which is the signal wanted,
-         * rather than a `'queued' in created` check that is dead today and silently right later.
+         * This line used to read `created.id` unconditionally, with a note saying that wiring the
+         * outbox in would make it stop compiling. It did, which is the whole value of having written
+         * it that way: the break landed on the one line that had to change, rather than a
+         * `'queued' in created` check that would have been dead for a month and silently correct
+         * afterwards. A queued thing has no id to link to until its replay assigns one.
          */
-        setSaved({ track: 'thing', id: created.id })
+        setSaved({ track: 'thing', id: 'queued' in created ? null : created.id })
       } catch (error) {
         setServerError(messageFor(error))
       }

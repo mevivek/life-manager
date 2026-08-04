@@ -7,7 +7,9 @@ import type {
 } from '@life-manager/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api } from '@/lib/api'
+import { api, OfflineError } from '@/lib/api'
+import * as outbox from '@/lib/outbox'
+import { canQueueBytes, requestPersistentStorage } from '@/lib/storage-quota'
 
 /**
  * TanStack Query hooks for Things. The sibling of `features/documents/useDocuments.ts`, and
@@ -23,23 +25,19 @@ import { api } from '@/lib/api'
  * half landed and implemented `packages/shared/src/things.ts` unchanged, which is what invariant 9 is
  * for. things.md §10 is the file that tracks what is left.
  *
- * ── The writes are NOT queued offline, and that is a decision rather than an omission ──
+ * ── The writes ARE queued offline now, and which ones is the deliberate part ──
  *
- * Documents route every write through `writeOrQueue` (ADR-0024): an `OfflineError` becomes an outbox
- * entry and the mutation resolves `{ queued: true }`. Things deliberately does not, for two reasons.
+ * Things route through `writeOrQueue` exactly as documents do (ADR-0024): an `OfflineError` becomes
+ * an outbox entry and the mutation resolves `{ queued: true }`. This block used to explain why they
+ * did not; the queue's entry union grew four thing kinds and D59's offline half closed with it.
  *
- *  1. **`lib/outbox.ts`'s entry union is `document.create | document.update | file.upload`, and
- *     adding a `thing.create` to it is not a small clean change.** `remapTempId` and
- *     `retryWithVersion` both narrow on `kind !== 'document.create'` and then read `.documentId`, so
- *     a fourth kind without that field is a type error in two places that have nothing to do with
- *     things. Widening the queue is the API session's work, alongside the endpoints.
- *  2. **The queue would need a `thing.create` before a photo could be queued against it.** A photo
- *     hangs off a `thing_id`, so queueing one for a thing that is itself only in the outbox means
- *     replaying two entries in order and remapping a temporary id between them — which is
- *     `remapTempId`'s job for documents and does not generalise for free.
+ * **Queued:** create, edit, log a service, upload a photo — the four writes a person makes standing in
+ * front of the object, which is where the signal is worst.
  *
- * So `OfflineError` propagates and the UI says the change was not saved, exactly as ADR-0013 had it.
- * The fix is one outbox kind and one `writeOrQueue` wrapper per mutation — debt D59's remaining half.
+ * **Not queued:** deleting a thing, deleting a photo, promoting a hero. A delete stays out for the
+ * reason documents' does — a queued destruction that returns hours later as a conflict has nothing to
+ * re-apply — and the two photo verbs are decisions *about* a set the user is looking at, which must
+ * not be replayed against a set that has since changed.
  */
 
 export const thingsKey = ['things'] as const
@@ -99,7 +97,11 @@ export function useCreateThing() {
      * retried, the retry carries the same key and the server replays its first response instead of
      * filing the same laptop twice. A key generated inside the fetch would defeat it entirely.
      */
-    mutationFn: (input: ThingCreate) => api.things.create(input, crypto.randomUUID()),
+    mutationFn: (input: ThingCreate) =>
+      outbox.writeOrQueue(
+        () => api.things.create(input, crypto.randomUUID()),
+        () => ({ kind: 'thing.create', tempId: crypto.randomUUID(), input }),
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: thingsKey })
     },
@@ -115,7 +117,13 @@ export function useUpdateThing(id: string) {
      * **read** at, not a fresh one — ADR-0024. A patch carrying a just-refetched version defeats the
      * precondition it exists to enforce, silently, and turns a refused write into last-write-wins.
      */
-    mutationFn: (patch: ThingUpdate) => api.things.update(id, patch, crypto.randomUUID()),
+    mutationFn: (patch: ThingUpdate) =>
+      outbox.writeOrQueue(
+        () => api.things.update(id, patch, crypto.randomUUID()),
+        // The patch carries the version the form was read at, so the queued edit keeps its
+        // precondition and is refused with 409 if the thing moved on meanwhile.
+        () => ({ kind: 'thing.update', thingId: id, patch }),
+      ),
     onSuccess: () => {
       // Both the detail and every list: a rename reorders the default `name asc` sort, and an
       // ownership change moves the row in and out of the sum insured.
@@ -157,7 +165,15 @@ export function useLogService(thingId: string) {
 
   return useMutation({
     mutationFn: (input: ThingServiceCreate) =>
-      api.things.logService(thingId, input, crypto.randomUUID()),
+      outbox.writeOrQueue(
+        () => api.things.logService(thingId, input, crypto.randomUUID()),
+        /**
+         * Queued, and this is the write that most wants to be: a service is logged in a garage or a
+         * driveway. `serviced_on` is in the payload rather than derived at send time, so a record
+         * replayed tomorrow still says it happened today.
+         */
+        () => ({ kind: 'thing.service', thingId, input }),
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: thingsKey })
     },
@@ -179,12 +195,12 @@ export function useLogService(thingId: string) {
  * event would have `persister.ts` throttle-writing the whole cache to IndexedDB for the duration of an
  * upload. It is transient view state.
  *
- * ── No offline queue, unlike a document's scan ──
+ * ── Queued offline, exactly like a document's scan ──
  *
- * `useUploadFile` catches `OfflineError` and enqueues the bytes. This does not, and the reason is at the
- * top of this file: `lib/outbox.ts`'s entry union has no thing kind, and a photo queued against a thing
- * that is itself only in the outbox needs a temporary-id remap that does not exist yet. So an offline
- * upload fails plainly at the moment it is attempted, which is the honest outcome and not a lost photo.
+ * The bytes go to the outbox on `OfflineError` and upload on reconnect, and the quota check happens
+ * BEFORE anything is stored — ADR-0024 is unambiguous that refusing a photo is a poor experience and
+ * accepting one then losing it to eviction is the worst bug available. A photo taken of a thing that is
+ * itself only in the queue is fine: `remapTempId` re-points it once the create replays.
  *
  * ── `makeHero` is the CALLER's decision, and it must be ──
  *
@@ -201,20 +217,48 @@ export function useUploadThingPhoto(thingId: string) {
   const mutation = useMutation({
     mutationFn: async ({ file, makeHero }: { file: File; makeHero: boolean }) => {
       setProgress(0)
-      const presigned = await api.things.photos.presignUpload(thingId, {
-        // Validated server-side against `ALLOWED_PHOTO_MIMES`; this is the browser's own reported
-        // type, and anything outside the allowlist comes back as a 400 rather than being uploaded.
-        mime: file.type as PhotoMime,
-        size_bytes: file.size,
-        make_hero: makeHero,
-      })
 
-      await api.files.upload(presigned.upload_url, file, setProgress)
+      const attemptUpload = async () => {
+        const presigned = await api.things.photos.presignUpload(thingId, {
+          // Validated server-side against `ALLOWED_PHOTO_MIMES`; this is the browser's own reported
+          // type, and anything outside the allowlist comes back as a 400 rather than being uploaded.
+          mime: file.type as PhotoMime,
+          size_bytes: file.size,
+          make_hero: makeHero,
+        })
 
-      // Pinned at 1 for the confirm round-trip rather than reset — see `useUploadFile`: clearing it
-      // first makes the tile flick back to "no progress", which reads as the upload restarting.
-      setProgress(1)
-      return api.things.photos.confirm(thingId, presigned.photo_id)
+        await api.files.upload(presigned.upload_url, file, setProgress)
+
+        // Pinned at 1 for the confirm round-trip rather than reset — see `useUploadFile`: clearing it
+        // first makes the tile flick back to "no progress", which reads as the upload restarting.
+        setProgress(1)
+        return api.things.photos.confirm(thingId, presigned.photo_id)
+      }
+
+      try {
+        return await attemptUpload()
+      } catch (error) {
+        if (!(error instanceof OfflineError)) throw error
+
+        const room = await canQueueBytes(file.size)
+        if (!room.ok) throw new Error(room.reason)
+
+        // Asked for only once we know we are actually about to hold bytes.
+        await requestPersistentStorage()
+
+        await outbox.enqueue({
+          kind: 'thing.photo',
+          thingId,
+          blob: file,
+          mime: file.type,
+          sizeBytes: file.size,
+          // Carried, not defaulted: the server would otherwise promote this to hero on replay and
+          // demote whatever the user has chosen since.
+          makeHero,
+        })
+        // `onSettled` clears `progress`, so a queued upload leaves no stalled bar behind.
+        return { queued: true } as const
+      }
     },
     onSuccess: () => {
       // The whole root: a first photo becomes the hero, which is also the list row's thumbnail.

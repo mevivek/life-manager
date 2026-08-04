@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { documentsKey } from '@/features/documents/useDocuments'
+import { thingsKey } from '@/features/things/useThings'
 import * as outbox from '@/lib/outbox'
 import { runOutbox } from '@/lib/outbox-replay'
 
@@ -54,8 +55,11 @@ export function useOutbox() {
 export function useResolveConflict() {
   const queryClient = useQueryClient()
 
+  // Both roots: a conflict can now be a thing's edit as well as a document's, and the resolution
+  // changes what the server holds either way.
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: documentsKey })
+    await queryClient.invalidateQueries({ queryKey: thingsKey })
   }
 
   return {

@@ -481,6 +481,343 @@ describe('offline image capture', () => {
   })
 })
 
+/**
+ * Things joined the queue after documents, and these are weighted towards the two ways a second
+ * domain breaks a queue that was written for one: an entry addressed by the wrong field, and a
+ * `send()` branch that falls through to the previous domain's endpoint.
+ */
+describe('things in the queue', () => {
+  const THING_ID = '55555555-5555-4555-8555-555555555555'
+  const PHOTO_ID = '66666666-6666-4666-8666-666666666666'
+
+  /** Satisfies `thingSchema`, so the client's Zod parse succeeds and a replay can report success. */
+  const thingBody = (overrides: Record<string, unknown> = {}) => ({
+    id: THING_ID,
+    space_id: '22222222-2222-4222-8222-222222222222',
+    name: 'Dishwasher',
+    kind: 'appliance',
+    brand: null,
+    model: null,
+    serial: null,
+    purchased_on: null,
+    price: null,
+    currency: null,
+    warranty_ends_on: null,
+    service_every_months: null,
+    service_due_on: null,
+    kept_at: null,
+    holder: null,
+    relation: null,
+    ownership: 'here',
+    ownership_who: null,
+    ownership_since: null,
+    notes: null,
+    document_count: 0,
+    photo_count: 0,
+    created_at: '2026-08-02T00:00:00.000Z',
+    updated_at: '2026-08-02T00:00:00.000Z',
+    version: 1,
+    ...overrides,
+  })
+
+  /** The three-step photo upload from things.md §5, recording which thing each step was addressed to. */
+  function photoHandlers(steps: string[], thingIdSeen: string[], heroSeen: boolean[] = []) {
+    return [
+      http.post('*/api/v1/things/:id/photos\\:presign-upload', async ({ params, request }) => {
+        const body = (await request.json()) as { make_hero?: boolean }
+        steps.push('presign')
+        thingIdSeen.push(String(params.id))
+        heroSeen.push(body.make_hero ?? true)
+        return HttpResponse.json({
+          photo_id: PHOTO_ID,
+          upload_url: 'https://storage.test/photo',
+          storage_key: `spaces/s/things/${THING_ID}/${PHOTO_ID}`,
+          expires_at: '2026-08-02T00:10:00.000Z',
+        })
+      }),
+      http.put('https://storage.test/photo', () => {
+        steps.push('put')
+        return new HttpResponse(null, { status: 200 })
+      }),
+      http.post('*/api/v1/things/:id/photos\\:confirm', () => {
+        steps.push('confirm')
+        return HttpResponse.json({
+          id: PHOTO_ID,
+          thing_id: THING_ID,
+          mime: 'image/jpeg',
+          size_bytes: 4,
+          sha256: null,
+          is_hero: true,
+          uploaded_at: '2026-08-02T00:00:00.000Z',
+          created_at: '2026-08-02T00:00:00.000Z',
+        })
+      }),
+    ]
+  }
+
+  it('sends a queued thing edit to the things endpoint, not the documents one', async () => {
+    const outbox = await import('./outbox')
+    const hit: string[] = []
+    server.use(
+      http.patch('*/api/v1/things/:id', () => {
+        hit.push('things')
+        return HttpResponse.json(thingBody({ version: 2 }))
+      }),
+      http.patch('*/api/v1/documents/:id', () => {
+        hit.push('documents')
+        return HttpResponse.json(documentBody())
+      }),
+    )
+
+    await outbox.enqueue({
+      kind: 'thing.update',
+      thingId: THING_ID,
+      patch: { version: 1, name: 'Edited in the kitchen' },
+    })
+    const result = await outbox.replay()
+
+    /**
+     * The assertion is `['things']` rather than "sent 1". `send()` used to end in a bare
+     * `api.documents.update(entry.documentId, …)` as its implicit final branch, so a thing entry
+     * would have been PATCHed to `/documents/undefined` — a request that fails, but for a reason the
+     * counts alone would not distinguish from an ordinary rejection.
+     */
+    expect(hit).toEqual(['things'])
+    expect(result.sent).toBe(1)
+    expect(await outbox.list()).toHaveLength(0)
+  })
+
+  it('keeps the version precondition on a queued thing edit and surfaces a 409', async () => {
+    const outbox = await import('./outbox')
+    let seenVersion: number | null = null
+    server.use(
+      http.patch('*/api/v1/things/:id', async ({ request }) => {
+        seenVersion = ((await request.json()) as { version: number }).version
+        return HttpResponse.json(
+          { type: 'about:blank', title: 'Conflict', status: 409, detail: 'Version 1 is stale.' },
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        )
+      }),
+    )
+
+    await outbox.enqueue({
+      kind: 'thing.update',
+      thingId: THING_ID,
+      patch: { version: 1, name: 'Edited offline' },
+    })
+    const result = await outbox.replay()
+
+    // The version the form was READ at travelled with the queued write — rule 1. Without it a replay
+    // is last-write-wins wearing a queue's clothes.
+    expect(seenVersion).toBe(1)
+    expect(result.conflicted).toBe(1)
+    const [entry] = await outbox.list()
+    expect(entry?.status).toBe('conflict')
+  })
+
+  it('"keep mine" re-queues a THING edit against the newer version', async () => {
+    const outbox = await import('./outbox')
+
+    const queued = await outbox.enqueue({
+      kind: 'thing.update',
+      thingId: THING_ID,
+      patch: { version: 1, name: 'Mine' },
+    })
+    const before = queued.idempotencyKey
+
+    await outbox.retryWithVersion(queued.id, 7)
+
+    const [entry] = await outbox.list()
+    /**
+     * `retryWithVersion` narrowed on `kind !== 'document.update'` before things existed, so without
+     * the second branch this silently did nothing and the retry was refused for the same reason again.
+     */
+    expect(entry?.kind === 'thing.update' && entry.patch.version).toBe(7)
+    expect(entry?.status).toBe('pending')
+    // A NEW logical operation, so a new key — reusing it would replay the original 409.
+    expect(entry?.idempotencyKey).not.toBe(before)
+  })
+
+  it('queues a service log with the day it happened, not the day it sends', async () => {
+    const outbox = await import('./outbox')
+    let body: { serviced_on?: string } = {}
+    server.use(
+      http.post('*/api/v1/things/:id/services', async ({ request }) => {
+        body = (await request.json()) as { serviced_on?: string }
+        return HttpResponse.json(
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            thing_id: THING_ID,
+            serviced_on: '2026-08-02',
+            cost: null,
+            currency: null,
+            provider: null,
+            notes: null,
+            created_at: '2026-08-04T00:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+    )
+
+    await outbox.enqueue({
+      kind: 'thing.service',
+      thingId: THING_ID,
+      input: { serviced_on: '2026-08-02' },
+    })
+    const result = await outbox.replay()
+
+    // Logged at the garage on the 2nd, sent on the 4th, and it still records the 2nd. The date is in
+    // the payload rather than derived at send time precisely so that stays true.
+    expect(result.sent).toBe(1)
+    expect(body.serviced_on).toBe('2026-08-02')
+  })
+
+  it('presigns a thing photo at REPLAY time and keeps its hero choice', async () => {
+    const outbox = await import('./outbox')
+    const steps: string[] = []
+    const heroSeen: boolean[] = []
+    server.use(...photoHandlers(steps, [], heroSeen))
+
+    await outbox.enqueue({
+      kind: 'thing.photo',
+      thingId: THING_ID,
+      blob: new Blob(['fake'], { type: 'image/jpeg' }),
+      mime: 'image/jpeg',
+      sizeBytes: 4,
+      makeHero: false,
+    })
+
+    expect(steps).toEqual([])
+
+    const result = await outbox.replay()
+
+    expect(result.sent).toBe(1)
+    expect(steps).toEqual(['presign', 'put', 'confirm'])
+    /**
+     * `false` survived the queue. The server defaults `make_hero` to TRUE and confirming a hero
+     * demotes its siblings, so a photo added from the strip and replayed an hour later would
+     * otherwise steal the main slot from whatever the user chose in the meantime.
+     */
+    expect(heroSeen).toEqual([false])
+  })
+
+  it('re-points a photo and a service at the real id once the thing is created', async () => {
+    const outbox = await import('./outbox')
+    const steps: string[] = []
+    const thingIdSeen: string[] = []
+    const serviceIdSeen: string[] = []
+    server.use(
+      http.post('*/api/v1/things', () => HttpResponse.json(thingBody(), { status: 201 })),
+      http.post('*/api/v1/things/:id/services', ({ params }) => {
+        serviceIdSeen.push(String(params.id))
+        return HttpResponse.json(
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            thing_id: THING_ID,
+            serviced_on: '2026-08-02',
+            cost: null,
+            currency: null,
+            provider: null,
+            notes: null,
+            created_at: '2026-08-02T00:00:00.000Z',
+          },
+          { status: 201 },
+        )
+      }),
+      ...photoHandlers(steps, thingIdSeen),
+    )
+
+    // File a thing with no signal, photograph it, and log the service that prompted filing it — all
+    // three queued, and the last two addressed to an id the server has never heard of.
+    await outbox.enqueue({
+      kind: 'thing.create',
+      tempId: 'temp-thing',
+      input: { name: 'Dishwasher', kind: 'appliance' },
+    })
+    await outbox.enqueue({
+      kind: 'thing.photo',
+      thingId: 'temp-thing',
+      blob: new Blob(['fake'], { type: 'image/jpeg' }),
+      mime: 'image/jpeg',
+      sizeBytes: 4,
+      makeHero: true,
+    })
+    await outbox.enqueue({
+      kind: 'thing.service',
+      thingId: 'temp-thing',
+      input: { serviced_on: '2026-08-02' },
+    })
+
+    await outbox.replay()
+
+    // Both dependants followed the create to the real id. `remapTempId` rewrites `thingId` here where
+    // it rewrites `documentId` for a document — the two fields are deliberately NOT merged, because
+    // renaming one would orphan every entry already queued by an installed bundle.
+    expect(thingIdSeen).toEqual([THING_ID])
+    expect(serviceIdSeen).toEqual([THING_ID])
+    expect(await outbox.list()).toHaveLength(0)
+  })
+
+  it('does not let a queued THING create remap a document’s temp id', async () => {
+    const outbox = await import('./outbox')
+    const documentIdSeen: string[] = []
+    server.use(
+      http.post('*/api/v1/things', () => HttpResponse.json(thingBody(), { status: 201 })),
+      http.post('*/api/v1/documents/:id/files\\:presign-upload', ({ params }) => {
+        documentIdSeen.push(String(params.id))
+        return HttpResponse.error()
+      }),
+    )
+
+    /**
+     * A thing and a document queued under the SAME temporary id — contrived, but it is the exact
+     * collision a shared `subjectId` field would have made possible, and the reason `remapTempId`
+     * takes a subject rather than matching on the id alone.
+     */
+    await outbox.enqueue({
+      kind: 'thing.create',
+      tempId: 'temp-shared',
+      input: { name: 'Dishwasher', kind: 'appliance' },
+    })
+    await outbox.enqueue({
+      kind: 'file.upload',
+      documentId: 'temp-shared',
+      blob: new Blob(['fake'], { type: 'image/jpeg' }),
+      mime: 'image/jpeg',
+      sizeBytes: 4,
+    })
+
+    await outbox.replay()
+
+    // The document's upload still points at its own placeholder: a thing's create must not claim it.
+    expect(documentIdSeen).toEqual(['temp-shared'])
+  })
+
+  it('does not queue a thing delete, a photo delete, or a hero promotion', async () => {
+    const { api, OfflineError } = await import('./api')
+    const outbox = await import('./outbox')
+    server.use(
+      http.delete('*/api/v1/things/:id', () => HttpResponse.error()),
+      http.delete('*/api/v1/things/:id/photos/:photoId', () => HttpResponse.error()),
+      http.patch('*/api/v1/things/:id/photos/:photoId', () => HttpResponse.error()),
+    )
+
+    await expect(api.things.remove(THING_ID, 1)).rejects.toBeInstanceOf(OfflineError)
+    await expect(api.things.photos.remove(THING_ID, PHOTO_ID)).rejects.toBeInstanceOf(OfflineError)
+    await expect(api.things.photos.makeHero(THING_ID, PHOTO_ID)).rejects.toBeInstanceOf(
+      OfflineError,
+    )
+
+    /**
+     * All three stay out by choice. The delete for documents' reason — nothing to re-apply when it
+     * comes back as a conflict — and the two photo verbs because they are decisions about a set the
+     * user is looking at, which must not be replayed against a set that has since changed.
+     */
+    expect(await outbox.list()).toHaveLength(0)
+  })
+})
+
 describe('storage quota', () => {
   it('refuses to queue when free space cannot be determined', async () => {
     const { canQueueBytes } = await import('./storage-quota')

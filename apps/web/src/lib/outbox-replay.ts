@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { documentsKey } from '@/features/documents/useDocuments'
+import { thingsKey } from '@/features/things/useThings'
 import * as outbox from './outbox'
 
 /**
@@ -25,11 +26,19 @@ export async function runOutbox(queryClient: QueryClient): Promise<outbox.Replay
   try {
     const result = await outbox.replay()
 
-    // Refetch whatever the replay changed. Even a conflicted run invalidates: the server state is
-    // now definitively different from what the cache holds, and the conflict UI needs the real value
-    // to show alongside the rejected one.
+    /**
+     * Refetch whatever the replay changed. Even a conflicted run invalidates: the server state is
+     * now definitively different from what the cache holds, and the conflict UI needs the real value
+     * to show alongside the rejected one.
+     *
+     * Both roots, unconditionally, rather than only the ones whose entries were in this run. A
+     * replayed thing create moves the library's `All` scope, and a replayed document edit can change
+     * a thing's `document_count` — the domains are linked, so narrowing this to the kinds that ran
+     * would leave the other collection drawing a stale count.
+     */
     if (result.sent > 0 || result.conflicted > 0) {
       await queryClient.invalidateQueries({ queryKey: documentsKey })
+      await queryClient.invalidateQueries({ queryKey: thingsKey })
     }
     return result
   } finally {
