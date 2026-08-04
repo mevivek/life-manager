@@ -435,10 +435,29 @@ so `scoped(actor, things)` type-checked on first use. That is the claim ADR-0006
 
 1. **§9(2) — automatic warranty reminders.** Unanswered, so the capability is built and the switch is
    off. §6 has the detail, including why the daily scan must not simply be widened (debt **D58**).
-2. **Offline writes.** `useThings` deliberately does not route through the outbox: `lib/outbox.ts`'s
-   entry union is document-shaped, and widening it was left with the endpoints rather than done before
-   them. Now that the endpoints exist, this is one outbox kind plus one `writeOrQueue` per mutation —
-   see the note at the top of `apps/web/src/features/things/useThings.ts`.
+2. ~~**Offline writes.**~~ **Done 2026-08-02.** `useThings` routes through `writeOrQueue` like
+   documents do, and `lib/outbox.ts` carries four thing kinds: `thing.create`, `thing.update`,
+   `thing.service` and `thing.photo`. Debt **D59** is closed entirely.
+
+   Three decisions inside it, because they are the parts a later session would otherwise redo:
+
+   - **Queued:** create, edit, log a service, upload a photo — the writes made standing in front of the
+     object. **Not queued:** deleting a thing, deleting a photo, promoting a hero. The delete stays out
+     for documents' reason (a conflict hours later has nothing to re-apply); the two photo verbs are
+     decisions *about a set the user is looking at*, and replaying one against a set that has since
+     changed promotes the wrong photo.
+   - **A service log carries `serviced_on` in its payload**, so a record queued at the garage and sent
+     two days later still says the day it happened. It is the one queued write with no document
+     equivalent and it earns the place.
+   - **The entry shapes are deliberately NOT unified.** A document entry keys its parent `documentId`,
+     a thing's `thingId`; `remapTempId` takes a subject to tell them apart. Merging them into one
+     `subjectId` reads better and would orphan every entry queued by an already-installed bundle — the
+     queue lives in IndexedDB, so this is **D87's failure mode** in a third place. Add fields, never
+     rename them.
+
+   One thing it also fixed, and the mechanism is worth copying: `CaptureSheet.tsx` read `created.id`
+   off the thing create unconditionally, with a comment saying that wiring the outbox in would make
+   that line stop compiling. It did, and the break landed on exactly the one line that had to change.
 3. ~~**No client for the photo verbs.**~~ **Done** — `api.things.photos` carries all five
    (`presign-upload`, `confirm`, `presign-download`, `makeHero`, `remove`), `useThings.ts` has four
    hooks, and `ThingPhotos.tsx` draws the comp's **172px hero** and its **150px strip** with a real

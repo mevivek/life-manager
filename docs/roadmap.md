@@ -90,11 +90,19 @@ the maintainer's laptop. `node scripts/verify-deployment.mjs` re-checks all of i
 
 ## Next actions, in order — read this before starting anything
 
-**M1 is built and deployed. It is still not done.** Every credential is bound and real documents are
-in; steps 1–6 of §4 below are all closed. What is unmet is **§4.7 — nobody has seen a notification
-arrive.** Turn reminders on from the You screen, call `/api/v1/maintenance:run-daily` again, and expect
-`delivered: 1` with a notification on the phone. Then §4.8 wants a week of real use. That is the whole
-next-actions list — not M2, and not more code.
+**M1 is built and deployed. It is still not done, and on 2026-08-02 the maintainer decided to carry
+on past it anyway.** Every credential is bound and real documents are in; steps 1–6 of §4 below are
+all closed. What is unmet is **§4.7 — nobody has seen a notification arrive.** Turn reminders on from
+the You screen, call `/api/v1/maintenance:run-daily` again, and expect `delivered: 1` with a
+notification on the phone. Then §4.8 wants a week of real use.
+
+**That observation was explicitly deferred, not forgotten** — recorded here because the standing rule
+below is that changing the plan is expected and changing it *silently* is not. M4 step 3 (the Things
+offline outbox) was built instead, which is the one §5 names as the temptation. The consequence to be
+honest about: **M1's "done when" is now unmet by choice, and stays unmet until someone stands in front
+of a phone.** No amount of further code closes it, so it does not decay into "nearly done" — it is one
+observation, indefinitely postponed, and the next session should read it that way rather than as a
+step that was somehow completed.
 
 ### 1. ✅ The M0 review — done 2026-07-28
 
@@ -273,11 +281,16 @@ agreements name first: "one domain at a time — finish and actually use it befo
 ([product/brain.md](product/brain.md) §5).
 
 **That agreement is under strain and it is worth saying so plainly.** Things is a second domain
-finished — both halves — before the first is done. The mitigation that used to be recorded here was
-that only the client half existed; that mitigation is gone. **M1's last observation is still
-outstanding**, and a session tempted to keep going on Things (the offline outbox, §9(2)) instead of
-turning reminders on from the You screen and watching one arrive should read §5 of the brain again
-first.
+finished — both halves, and now its offline writes too — before the first is done. The mitigation that
+used to be recorded here was that only the client half existed; that mitigation is gone.
+
+**And on 2026-08-02 the strain became a decision.** This paragraph used to tell a session tempted by
+the offline outbox to read §5 of the brain first. It was read, and the maintainer chose the outbox
+anyway; that is the human yes invariant 12 asks for, so it is a decision rather than a drift. What it
+does **not** do is retire the agreement — the honest reading is that "one domain at a time" has now
+been set aside twice for Things specifically, and the thing still outstanding is the same single
+observation it was a week ago. **M1's last observation is still outstanding.** A third deferral should
+be argued for on its merits rather than assumed from these two.
 
 ---
 
@@ -415,14 +428,17 @@ So M4 is now, in order:
    asserting exactly that. **Answering it is not only a `AUTO_REMINDER_TYPES`-shaped edit** —
    the daily scan's copy is document-shaped and would announce that a warranty "expires",
    which is the sentence ADR-0029 exists to prevent. Debt D58.
-3. **The one client gap step 1 left**, named in things.md §10 item 2: Things writes do not go
-   through the offline outbox — one entry kind plus one `writeOrQueue` per mutation. The
-   photo client is **not** part of this any more: `api.things.photos` carries all five verbs
-   and `ThingPhotos.tsx` draws the hero and the strip, so debt **D59** is closed for reads and
-   writes and only its offline half survives, inside this same outbox work. (It landed with its
-   URLs written `photos::presign-upload` — the `::` is Fastify's *registration* escape and never
-   reaches a URL, so every photo verb 404'd until the paths were corrected to one colon. Fixed;
-   recorded because the doc it was copied from said `::` too.)
+3. - [x] **The one client gap step 1 left** — Things writes now go through the offline outbox.
+     **Done 2026-08-02**, closing debt **D59** entirely. Four entry kinds (`thing.create`,
+     `thing.update`, `thing.service`, `thing.photo`), `writeOrQueue` lifted out of
+     `features/documents` into `lib/outbox.ts` so both domains share one copy, and `remapTempId`
+     taught to take a *subject* so a photo or a service queued against a thing that is itself only
+     in the queue follows it to the real id. Deletes and the two photo-organisation verbs stay
+     out by choice — things.md §10 item 2 has the reasoning and the two other decisions.
+     (The photo verbs had earlier landed with their URLs written `photos::presign-upload` — the
+     `::` is Fastify's *registration* escape and never reaches a URL, so every photo verb 404'd
+     until the paths were corrected to one colon. Recorded because the doc it was copied from
+     said `::` too.)
 4. **Money**, with its own doc first.
 
 The real test here was whether the playbook works: adding a domain should be mechanical.

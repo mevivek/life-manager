@@ -168,12 +168,11 @@ than to catch bugs — the isolation test in §2 is worth more than 20 points of
 ([ADR-0018](../decisions/0018-testcontainers-for-api-tests.md)), so a green run does not mean the
 API was tested. **Check the skip count, every time.**
 
-**Measured 2026-08-01, merging Sibling/Cousin into ADR-0036: 864 passed / 0 skipped** with a database
-(web 564 · api 244 · shared 56); **648 passed / 216 skipped** without one — every skip is the API's.
-Each figure was read off its own filtered run. The two sides of this merge said 858 and 861; the
-answer was 864.
+**Measured 2026-08-02, wiring Things into the offline outbox: 875 passed / 0 skipped** with a database
+(web 575 · api 244 · shared 56); **659 passed / 216 skipped** without one — every skip is the API's.
+Each figure was read off its own filtered run, `api` re-measured rather than assumed unchanged.
 
-**This line has now been wrong six times, and three of those were a merge.** The first three were
+**This line had been wrong six times before this measurement, and three of those were a merge.** The first three were
 ordinary staleness — once by 17 tests, once because a session did the arithmetic instead of running
 the suite. The last three share one shape: **two branches each edited this line with a figure that
 was true of its own tree, and neither was true once the trees were joined.** It happened on the

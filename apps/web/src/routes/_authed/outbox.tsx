@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/label'
 import { useDocument } from '@/features/documents/useDocuments'
 import { useOutbox, useResolveConflict } from '@/features/outbox/useOutbox'
+import { useThing } from '@/features/things/useThings'
 import type { OutboxEntry } from '@/lib/outbox'
 import { formatBytes } from '@/lib/storage-quota'
 
@@ -91,6 +92,16 @@ function describe(entry: OutboxEntry): string {
       const fields = Object.keys(entry.patch).filter((key) => key !== 'version')
       return `Edit to ${fields.join(', ')}`
     }
+    case 'thing.create':
+      return `New thing: ${entry.input.name}`
+    case 'thing.update': {
+      const fields = Object.keys(entry.patch).filter((key) => key !== 'version')
+      return `Edit to ${fields.join(', ')}`
+    }
+    case 'thing.service':
+      return `Service logged for ${entry.input.serviced_on}`
+    case 'thing.photo':
+      return `Photo waiting to upload (${formatBytes(entry.sizeBytes)})`
     default: {
       // Exhaustive switch with a `never` default (conventions/code.md §5): a new entry kind becomes
       // a compile error here rather than rendering as blank text on the one screen that explains
@@ -101,13 +112,73 @@ function describe(entry: OutboxEntry): string {
   }
 }
 
+/**
+ * Picks the card that knows how to read the record the conflict is about.
+ *
+ * **Two components rather than one with two hooks in it.** A single card would have to call both
+ * `useDocument` and `useThing` on every render — hooks cannot be conditional — so every thing conflict
+ * would fire a `GET /documents/` and vice versa. Splitting keeps each hook unconditional *within* its
+ * own component and fires exactly one request.
+ */
 function ConflictCard({ entry }: { entry: OutboxEntry }) {
-  const { discard, keepMine } = useResolveConflict()
+  if (entry.kind === 'document.update') return <DocumentConflictCard entry={entry} />
+  if (entry.kind === 'thing.update') return <ThingConflictCard entry={entry} />
 
-  // Only an update can conflict today — a create has no version to be stale. Narrowed rather than
-  // asserted so adding a conflicting entry kind later is a compile error here.
-  const documentId = entry.kind === 'document.update' ? entry.documentId : null
-  const current = useDocument(documentId ?? '')
+  /**
+   * Nothing else can conflict today: a create has no version to be stale against, and the queue's
+   * other kinds are appends. This branch is not dead code though — `MAX_ONLINE_ATTEMPTS` marks *any*
+   * kind `'conflict'` when it repeatedly fails while online, so a queued photo can land here. It gets
+   * the same card without a "currently saved" row, because there is no single record to show.
+   */
+  return <ConflictShell entry={entry} current={{ isPending: false, label: null }} />
+}
+
+function DocumentConflictCard({ entry }: { entry: OutboxEntry & { kind: 'document.update' } }) {
+  const current = useDocument(entry.documentId)
+
+  return (
+    <ConflictShell
+      entry={entry}
+      current={{
+        isPending: current.isPending,
+        label:
+          current.data === undefined
+            ? 'This document no longer exists.'
+            : `${current.data.title} (version ${current.data.version})`,
+        version: current.data?.version,
+      }}
+    />
+  )
+}
+
+function ThingConflictCard({ entry }: { entry: OutboxEntry & { kind: 'thing.update' } }) {
+  const current = useThing(entry.thingId)
+
+  return (
+    <ConflictShell
+      entry={entry}
+      current={{
+        isPending: current.isPending,
+        label:
+          current.data === undefined
+            ? 'This thing no longer exists.'
+            : `${current.data.name} (version ${current.data.version})`,
+        version: current.data?.version,
+      }}
+    />
+  )
+}
+
+type CurrentValue = {
+  isPending: boolean
+  /** `null` when this kind has no single record to show — see `ConflictCard`'s last branch. */
+  label: string | null
+  /** Absent when the record could not be read; "Keep my change" needs it and stays disabled without it. */
+  version?: number
+}
+
+function ConflictShell({ entry, current }: { entry: OutboxEntry; current: CurrentValue }) {
+  const { discard, keepMine } = useResolveConflict()
 
   return (
     <Card tone="late" className="p-card">
@@ -121,18 +192,16 @@ function ConflictCard({ entry }: { entry: OutboxEntry }) {
           </dt>
           <dd className="mt-0.5 text-body">{describe(entry)}</dd>
         </div>
-        <div>
-          <dt className="font-mono text-label font-medium uppercase tracking-label text-ink-3">
-            Currently saved
-          </dt>
-          <dd className="selectable mt-0.5 text-body">
-            {current.isPending
-              ? 'Loading…'
-              : current.data === undefined
-                ? 'This document no longer exists.'
-                : `${current.data.title} (version ${current.data.version})`}
-          </dd>
-        </div>
+        {current.label !== null && (
+          <div>
+            <dt className="font-mono text-label font-medium uppercase tracking-label text-ink-3">
+              Currently saved
+            </dt>
+            <dd className="selectable mt-0.5 text-body">
+              {current.isPending ? 'Loading…' : current.label}
+            </dd>
+          </div>
+        )}
       </dl>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -140,10 +209,10 @@ function ConflictCard({ entry }: { entry: OutboxEntry }) {
           size="sm"
           // Disabled until the current value has loaded: "keep mine" needs the server's version to
           // apply on top of, and without it the retry would be refused for the same reason again.
-          disabled={current.data === undefined}
+          disabled={current.version === undefined}
           onClick={() => {
-            if (current.data === undefined) return
-            void keepMine(entry.id, current.data.version)
+            if (current.version === undefined) return
+            void keepMine(entry.id, current.version)
           }}
         >
           Keep my change

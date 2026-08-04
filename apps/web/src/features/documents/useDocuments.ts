@@ -64,31 +64,10 @@ export function useHolders() {
 }
 
 /**
- * Runs a write, and queues it in the outbox if there is no connectivity (ADR-0024).
- *
- * The attempt comes FIRST, and the queue is the fallback — not the other way round. Checking
- * `navigator.onLine` up front and queueing on `false` would be wrong in both directions: it reports
- * `true` behind a captive portal (so the write would be attempted and lost anyway) and it can report
- * `false` on a working connection. An `OfflineError` is proof the request did not reach the server;
- * a status code is proof that it did.
- *
- * Anything else — a 409, a 422 — is rethrown untouched. A request the server has *judged* must not be
- * queued for a retry that would get the same answer.
+ * `writeOrQueue` moved to `lib/outbox.ts` when Things needed it too — same function, same reasoning,
+ * one copy. It is re-exported here only so the existing call sites below read unchanged.
  */
-async function writeOrQueue<T>(
-  attempt: () => Promise<T>,
-  queued: () => Parameters<typeof outbox.enqueue>[0],
-): Promise<T | { queued: true }> {
-  try {
-    return await attempt()
-  } catch (error) {
-    if (error instanceof OfflineError) {
-      await outbox.enqueue(queued())
-      return { queued: true }
-    }
-    throw error
-  }
-}
+const { writeOrQueue } = outbox
 
 export function useCreateDocument() {
   const queryClient = useQueryClient()
